@@ -1,0 +1,3373 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#09090b">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="description" content="MicroSave Ultimate - Professional Variance Tracker">
+    <title>MicroSave OS</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=JetBrains+Mono:wght@100..800&family=Outfit:wght@100..900&family=Sora:wght@100..800&display=swap"
+        rel="stylesheet">
+
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        canvas: '#09090b',
+                        surface: { 1: '#18181b', 2: '#27272a', 3: '#3f3f46' },
+                        brand: { DEFAULT: '#6366f1', light: '#818cf8', glow: 'rgba(99, 102, 241, 0.5)' },
+                        success: { DEFAULT: '#10b981', glow: 'rgba(16, 185, 129, 0.4)' },
+                        danger: { DEFAULT: '#f43f5e', glow: 'rgba(244, 63, 94, 0.4)' },
+                        warning: '#f59e0b',
+                        glass: 'rgba(255, 255, 255, 0.08)'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+
+    <style>
+        /* ================================================================
+        SECTION 1: THEME CONFIGURATION & DESIGN TOKENS
+        ================================================================
+        We are using a rigorous atomic design system. 
+        Every color, spacing, and timing is tokenized.
+        */
+
+        :root {
+            /* --- COLOR PALETTE: NEBULA DARK (Default) --- */
+            --c-void: #000000;
+            --c-canvas: #09090b;
+            /* Zinc 950 */
+            --c-surface-1: #18181b;
+            /* Zinc 900 */
+            --c-surface-2: #27272a;
+            /* Zinc 800 */
+            --c-surface-3: #3f3f46;
+            /* Zinc 700 */
+
+            --c-text-primary: #fafafa;
+            --c-text-secondary: #a1a1aa;
+            --c-text-tertiary: #52525b;
+
+            /* --- BRAND ACCENTS --- */
+            /* The "Savings" Green - Electric Emerald */
+            --c-accent-success: #10b981;
+            --c-accent-success-glow: rgba(16, 185, 129, 0.4);
+
+            /* The "Expense" Red - Plasma Rose */
+            --c-accent-danger: #f43f5e;
+            --c-accent-danger-glow: rgba(244, 63, 94, 0.4);
+
+            /* The "Brand" Blue - Deep Space Indigo */
+            --c-accent-brand: #6366f1;
+            --c-accent-brand-light: #818cf8;
+            --c-accent-brand-glow: rgba(99, 102, 241, 0.5);
+
+            /* The "Warning" Orange - Solar Flare */
+            --c-accent-warning: #f59e0b;
+
+            /* --- GLASSMORPHISM SYSTEM --- */
+            /* We use a multi-layered glass system for depth */
+            --glass-panel-bg: rgba(24, 24, 27, 0.65);
+            --glass-panel-border: rgba(255, 255, 255, 0.08);
+            --glass-panel-highlight: rgba(255, 255, 255, 0.03);
+            --glass-blur-lg: 24px;
+            --glass-blur-md: 12px;
+            --glass-blur-sm: 8px;
+
+            /* --- SPACING & LAYOUT --- */
+            --space-unit: 4px;
+            --space-xs: calc(var(--space-unit) * 1);
+            /* 4px */
+            --space-sm: calc(var(--space-unit) * 2);
+            /* 8px */
+            --space-md: calc(var(--space-unit) * 4);
+            /* 16px */
+            --space-lg: calc(var(--space-unit) * 6);
+            /* 24px */
+            --space-xl: calc(var(--space-unit) * 10);
+            /* 40px */
+            --space-2xl: calc(var(--space-unit) * 16);
+            /* 64px */
+
+            --radius-sm: 8px;
+            --radius-md: 16px;
+            --radius-lg: 24px;
+            --radius-xl: 32px;
+            --radius-full: 9999px;
+
+            --header-height: 64px;
+            --nav-height: 80px;
+
+            /* --- TYPOGRAPHY --- */
+            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+
+            /* UTILITY ANIMATIONS */
+            @keyframes fade-in-up {
+                from {
+                    opacity: 0;
+                    transform: translateY(10px);
+                }
+
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+
+            .animate-fade-in-up {
+                animation: fade-in-up 0.5s ease-out forwards;
+            }
+
+            /* Using spring-like cubic-beziers instead of ease-in-out */
+            --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            --ease-out-expo: cubic-bezier(0.19, 1, 0.22, 1);
+            --ease-in-quart: cubic-bezier(0.895, 0.03, 0.685, 0.22);
+
+            --duration-fast: 200ms;
+            --duration-normal: 400ms;
+            --duration-slow: 600ms;
+
+            /* --- Z-INDEX LAYERS --- */
+            --z-background: -1;
+            --z-base: 1;
+            --z-floating: 10;
+            --z-header: 50;
+            --z-modal-backdrop: 90;
+            --z-modal: 100;
+            --z-toast: 200;
+            --z-cursor: 9999;
+        }
+
+        /* ================================================================
+        SECTION 2: GLOBAL RESET & UTILITIES
+        ================================================================
+        */
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            user-select: none;
+            /* App-like feel, disable text selection */
+        }
+
+        /* Hide Vue templates until compiled */
+        [v-cloak] {
+            display: none !important;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            /* We manage scrolling internally */
+            background-color: var(--c-canvas);
+            color: var(--c-text-primary);
+            font-family: var(--font-sans);
+            font-size: 16px;
+            line-height: 1.5;
+        }
+
+        /* SCROLLBAR HIDING */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* ================================================================
+        SECTION 3: COMPONENT STYLES & ANIMATIONS
+        ================================================================
+        */
+
+        /* ANIMATED BACKGROUND MESH */
+        .mesh-gradient {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at 15% 50%, rgba(99, 102, 241, 0.08), transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(16, 185, 129, 0.08), transparent 25%),
+                radial-gradient(circle at 50% 80%, rgba(244, 63, 94, 0.05), transparent 40%);
+            z-index: var(--z-background);
+            pointer-events: none;
+            filter: blur(60px);
+            opacity: 0.8;
+            animation: pulse-mesh 10s ease-in-out infinite alternate;
+        }
+
+        @keyframes pulse-mesh {
+            0% {
+                transform: scale(1);
+                opacity: 0.8;
+            }
+
+            100% {
+                transform: scale(1.1);
+                opacity: 1;
+            }
+        }
+
+        /* GLASS CARD BASE */
+        .glass-panel {
+            background: var(--glass-panel-bg);
+            backdrop-filter: blur(var(--glass-blur-lg));
+            -webkit-backdrop-filter: blur(var(--glass-blur-lg));
+            border: 1px solid var(--glass-panel-border);
+            box-shadow:
+                0 4px 6px -1px rgba(0, 0, 0, 0.1),
+                0 2px 4px -1px rgba(0, 0, 0, 0.06),
+                inset 0 1px 0 0 var(--glass-panel-highlight);
+            border-radius: var(--radius-lg);
+            transition: transform var(--duration-fast) var(--ease-out-expo),
+                box-shadow var(--duration-fast) var(--ease-out-expo);
+        }
+
+        .glass-panel:active {
+            transform: scale(0.98);
+        }
+
+        /* CINEMA WRAPPER - 1.9:1 ASPECT RATIO LOCK */
+        .cinema-wrapper {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+            overflow: hidden;
+        }
+
+        .cinema-backdrop {
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(ellipse at center, rgba(99, 102, 241, 0.1), transparent 70%);
+            filter: blur(100px);
+            pointer-events: none;
+        }
+
+        /* APP CONTAINER - Locked to 1.9:1 */
+        #app {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            max-width: min(100vw, calc(100vh * 1.9));
+            max-height: min(100vh, calc(100vw / 1.9));
+            aspect-ratio: 1.9 / 1;
+            background: var(--c-canvas);
+            box-shadow: 0 0 80px rgba(0, 0, 0, 0.8);
+            border-radius: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* On mobile portrait, allow full height */
+        @media (max-aspect-ratio: 1.9/1) {
+            #app {
+                max-width: 100vw;
+                max-height: 100vh;
+                aspect-ratio: auto;
+                width: 100%;
+                height: 100%;
+            }
+        }
+
+        /* LOADING SPINNER */
+        .loader-ring {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+        }
+
+        .loader-ring:after {
+            content: " ";
+            display: block;
+            width: 32px;
+            height: 32px;
+            margin: 4px;
+            border-radius: 50%;
+            border: 3px solid var(--c-accent-brand);
+            border-color: var(--c-accent-brand) transparent var(--c-accent-brand) transparent;
+            animation: ring-spin 1.2s linear infinite;
+        }
+
+        @keyframes ring-spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* TRANSITION GROUPS (Vue) */
+        .fade-enter-active,
+        .fade-leave-active {
+            transition: opacity var(--duration-normal) ease;
+        }
+
+        .fade-enter-from,
+        .fade-leave-to {
+            opacity: 0;
+        }
+
+        .slide-up-enter-active {
+            transition: all var(--duration-normal) var(--ease-out-expo);
+        }
+
+        .slide-up-leave-active {
+            transition: all var(--duration-fast) var(--ease-in-quart);
+        }
+
+        .slide-up-enter-from,
+        .slide-up-leave-to {
+            transform: translateY(100%);
+            opacity: 0;
+        }
+
+        /* V3: REWRITTEN LIST TRANSITIONS - Smooth Cross-Fade */
+        /* Using opacity-only transitions to prevent layout jank */
+        .list-move {
+            transition: transform 0.3s ease;
+        }
+
+        .list-enter-active {
+            transition: opacity 0.25s ease 0.05s;
+        }
+
+        .list-leave-active {
+            transition: opacity 0.15s ease;
+            position: absolute;
+            width: 100%;
+        }
+
+        .list-enter-from {
+            opacity: 0;
+        }
+
+        .list-leave-to {
+            opacity: 0;
+        }
+
+        /* ================================================================
+        COMPONENT: Date Scroller - V2 Compact With Month
+        ================================================================ */
+        .date-scroller {
+            display: flex;
+            gap: 6px;
+            overflow-x: auto;
+            padding: 8px 12px;
+            scroll-snap-type: x mandatory;
+        }
+
+        .date-chip {
+            flex-shrink: 0;
+            width: 48px;
+            padding: 8px 6px;
+            text-align: center;
+            scroll-snap-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .date-chip.active {
+            background: var(--c-accent-brand);
+            border-color: var(--c-accent-brand);
+        }
+
+        .date-chip.today:not(.active) {
+            border-color: var(--c-accent-brand);
+        }
+
+        .date-num {
+            font-size: 1.1rem;
+            font-weight: 700;
+            font-family: var(--font-mono);
+            line-height: 1;
+        }
+
+        .date-month {
+            font-size: 0.5rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: var(--c-text-tertiary);
+            letter-spacing: 0.5px;
+            margin-bottom: 2px;
+        }
+
+        .date-day {
+            font-size: 0.5rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: var(--c-text-secondary);
+            margin-top: 2px;
+            letter-spacing: 0.3px;
+        }
+
+        .date-chip.active .date-month,
+        .date-chip.active .date-day {
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .date-dot {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: var(--c-accent-warning);
+            margin: 4px auto 0;
+        }
+
+        /* ================================================================
+        COMPONENT: Content Area
+        ================================================================ */
+        .content-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            padding-bottom: 100px;
+            /* Space for FAB */
+        }
+
+        /* ================================================================
+        COMPONENT: Expense Card - V2 Neon Glass Design
+        ================================================================ */
+        .expense-card {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 14px 14px 18px;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s var(--ease-out-expo);
+        }
+
+        /* Variance Stripe - Left Edge Glow */
+        .variance-stripe {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            transition: all 0.3s ease;
+        }
+
+        .variance-stripe.stripe-neutral {
+            background: var(--c-surface-3);
+        }
+
+        .variance-stripe.stripe-brand {
+            background: var(--c-accent-brand);
+            box-shadow: 0 0 12px var(--c-accent-brand-glow);
+        }
+
+        .variance-stripe.stripe-success {
+            background: var(--c-accent-success);
+            box-shadow: 0 0 12px var(--c-accent-success-glow);
+        }
+
+        .variance-stripe.stripe-danger {
+            background: var(--c-accent-danger);
+            box-shadow: 0 0 12px var(--c-accent-danger-glow);
+        }
+
+        /* PENDING STATE - Ghostly */
+        .expense-card.is-pending {
+            opacity: 0.65;
+            border-style: dashed !important;
+            border-color: var(--c-surface-3) !important;
+        }
+
+        .expense-card.is-pending .cat-icon {
+            filter: grayscale(100%);
+            opacity: 0.6;
+        }
+
+        .expense-card.is-pending .amt-main {
+            color: var(--c-text-secondary);
+        }
+
+        /* Default card-name and card-status colors */
+        .card-name {
+            color: var(--c-text-primary);
+        }
+
+        .card-status {
+            color: var(--c-text-tertiary);
+            font-weight: 600;
+        }
+
+        /* PAID STATE - Vibrant */
+        .expense-card.is-paid {
+            border-color: rgba(255, 255, 255, 0.12) !important;
+        }
+
+        /* V3: Icons and text colored based on status */
+        .expense-card.is-paid .cat-icon {
+            filter: none;
+            opacity: 1;
+        }
+
+        .expense-card.is-paid .amt-main {
+            text-shadow: 0 0 8px currentColor;
+        }
+
+        /* SAVED STATE: Green */
+        .expense-card.is-paid.var-saved .amt-main {
+            color: var(--c-accent-success);
+        }
+
+        .expense-card.is-paid.var-saved .cat-icon {
+            background: linear-gradient(135deg, #10b981, #059669) !important;
+        }
+
+        .expense-card.is-paid.var-saved .card-name {
+            color: var(--c-accent-success);
+        }
+
+        .expense-card.is-paid.var-saved .card-status {
+            color: rgba(16, 185, 129, 0.7);
+        }
+
+        /* OVERSPENT STATE: Red */
+        .expense-card.is-paid.var-over .amt-main {
+            color: var(--c-accent-danger);
+        }
+
+        .expense-card.is-paid.var-over .cat-icon {
+            background: linear-gradient(135deg, #f43f5e, #e11d48) !important;
+        }
+
+        .expense-card.is-paid.var-over .card-name {
+            color: var(--c-accent-danger);
+        }
+
+        .expense-card.is-paid.var-over .card-status {
+            color: rgba(244, 63, 94, 0.7);
+        }
+
+        /* ON-BUDGET STATE: Blue */
+        .expense-card.is-paid.var-exact .amt-main {
+            color: var(--c-accent-brand-light);
+        }
+
+        .expense-card.is-paid.var-exact .cat-icon {
+            background: linear-gradient(135deg, #818cf8, #6366f1) !important;
+        }
+
+        .expense-card.is-paid.var-exact .card-name {
+            color: var(--c-accent-brand-light);
+        }
+
+        .expense-card.is-paid.var-exact .card-status {
+            color: rgba(129, 140, 248, 0.7);
+        }
+
+        /* GOLD STATE - LEGENDARY 100% Savings 🔥 */
+        .expense-card.is-gold {
+            background: linear-gradient(135deg,
+                    rgba(251, 191, 36, 0.25),
+                    rgba(245, 158, 11, 0.15),
+                    rgba(234, 88, 12, 0.1)) !important;
+            border: 2px solid rgba(251, 191, 36, 0.6) !important;
+            animation: gold-legendary 2s ease-in-out infinite;
+            position: relative;
+        }
+
+        .expense-card.is-gold::before {
+            content: '';
+            position: absolute;
+            inset: -2px;
+            border-radius: inherit;
+            background: linear-gradient(135deg,
+                    rgba(251, 191, 36, 0.4),
+                    rgba(245, 158, 11, 0.2),
+                    rgba(234, 88, 12, 0.3));
+            filter: blur(8px);
+            z-index: -1;
+            opacity: 0.7;
+            animation: gold-glow-pulse 2s ease-in-out infinite alternate;
+        }
+
+        .expense-card.is-gold .variance-stripe {
+            background: linear-gradient(to bottom, #fbbf24, #f59e0b, #ea580c);
+            box-shadow: 0 0 20px rgba(251, 191, 36, 0.8), 0 0 40px rgba(234, 88, 12, 0.4);
+        }
+
+        /* GOLD overrides SAVED - higher specificity with !important */
+        .expense-card.is-gold.var-saved .cat-icon,
+        .expense-card.is-gold .cat-icon {
+            filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.8)) !important;
+            background: linear-gradient(135deg, #fbbf24, #f59e0b) !important;
+        }
+
+        .expense-card.is-gold.var-saved .amt-main,
+        .expense-card.is-gold .amt-main {
+            color: #fbbf24 !important;
+            text-shadow: 0 0 16px rgba(251, 191, 36, 1), 0 0 32px rgba(234, 88, 12, 0.6) !important;
+        }
+
+        /* Gold state: All text is gold - LIGHTER for visibility */
+        .expense-card.is-gold.var-saved .card-name,
+        .expense-card.is-gold .card-name {
+            color: #fbbf24 !important;
+        }
+
+        .expense-card.is-gold.var-saved .card-status,
+        .expense-card.is-gold .card-status {
+            color: rgba(251, 191, 36, 0.6) !important;
+        }
+
+        @keyframes gold-legendary {
+
+            0%,
+            100% {
+                box-shadow:
+                    0 0 20px rgba(251, 191, 36, 0.3),
+                    0 0 40px rgba(245, 158, 11, 0.2),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            }
+
+            50% {
+                box-shadow:
+                    0 0 30px rgba(251, 191, 36, 0.5),
+                    0 0 60px rgba(245, 158, 11, 0.3),
+                    0 0 80px rgba(234, 88, 12, 0.2),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+            }
+        }
+
+        @keyframes gold-glow-pulse {
+            0% {
+                opacity: 0.5;
+            }
+
+            100% {
+                opacity: 0.8;
+            }
+        }
+
+        /* Category Icons - Vibrant Tiles */
+        .cat-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            flex-shrink: 0;
+            transition: filter 0.3s ease;
+        }
+
+        .cat-icon.cat-transport {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+        }
+
+        .cat-icon.cat-food {
+            background: linear-gradient(135deg, #f97316, #ea580c);
+        }
+
+        .cat-icon.cat-utilities {
+            background: linear-gradient(135deg, #eab308, #ca8a04);
+        }
+
+        .cat-icon.cat-tech {
+            background: linear-gradient(135deg, #a855f7, #9333ea);
+        }
+
+        .cat-icon.cat-shopping {
+            background: linear-gradient(135deg, #ec4899, #be185d);
+        }
+
+        .cat-icon.cat-other {
+            background: linear-gradient(135deg, #6b7280, #4b5563);
+        }
+
+        .card-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .card-right {
+            text-align: right;
+        }
+
+        .amt-main {
+            font-family: var(--font-mono);
+            font-size: 1.15rem;
+            font-weight: 700;
+            transition: color 0.3s ease, text-shadow 0.3s ease;
+        }
+
+        .amt-sub {
+            font-size: 0.7rem;
+            color: var(--c-text-tertiary);
+            font-family: var(--font-mono);
+        }
+
+        /* Variance Pills - Dynamic Status */
+        .variance-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.65rem;
+            font-weight: 700;
+            font-family: var(--font-mono);
+            padding: 3px 8px;
+            border-radius: 20px;
+            margin-top: 2px;
+        }
+
+        .variance-pill.pill-success {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--c-accent-success);
+        }
+
+        .variance-pill.pill-danger {
+            background: rgba(244, 63, 94, 0.2);
+            color: var(--c-accent-danger);
+        }
+
+        .variance-pill.pill-brand {
+            background: rgba(99, 102, 241, 0.2);
+            color: var(--c-accent-brand-light);
+        }
+
+        .variance-pill.pill-gold {
+            background: rgba(251, 191, 36, 0.2);
+            color: #fbbf24;
+        }
+
+        /* ================================================================
+        COMPONENT: FAB (Floating Action Button)
+        ================================================================ */
+        .fab {
+            position: absolute;
+            bottom: 24px;
+            right: 24px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: var(--c-accent-brand);
+            color: white;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 8px 24px var(--c-accent-brand-glow);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            z-index: 100;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .fab:active {
+            transform: scale(0.95);
+        }
+
+        /* ================================================================
+        COMPONENT: Confetti Animation
+        ================================================================ */
+        .confetti {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            top: -20px;
+            border-radius: 2px;
+            animation: confetti-fall 1.2s ease-out forwards;
+            z-index: 9999;
+            pointer-events: none;
+        }
+
+        @keyframes confetti-fall {
+            0% {
+                transform: translateY(0) rotate(0deg);
+                opacity: 1;
+            }
+
+            100% {
+                transform: translateY(100vh) rotate(720deg);
+                opacity: 0;
+            }
+        }
+
+        /* ================================================================
+        COMPONENT: Brand Title - Premium Typography
+        ================================================================ */
+        .brand-title {
+            font-family: 'Sora', 'Outfit', system-ui, sans-serif;
+            font-size: 1.3rem;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            background: linear-gradient(120deg, #fef3c7 0%, #fcd34d 25%, #f59e0b 50%, #ef4444 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            display: inline-block;
+            filter: drop-shadow(0 1px 4px rgba(245, 158, 11, 0.4));
+        }
+
+        /* Premium Modal Title Typography */
+        .modal-title-premium {
+            font-family: 'Sora', 'Outfit', system-ui, sans-serif;
+            font-size: 1.25rem;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+            color: var(--c-text-primary);
+        }
+
+        /* ================================================================
+        COMPONENT: Text Color Utilities (for CSS vars)
+        ================================================================ */
+        .text-secondary {
+            color: var(--c-text-secondary);
+        }
+
+        .text-tertiary {
+            color: var(--c-text-tertiary);
+        }
+
+        /* ================================================================
+        COMPONENT: Form Inputs - Glass Styling for Edit Modal
+        ================================================================ */
+        .input-wrapper {
+            position: relative;
+            margin-bottom: 4px;
+        }
+
+        .input-label {
+            display: block;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--c-text-secondary);
+            margin-bottom: 6px;
+        }
+
+        .glass-input {
+            width: 100%;
+            padding: 12px 14px;
+            font-size: 0.95rem;
+            font-family: var(--font-sans);
+            color: var(--c-text-primary);
+            background: var(--c-surface-1);
+            border: 1px solid var(--glass-panel-border);
+            border-radius: var(--radius-sm);
+            outline: none;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .glass-input:focus {
+            border-color: var(--c-accent-brand);
+            box-shadow: 0 0 0 3px var(--c-accent-brand-glow);
+        }
+
+        .glass-input::placeholder {
+            color: var(--c-text-tertiary);
+        }
+
+        /* Date inputs on mobile */
+        .glass-input[type="date"] {
+            color-scheme: dark;
+        }
+
+        .glass-input[type="number"] {
+            -moz-appearance: textfield;
+            appearance: textfield;
+        }
+
+        .glass-input[type="number"]::-webkit-outer-spin-button,
+        .glass-input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+    </style>
+
+    <script>
+        /**
+         * MICROSAVE OS CORE UTILITIES
+         * A collection of rigorous helper functions for math, formatting, and physics.
+         */
+
+        const Core = {
+            // --- CURRENCY ENGINE ---
+            // Handles floating point errors by working in Integers (Halalas) then converting back.
+            Currency: {
+                format(amount, currency = 'SAR') {
+                    return new Intl.NumberFormat('en-SA', {
+                        style: 'currency',
+                        currency: currency,
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 1
+                    }).format(amount);
+                },
+
+                // Returns an object with parts for fancy typography styling
+                formatParts(amount) {
+                    const str = amount.toFixed(2);
+                    const [whole, fraction] = str.split('.');
+                    return { whole, fraction };
+                },
+
+                // Calculates variance percentage safely
+                variancePct(expected, actual) {
+                    if (expected === 0) return 0;
+                    return ((expected - actual) / expected) * 100;
+                }
+            },
+
+            // --- DATE ENGINE ---
+            // Replacement for Moment.js/Day.js to save space but keep power.
+            Date: {
+                getTodayISO() {
+                    return new Date().toISOString().split('T')[0];
+                },
+
+                addDays(dateStr, days) {
+                    const d = new Date(dateStr);
+                    d.setDate(d.getDate() + days);
+                    return d.toISOString().split('T')[0];
+                },
+
+                // Returns array of date objects for the scroller
+                generateWindow(centerDateStr, daysBefore = 7, daysAfter = 21) {
+                    const center = new Date(centerDateStr);
+                    const start = new Date(center);
+                    start.setDate(center.getDate() - daysBefore);
+
+                    const days = [];
+                    const totalDays = daysBefore + 1 + daysAfter;
+
+                    for (let i = 0; i < totalDays; i++) {
+                        const d = new Date(start);
+                        d.setDate(start.getDate() + i);
+                        const iso = d.toISOString().split('T')[0];
+                        days.push({
+                            iso: iso,
+                            dom: d.getDate(), // Day of Month
+                            month: d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase(), // V2: Month abbreviation
+                            day: d.toLocaleDateString('en-US', { weekday: 'short' }),
+                            fullDate: d,
+                            isToday: iso === this.getTodayISO(),
+                            isWeekend: d.getDay() === 5 || d.getDay() === 6 // Fri/Sat in KSA
+                        });
+                    }
+                    return days;
+                },
+
+                humanize(dateStr) {
+                    const today = this.getTodayISO();
+                    if (dateStr === today) return 'Today';
+                    const d = new Date(dateStr);
+                    const y = new Date(today);
+                    y.setDate(y.getDate() - 1);
+                    if (dateStr === y.toISOString().split('T')[0]) return 'Yesterday';
+
+                    const t = new Date(today);
+                    t.setDate(t.getDate() + 1);
+                    if (dateStr === t.toISOString().split('T')[0]) return 'Tomorrow';
+
+                    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                }
+            },
+
+            // --- ID GENERATOR ---
+            // UUID v4 compliant generator for database keys
+            UUID() {
+                return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+                    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                    return v.toString(16);
+                });
+            },
+
+            // --- PHYSICS ANIMATION LOOP ---
+            // For custom canvas drawing or complex JS animations
+            Physics: {
+                lerp(start, end, factor) {
+                    return start + (end - start) * factor;
+                },
+
+                // Spring logic
+                spring(value, target, velocity, config = { stiffness: 0.1, damping: 0.8 }) {
+                    const force = (target - value) * config.stiffness;
+                    velocity += force;
+                    velocity *= config.damping;
+                    return { value: value + velocity, velocity };
+                }
+            }
+        };
+
+        // EXPOSE CORE TO WINDOW FOR DEBUGGING
+        window.MicroSaveCore = Core;
+    </script>
+</head>
+
+<body>
+    <div class="cinema-wrapper">
+        <div class="cinema-backdrop"></div>
+        <div id="app" v-cloak>
+            <div class="mesh-gradient"></div>
+
+            <transition name="fade" mode="out-in">
+                <div v-if="currentView === 'dashboard'" key="dashboard" class="flex flex-col h-full relative">
+
+                    <!-- V6 Premium Header - More Breathing Room -->
+                    <header class="px-4 pt-5 pb-[8px]">
+                        <!-- Top Bar: Brand Stack + Right Actions -->
+                        <div class="flex items-center justify-between mb-[20px]">
+                            <!-- Left: Brand Identity Stack -->
+                            <div class="flex items-center gap-2.5">
+                                <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg"
+                                    style="box-shadow: 0 4px 16px rgba(251, 191, 36, 0.4);">
+                                    <span class="material-symbols-rounded text-white"
+                                        style="font-size: 18px;">savings</span>
+                                </div>
+                                <div class="leading-none">
+                                    <!-- Premium Brand Title -->
+                                    <span class="brand-title">MicroSave</span>
+                                    <!-- Month/Year Context (tight leading) -->
+                                    <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mt-0.5">
+                                        {{ currentMonthYear }}
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Right: Level Indicator + Settings - Aligned -->
+                            <div class="flex items-center gap-2">
+                                <!-- Level Indicator Pill - V6: Taller to match settings icon -->
+                                <button @click="showProfile = true"
+                                    class="flex items-center gap-1.5 px-3 h-9 rounded-xl bg-surface-1 border border-glass hover:bg-surface-2 transition-all">
+                                    <span class="material-symbols-rounded text-amber-400"
+                                        style="font-size: 16px;">emoji_events</span>
+                                    <span class="text-xs font-bold text-white">LVL {{ game.level }}</span>
+                                </button>
+                                <!-- Settings Icon - Flush Right -->
+                                <button @click="currentView = 'settings'"
+                                    class="w-9 h-9 rounded-xl bg-surface-1 border border-glass hover:bg-surface-2 flex items-center justify-center transition-all">
+                                    <span class="material-symbols-rounded text-zinc-400"
+                                        style="font-size: 20px;">settings</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Compact Safe to Spend Card - Weekly by default -->
+                        <div class="glass-panel relative overflow-hidden p-3 mb-0">
+                            <div class="absolute inset-0" :style="{ 
+                            background: store.globalStats.netVariance >= 0 
+                            ? 'radial-gradient(circle at right, var(--c-accent-success-glow), transparent 70%)' 
+                            : 'radial-gradient(circle at right, var(--c-accent-danger-glow), transparent 70%)',
+                            opacity: 0.25 
+                        }"></div>
+
+                            <div class="relative z-10 flex items-center justify-between">
+                                <!-- Left: Amount -->
+                                <div>
+                                    <div class="text-[10px] font-bold uppercase text-zinc-500 mb-0.5"
+                                        style="letter-spacing: 0.5px;">
+                                        Safe to Spend <span class="text-brand-light">({{ store.settings.safeToSpendMode
+                                            === 'monthly' ? 'Monthly' : 'Weekly' }})</span>
+                                    </div>
+                                    <div class="flex items-baseline gap-1">
+                                        <span class="font-mono text-2xl font-bold">{{
+                                            core.Currency.formatParts(displaySafeToSpend).whole }}</span>
+                                        <span class="font-mono text-sm opacity-50">.<span>{{
+                                                core.Currency.formatParts(displaySafeToSpend).fraction }}</span></span>
+                                        <span class="text-xs font-bold text-zinc-500 ml-1">SAR</span>
+                                    </div>
+                                </div>
+
+                                <!-- Right: Savings Stats - Budget Removed -->
+                                <div class="flex flex-col items-start ml-auto animate-fade-in-up"
+                                    style="animation-delay: 0.2s;">
+                                    <div class="text-[10px] font-bold uppercase text-zinc-500 mb-0.5"
+                                        style="letter-spacing: 0.5px;">SAVINGS</div>
+                                    <div class="font-mono text-lg font-bold"
+                                        :class="store.globalStats.netVariance >= 0 ? 'text-success' : 'text-danger'">
+                                        {{ store.globalStats.netVariance.toFixed(1) }} <span
+                                            class="text-zinc-500 text-[10px]">SAR</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </header>
+
+                    <!-- V3: Date Scroller - Month Top, Day Name Bottom -->
+                    <div class="date-scroller no-scrollbar" ref="dateScroller">
+                        <div v-for="d in dateWindow" :key="d.iso" class="date-chip glass-panel"
+                            :class="{ active: d.iso === store.currentDate, today: d.isToday }"
+                            @click="selectDate(d.iso)">
+                            <!-- Month on Top -->
+                            <div class="date-month">{{ d.month }}</div>
+                            <!-- Day Number Center - V6: Lighter blue for weekends when active -->
+                            <div class="date-num"
+                                :style="{ color: d.isWeekend ? (d.iso === store.currentDate ? '#dbeafe' : '#93c5fd') : '' }">
+                                {{ d.dom }}</div>
+                            <!-- Day Name Bottom -->
+                            <div class="date-day">{{ d.day }}</div>
+                            <!-- Activity Dot -->
+                            <div class="date-dot" :style="{ opacity: hasPending(d.iso) ? 1 : 0 }"></div>
+                        </div>
+                    </div>
+
+                    <div class="content-area no-scrollbar">
+                        <!-- V3: Daily Summary Header - Paid Left, Expected Right -->
+                        <div v-if="store.currentViewExpenses.length > 0" class="flex justify-between mb-2 px-1">
+                            <span class="text-xs text-zinc-500 font-mono">Paid: {{ dailyPaidTotal.toFixed(2) }}
+                                SAR</span>
+                            <span class="text-xs text-zinc-500 font-mono">Expected: {{ dailyExpectedTotal.toFixed(2) }}
+                                SAR</span>
+                        </div>
+
+                        <div v-if="store.currentViewExpenses.length === 0"
+                            class="flex flex-col items-center justify-center py-10 text-center opacity-60">
+                            <span class="material-symbols-rounded"
+                                style="font-size: 48px; color: var(--c-text-secondary); margin-bottom: 12px;">calendar_today</span>
+                            <h3 class="text-base font-bold">No Expenses</h3>
+                            <p class="text-xs text-secondary mb-4">Your schedule is clear for this day.</p>
+                            <ms-btn variant="primary" icon="bolt" @click="autoFillToday">
+                                Auto-Fill Schedule
+                            </ms-btn>
+                        </div>
+
+                        <transition-group name="list" tag="div">
+                            <ms-swipe-item v-for="expense in sortedExpenses" :key="expense.id" class="mb-2"
+                                @swipe-left="deleteExpense(expense.id)" @swipe-right="openPayModal(expense)"
+                                @click="openEditModal(expense)">
+
+                                <!-- V2: Neon Glass Expense Card -->
+                                <div class="expense-card glass-panel w-full" :class="[
+                                    expense.isPaid ? 'is-paid' : 'is-pending',
+                                    expense.isPaid && expense.actualPaid === 0 ? 'is-gold' : '',
+                                    expense.isPaid && expense.expectedCost - expense.actualPaid > 0 ? 'var-saved' : '',
+                                    expense.isPaid && expense.expectedCost - expense.actualPaid < 0 ? 'var-over' : '',
+                                    expense.isPaid && expense.expectedCost === expense.actualPaid ? 'var-exact' : ''
+                                ]">
+
+                                    <!-- V2: Variance Stripe -->
+                                    <div class="variance-stripe" :class="getVarianceStripeClass(expense)"></div>
+
+                                    <div class="card-left">
+                                        <!-- V2: Vibrant Category Icon -->
+                                        <div class="cat-icon" :class="'cat-' + expense.category">
+                                            <ms-icon :name="getCategoryIcon(expense.category)" size="18"></ms-icon>
+                                        </div>
+                                        <div class="min-w-0">
+                                            <div class="card-name font-bold text-sm truncate">{{ expense.name }}</div>
+                                            <div class="text-[10px]">
+                                                <span v-if="expense.isPaid" class="card-status">✓ Paid</span>
+                                                <span v-else class="text-zinc-500">Pending</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="card-right">
+                                        <div class="amt-main">
+                                            {{ expense.isPaid ? expense.actualPaid.toFixed(2) :
+                                            expense.expectedCost.toFixed(2) }} <span class="text-[10px]">SAR</span>
+                                        </div>
+                                        <!-- V3: Variance Pill with corrected arrows -->
+                                        <div v-if="expense.isPaid" class="variance-pill"
+                                            :class="getVariancePillClass(expense)">
+                                            <span v-if="expense.actualPaid === 0">🔥 FREE</span>
+                                            <span v-else-if="expense.expectedCost === expense.actualPaid">On
+                                                Budget</span>
+                                            <span v-else-if="expense.expectedCost > expense.actualPaid">↑ {{
+                                                (expense.expectedCost - expense.actualPaid).toFixed(2) }} SAR</span>
+                                            <span v-else>↓ {{ (expense.actualPaid - expense.expectedCost).toFixed(2) }}
+                                                SAR</span>
+                                        </div>
+                                        <div v-else class="amt-sub">SAR</div>
+                                    </div>
+                                </div>
+
+                            </ms-swipe-item>
+                        </transition-group>
+                    </div>
+
+                    <!-- V2: FAB hidden when modal is open -->
+                    <button v-if="!anyModalOpen" class="fab" @click="openAddModal">
+                        <span class="material-symbols-rounded">add</span>
+                    </button>
+                </div>
+
+                <div v-else-if="currentView === 'settings'" key="settings"
+                    class="flex flex-col h-full relative p-5 overflow-y-auto">
+                    <!-- V5: Blue arrow back button + Settings title -->
+                    <header class="mb-6 flex items-center gap-3">
+                        <button @click="currentView = 'dashboard'" class="settings-back-btn">
+                            <span class="material-symbols-rounded" style="font-size: 18px;">arrow_back</span>
+                        </button>
+                        <h2 class="modal-title-premium">Settings</h2>
+                    </header>
+
+                    <section class="mb-8">
+                        <div class="text-xs font-bold text-secondary uppercase mb-3 ml-2">Budget Configuration</div>
+                        <div class="glass-panel p-4 flex justify-between items-center mb-3">
+                            <div>
+                                <div class="font-bold">Monthly Allowance</div>
+                                <div class="text-xs text-secondary">Base funds before expenses</div>
+                            </div>
+                            <input type="number" v-model.number="store.settings.baseAllowance" @change="saveSettings"
+                                class="bg-surface-1 border border-glass text-right font-mono p-3 rounded-lg w-32 focus:border-brand outline-none text-white">
+                        </div>
+                        <!-- V5: Weekly/Monthly Safe to Spend toggle -->
+                        <div class="glass-panel p-4 flex justify-between items-center">
+                            <div>
+                                <div class="font-bold">Safe to Spend View</div>
+                                <div class="text-xs text-secondary">Weekly divides by 4</div>
+                            </div>
+                            <div class="flex bg-surface-1 rounded-lg p-1 border border-glass">
+                                <button @click="setSafeToSpendMode('weekly')"
+                                    class="px-3 py-1.5 text-xs font-bold rounded-md transition-all"
+                                    :class="store.settings.safeToSpendMode === 'weekly' ? 'bg-brand text-white' : 'text-zinc-400 hover:text-white'">
+                                    Weekly
+                                </button>
+                                <button @click="setSafeToSpendMode('monthly')"
+                                    class="px-3 py-1.5 text-xs font-bold rounded-md transition-all"
+                                    :class="store.settings.safeToSpendMode === 'monthly' ? 'bg-brand text-white' : 'text-zinc-400 hover:text-white'">
+                                    Monthly
+                                </button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="mb-8">
+                        <div class="text-xs font-bold text-secondary uppercase mb-3 ml-2">Auto-Fill Templates</div>
+                        <div class="glass-panel overflow-hidden">
+                            <div v-for="t in store.templates" :key="t.id"
+                                class="p-4 border-b border-glass flex justify-between items-center cursor-pointer hover:bg-surface-2 transition-colors"
+                                @click="openEditModal(t, true)">
+                                <div class="flex items-center gap-3">
+                                    <div
+                                        class="w-8 h-8 rounded bg-surface-1 flex items-center justify-center text-secondary">
+                                        <ms-icon :name="getCategoryIcon(t.category)" size="16"></ms-icon>
+                                    </div>
+                                    <div>
+                                        <div class="font-bold text-sm">{{ t.name }}</div>
+                                        <div class="text-xs text-secondary">{{ t.recurrence }}</div>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    <div class="font-mono font-bold">{{ t.expectedCost }}</div>
+                                    <button class="text-danger opacity-50 hover:opacity-100 p-2"
+                                        @click.stop="deleteTemplate(t.id)">
+                                        <ms-icon name="delete" size="20"></ms-icon>
+                                    </button>
+                                </div>
+                            </div>
+                            <button class="w-full p-4 text-brand font-bold text-sm hover:bg-surface-1 transition-colors"
+                                @click="openTemplateModal">
+                                + Add New Template
+                            </button>
+                        </div>
+                    </section>
+
+                    <section class="mb-12">
+                        <div class="text-xs font-bold text-secondary uppercase mb-3 ml-2">Data Zone</div>
+                        <!-- V6: Side-by-side Export/Import buttons -->
+                        <div class="flex gap-3 mb-3">
+                            <button @click="exportData"
+                                class="flex-1 py-3 rounded-xl bg-surface-1 border border-glass hover:bg-surface-2 transition-all flex items-center justify-center gap-2">
+                                <span class="material-symbols-rounded text-brand"
+                                    style="font-size: 20px;">download</span>
+                                <span class="font-semibold text-sm">Export Backup</span>
+                            </button>
+                            <label
+                                class="flex-1 py-3 rounded-xl bg-surface-1 border border-glass hover:bg-surface-2 transition-all flex items-center justify-center gap-2 cursor-pointer relative">
+                                <span class="material-symbols-rounded text-success"
+                                    style="font-size: 20px;">upload</span>
+                                <span class="font-semibold text-sm">Import Backup</span>
+                                <input type="file" @change="importData"
+                                    class="absolute inset-0 opacity-0 cursor-pointer">
+                            </label>
+                        </div>
+                        <ms-btn variant="danger" icon="delete_forever" block @click="resetApp">Factory Reset</ms-btn>
+                    </section>
+                </div>
+            </transition>
+
+            <!-- ============================================ -->
+            <!-- MODAL: Record Payment - V3 Compact Redesign -->
+            <!-- ============================================ -->
+            <ms-modal v-model="payModal.open">
+                <div v-if="payModal.item" class="flex flex-col gap-3">
+                    <!-- V5: Stacked Header - More top padding -->
+                    <div class="flex flex-col gap-1 pt-4">
+                        <!-- Title Row with padding for X button -->
+                        <div class="pr-10 pt-[2px]">
+                            <h3 class="modal-title-premium">Record Payment</h3>
+                        </div>
+                        <!-- Expense Info Row -->
+                        <div class="flex items-center gap-2 pr-10">
+                            <span class="font-semibold truncate"
+                                :class="payModal.item.name.length > 18 ? 'text-xs' : 'text-sm'"
+                                style="max-width: 70%;">{{ payModal.item.name }}</span>
+                            <span class="text-zinc-500">·</span>
+                            <span class="text-sm font-mono text-zinc-400">{{ payModal.item.expectedCost.toFixed(0) }}
+                                SAR</span>
+                        </div>
+                    </div>
+
+                    <!-- Amount Display -->
+                    <div class="py-3 px-4 glass-panel text-center">
+                        <div class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Amount Paid</div>
+                        <div class="text-3xl font-mono font-bold" :class="getPaymentAmountClass()">{{ payModal.amount }}
+                        </div>
+                    </div>
+
+                    <!-- Quick Adjusters - Red for minus, Green for plus -->
+                    <div class="flex gap-2">
+                        <button v-for="adj in [-5, -2, -1]" :key="adj"
+                            class="flex-1 py-2.5 text-sm font-bold rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors"
+                            @click="adjustAmount(adj)">
+                            {{ adj }}
+                        </button>
+                        <button v-for="adj in [1, 2, 5]" :key="adj"
+                            class="flex-1 py-2.5 text-sm font-bold rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"
+                            @click="adjustAmount(adj)">
+                            +{{ adj }}
+                        </button>
+                    </div>
+
+                    <!-- Numpad -->
+                    <ms-numpad @input="handleNumpadInput" @delete="handleNumpadDelete"></ms-numpad>
+
+                    <!-- V3: Two Bottom Buttons - Confirm & Free - moved lower -->
+                    <div class="flex gap-2 mt-[14px] mb-0">
+                        <button class="ms-btn btn-premium-confirm flex-1 rounded-[24px]" @click="commitPayment">
+                            <ms-icon name="check" size="18" class="mr-1"></ms-icon>
+                            <span>Confirm</span>
+                        </button>
+                        <button @click="markAsFree" class="free-btn flex-1 rounded-[24px]">
+                            <span class="free-icon relative z-10">✨</span>
+                            <span class="relative z-10">Free</span>
+                        </button>
+                    </div>
+                </div>
+            </ms-modal>
+
+            <!-- ============================================ -->
+            <!-- MODAL: Add New Expense - V2 Redesign -->
+            <!-- ============================================ -->
+            <ms-modal v-model="addModal.open" title="New Expense">
+                <div class="flex flex-col gap-4">
+                    <!-- Name Input with Floating Label -->
+                    <div>
+                        <label
+                            class="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1 block">Name</label>
+                        <input type="text" v-model="addModal.form.name" placeholder="Taxi, Lunch..."
+                            class="w-full p-3 bg-surface-1 border border-glass rounded-lg text-white text-sm focus:border-brand outline-none">
+                    </div>
+
+                    <!-- Cost Input with Floating Label -->
+                    <div>
+                        <label class="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1 block">Expected
+                            Cost
+                            (SAR)</label>
+                        <input type="number" v-model.number="addModal.form.cost" placeholder="0.00"
+                            class="w-full p-3 bg-surface-1 border border-glass rounded-lg text-white font-mono text-lg focus:border-brand outline-none">
+                    </div>
+
+                    <!-- V2: Category Grid (3 columns) -->
+                    <div>
+                        <label
+                            class="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-2 block">Category</label>
+                        <div class="grid grid-cols-3 gap-2">
+                            <button v-for="cat in categoryOptions" :key="cat.id"
+                                @click="addModal.form.category = cat.id" :class="[
+                                'p-3 rounded-lg flex flex-col items-center gap-1 transition-all border',
+                                addModal.form.category === cat.id 
+                                    ? 'bg-brand/20 border-brand' 
+                                    : 'bg-surface-1 border-glass hover:border-zinc-500'
+                            ]">
+                                <div class="cat-icon" :class="'cat-' + cat.id" style="width: 28px; height: 28px;">
+                                    <ms-icon :name="cat.icon" size="14"></ms-icon>
+                                </div>
+                                <span class="text-[10px] font-medium"
+                                    :class="addModal.form.category === cat.id ? 'text-brand-light' : 'text-zinc-400'">{{
+                                    cat.label }}</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <button class="ms-btn btn-premium-add mt-3 mb-0 rounded-[24px]" @click="submitNewExpense"
+                        :loading="addModal.isSubmitting">
+                        <div class="relative z-10 flex items-center justify-center">
+                            <ms-icon name="add" size="18" class="mr-1"></ms-icon>
+                            <span>Add to {{ core.Date.humanize(store.currentDate) }}</span>
+                        </div>
+                    </button>
+                </div>
+            </ms-modal>
+
+            <!-- ============================================ -->
+            <!-- MODAL: Edit Expense - V6 Premium Rework -->
+            <!-- ============================================ -->
+            <ms-modal v-model="editModal.open">
+                <div v-if="editModal.item" class="flex flex-col gap-4">
+                    <!-- V6: Header with "Perfect Positions" - Title aligned with X -->
+                    <div class="flex items-center justify-end gap-2 pr-10 pt-[18px]">
+                        <h3 class="modal-title-premium mr-auto">Edit Expense</h3>
+                        <!-- V6: Subtle "Unpaid" status tag (only if paid) -->
+                        <button v-if="editModal.item.isPaid" @click="markUnpaidFromEdit" class="unpaid-tag mt-[2px]">
+                            <span class="material-symbols-rounded" style="font-size: 12px;">undo</span>
+                            Unpaid
+                        </button>
+                    </div>
+
+                    <!-- Name Input - Label ABOVE -->
+                    <div class="edit-input-group">
+                        <label class="edit-input-label">Name</label>
+                        <input type="text" v-model="editModal.form.name" class="glass-input w-full"
+                            placeholder="Expense name">
+                    </div>
+
+                    <!-- Cost Input - Label ABOVE -->
+                    <div class="edit-input-group">
+                        <label class="edit-input-label">Expected Cost (SAR)</label>
+                        <input type="number" v-model="editModal.form.cost" class="glass-input w-full" placeholder="0.00"
+                            step="0.01">
+                    </div>
+
+                    <!-- Date Input - Label ABOVE -->
+                    <div class="edit-input-group" v-if="!editModal.isTemplate">
+                        <label class="edit-input-label">Date</label>
+                        <input type="date" v-model="editModal.form.date" class="glass-input w-full">
+                    </div>
+
+                    <!-- Category Selector - Same Label Style -->
+                    <div class="edit-input-group">
+                        <label class="edit-input-label">Category</label>
+                        <div class="grid grid-cols-3 gap-2">
+                            <button v-for="cat in categoryOptions" :key="cat.id"
+                                @click="editModal.form.category = cat.id"
+                                class="flex flex-col items-center gap-1 p-2 rounded-lg transition-all"
+                                :class="editModal.form.category === cat.id ? 'bg-brand/20 border border-brand' : 'bg-surface-3 border border-transparent'">
+                                <div class="w-8 h-8 rounded-full flex items-center justify-center"
+                                    :style="{ background: getCategoryColor(cat.id) }">
+                                    <ms-icon :name="cat.icon" size="14"></ms-icon>
+                                </div>
+                                <span class="text-[10px] font-medium"
+                                    :class="editModal.form.category === cat.id ? 'text-brand-light' : 'text-zinc-400'">{{
+                                    cat.label }}</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- V6: Premium Action Buttons - Refined Design -->
+                    <div class="flex gap-3 mt-3 mb-0">
+                        <button @click="saveEditedExpense" class="edit-action-btn edit-action-update rounded-[24px]">
+                            <span class="material-symbols-rounded relative z-10" style="font-size: 18px;">check</span>
+                            <span class="relative z-10">Update</span>
+                        </button>
+                        <button @click="deleteEditedExpense" class="edit-action-btn edit-action-delete rounded-[24px]">
+                            <span class="material-symbols-rounded relative z-10" style="font-size: 18px;">delete</span>
+                            <span class="relative z-10">Delete</span>
+                        </button>
+                    </div>
+                </div>
+            </ms-modal>
+
+            <!-- ============================================ -->
+            <!-- MODAL: Custom Confirm Dialog - V4 NEW -->
+            <!-- ============================================ -->
+            <transition name="fade">
+                <div v-if="confirmDialog.open" class="modal-backdrop" @click="handleConfirmDialogCancel"></div>
+            </transition>
+            <transition name="modal-pop">
+                <div v-if="confirmDialog.open" class="confirm-dialog-card">
+                    <div class="confirm-dialog-icon">
+                        <span class="material-symbols-rounded"
+                            style="font-size: 32px; color: var(--c-accent-danger);">warning</span>
+                    </div>
+                    <h3 class="modal-title-premium text-center mb-2">{{ confirmDialog.title }}</h3>
+                    <p class="text-sm text-zinc-400 text-center mb-6">{{ confirmDialog.message }}</p>
+                    <div class="flex gap-3">
+                        <!-- V5: Delete on LEFT, Cancel on RIGHT with styled button -->
+                        <button @click="handleConfirmDialogConfirm"
+                            class="flex-1 py-3 px-4 rounded-xl bg-danger text-white font-semibold hover:brightness-110 transition-all shadow-lg"
+                            style="box-shadow: 0 4px 16px rgba(244, 63, 94, 0.4);">
+                            Delete
+                        </button>
+                        <button @click="handleConfirmDialogCancel"
+                            class="flex-1 py-3 px-4 rounded-xl bg-surface-2 border border-glass text-zinc-300 font-semibold hover:bg-surface-3 hover:border-zinc-500 transition-all">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </transition>
+
+            <!-- Profile Overlay -->
+            <ms-profile-overlay :open="showProfile" @close="showProfile = false"></ms-profile-overlay>
+
+        </div>
+    </div>
+
+    <script>
+        /**
+         * ================================================================
+         * MODULE: DATABASE (IndexedDB Wrapper)
+         * ================================================================
+         * A professional-grade wrapper for the browser's SQL-like database.
+         * Handles schema upgrades, transactions, and async queries.
+         */
+        const DB = {
+            dbName: 'MicroSaveOS_DB',
+            version: 1,
+            db: null,
+
+            async connect() {
+                return new Promise((resolve, reject) => {
+                    const request = indexedDB.open(this.dbName, this.version);
+
+                    request.onupgradeneeded = (event) => {
+                        const db = event.target.result;
+
+                        // Store 1: Settings (Key-Value)
+                        if (!db.objectStoreNames.contains('settings')) {
+                            db.createObjectStore('settings', { keyPath: 'key' });
+                        }
+
+                        // Store 2: Templates (Recurring Rules)
+                        if (!db.objectStoreNames.contains('templates')) {
+                            db.createObjectStore('templates', { keyPath: 'id' });
+                        }
+
+                        // Store 3: Expenses (The massive transaction log)
+                        // We index by 'date' for fast queries on the calendar view
+                        if (!db.objectStoreNames.contains('expenses')) {
+                            const store = db.createObjectStore('expenses', { keyPath: 'id' });
+                            store.createIndex('date', 'date', { unique: false });
+                            store.createIndex('isPaid', 'isPaid', { unique: false });
+                        }
+                    };
+
+                    request.onsuccess = (event) => {
+                        this.db = event.target.result;
+                        console.log("✅ Database Connected: " + this.dbName);
+                        resolve(this.db);
+                    };
+
+                    request.onerror = (event) => {
+                        console.error("❌ Database Error:", event.target.error);
+                        reject(event.target.error);
+                    };
+                });
+            },
+
+            // --- GENERIC HELPER: TRANSACTION WRAPPER ---
+            async transaction(storeName, mode, callback) {
+                if (!this.db) await this.connect();
+                return new Promise((resolve, reject) => {
+                    const tx = this.db.transaction(storeName, mode);
+                    const store = tx.objectStore(storeName);
+                    const request = callback(store);
+
+                    tx.oncomplete = () => resolve(request.result);
+                    tx.onerror = () => reject(tx.error);
+                });
+            },
+
+            // --- API METHODS ---
+
+            // Settings
+            async getSetting(key, defaultValue) {
+                try {
+                    const result = await this.transaction('settings', 'readonly', store => store.get(key));
+                    return result ? result.value : defaultValue;
+                } catch (e) { return defaultValue; }
+            },
+
+            async setSetting(key, value) {
+                return this.transaction('settings', 'readwrite', store => store.put({ key, value }));
+            },
+
+            // Templates
+            async getTemplates() {
+                return new Promise(async (resolve) => {
+                    if (!this.db) await this.connect();
+                    const tx = this.db.transaction('templates', 'readonly');
+                    const request = tx.objectStore('templates').getAll();
+                    request.onsuccess = () => resolve(request.result || []);
+                });
+            },
+
+            async saveTemplate(template) {
+                return this.transaction('templates', 'readwrite', store => store.put(template));
+            },
+
+            async deleteTemplate(id) {
+                return this.transaction('templates', 'readwrite', store => store.delete(id));
+            },
+
+            // Expenses
+            async getExpensesByDate(dateStr) {
+                return new Promise(async (resolve) => {
+                    if (!this.db) await this.connect();
+                    const tx = this.db.transaction('expenses', 'readonly');
+                    const index = tx.objectStore('expenses').index('date');
+                    const request = index.getAll(IDBKeyRange.only(dateStr));
+                    request.onsuccess = () => resolve(request.result || []);
+                });
+            },
+
+            async getAllExpenses() {
+                return this.transaction('expenses', 'readonly', store => store.getAll());
+            },
+
+            async saveExpense(expense) {
+                return this.transaction('expenses', 'readwrite', store => store.put(expense));
+            },
+
+            async deleteExpense(id) {
+                return this.transaction('expenses', 'readwrite', store => store.delete(id));
+            },
+
+            // --- NUKE OPTION ---
+            async factoryReset() {
+                return new Promise((resolve, reject) => {
+                    if (this.db) this.db.close();
+                    const req = indexedDB.deleteDatabase(this.dbName);
+                    req.onsuccess = () => resolve();
+                    req.onerror = () => reject();
+                });
+            }
+        };
+
+        /**
+         * ================================================================
+         * MODULE: STORE (Reactive State Manager)
+         * ================================================================
+         * The brain of the application. It connects Vue to the Database.
+         * Handles the "Variance Engine" logic and centralized data fetching.
+         */
+        const { reactive, computed, watchEffect } = Vue;
+
+        const Store = reactive({
+            // --- STATE ---
+            isReady: false,
+            currentDate: Core.Date.getTodayISO(),
+            settings: {
+                baseAllowance: 1000,
+                rent: 350,
+                targetSavings: 0,
+                safeToSpendMode: 'weekly'  // V5: 'weekly' or 'monthly'
+            },
+            templates: [],
+
+            // We cache expenses for the current VIEW only (performance optimization)
+            // But we keep global totals for the dashboard
+            currentViewExpenses: [],
+            globalStats: {
+                totalSaved: 0,
+                totalOverspent: 0,
+                netVariance: 0,
+                monthlyPaid: 0,      // V4: Paid costs this month
+                monthlyExpected: 0,   // V4: Expected costs this month (unpaid)
+                monthlySpent: 0       // V4: Total = monthlyPaid + monthlyExpected
+            },
+
+            // --- ACTIONS ---
+
+            async init() {
+                await DB.connect();
+
+                // Load Settings
+                this.settings.baseAllowance = await DB.getSetting('baseAllowance', 1000);
+                this.settings.safeToSpendMode = await DB.getSetting('safeToSpendMode', 'weekly');
+
+                // Load Templates (Seed if empty)
+                this.templates = await DB.getTemplates();
+                if (this.templates.length === 0) {
+                    await this.seedTemplates();
+                }
+
+                // Calculate Global Variance (Heavy calculation, done once on load)
+                await this.recalcGlobalStats();
+
+                // Load today's view
+                await this.loadDay(this.currentDate);
+
+                this.isReady = true;
+                console.log("🚀 MicroSave OS Initialized");
+            },
+
+            async loadDay(dateStr) {
+                this.currentDate = dateStr;
+                this.currentViewExpenses = await DB.getExpensesByDate(dateStr);
+            },
+
+            // The "Variance Engine" Logic
+            async recalcGlobalStats() {
+                const all = await DB.getAllExpenses();
+                let saved = 0;
+                let over = 0;
+                let monthlyPaid = 0;
+                let monthlyExpected = 0;
+
+                // Get current month bounds
+                const now = new Date();
+                const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+                const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+
+                all.forEach(e => {
+                    // Calculate variance for all paid expenses
+                    if (e.isPaid) {
+                        const variance = e.expectedCost - e.actualPaid;
+                        if (variance > 0) saved += variance;
+                        else over += Math.abs(variance);
+                    }
+
+                    // V4: Calculate monthly costs (paid + expected)
+                    if (e.date >= monthStart && e.date <= monthEnd) {
+                        if (e.isPaid) {
+                            monthlyPaid += e.actualPaid;
+                        } else {
+                            monthlyExpected += e.expectedCost;
+                        }
+                    }
+                });
+
+                this.globalStats.totalSaved = saved;
+                this.globalStats.totalOverspent = over;
+                this.globalStats.netVariance = saved - over;
+                this.globalStats.monthlyPaid = monthlyPaid;
+                this.globalStats.monthlyExpected = monthlyExpected;
+                this.globalStats.monthlySpent = monthlyPaid + monthlyExpected;
+            },
+
+            // --- MUTATIONS (Data Writers) ---
+
+            async addExpense(expense) {
+                // Ensure ID
+                if (!expense.id) expense.id = Core.UUID();
+
+                // Optimistic UI Update (Instant feedback before DB confirms)
+                if (expense.date === this.currentDate) {
+                    this.currentViewExpenses.push(expense);
+                }
+
+                await DB.saveExpense(expense);
+                await this.recalcGlobalStats(); // Update the "Safe to Spend" number
+            },
+
+            async updateExpense(updatedExpense) {
+                // Optimistic UI
+                const idx = this.currentViewExpenses.findIndex(e => e.id === updatedExpense.id);
+                if (idx !== -1) {
+                    this.currentViewExpenses[idx] = updatedExpense;
+                }
+
+                await DB.saveExpense(updatedExpense);
+                await this.recalcGlobalStats();
+            },
+
+            async deleteExpense(id) {
+                this.currentViewExpenses = this.currentViewExpenses.filter(e => e.id !== id);
+                await DB.deleteExpense(id);
+                await this.recalcGlobalStats();
+            },
+
+            // Template Logic
+            async seedTemplates() {
+                const seeds = [
+                    { id: 't1', name: 'Taxi to College', expectedCost: 8, category: 'transport', recurrence: 'daily' },
+                    { id: 't2', name: 'Taxi Home', expectedCost: 8, category: 'transport', recurrence: 'daily' },
+                    { id: 't3', name: 'Water Gallon', expectedCost: 8, category: 'food', recurrence: 'daily' },
+                    { id: 't4', name: 'Bus Trip', expectedCost: 19, category: 'transport', recurrence: 'monthly', days: [31, 7, 14, 22] }, // Using numeric dates roughly
+                    { id: 't5', name: 'Tabby Payment', expectedCost: 120, category: 'other', recurrence: 'monthly', days: [1] },
+                    { id: 't6', name: 'Internet', expectedCost: 60, category: 'utilities', recurrence: 'monthly', days: [1] }
+                ];
+
+                for (const t of seeds) {
+                    await DB.saveTemplate(t);
+                }
+                this.templates = seeds;
+            },
+
+            // The "Auto-Fill" Logic
+            async autoFillDay(dateStr) {
+                const d = new Date(dateStr);
+                const dayNum = d.getDate();
+                const existing = await DB.getExpensesByDate(dateStr);
+                const existingNames = new Set(existing.map(e => e.name));
+
+                const toAdd = [];
+
+                this.templates.forEach(t => {
+                    if (existingNames.has(t.name)) return;
+
+                    let shouldAdd = false;
+                    if (t.recurrence === 'daily') shouldAdd = true;
+                    if (t.recurrence === 'monthly' && t.days && t.days.includes(dayNum)) shouldAdd = true;
+
+                    if (shouldAdd) {
+                        toAdd.push({
+                            id: Core.UUID(),
+                            name: t.name,
+                            expectedCost: t.expectedCost,
+                            actualPaid: 0,
+                            isPaid: false,
+                            category: t.category,
+                            date: dateStr,
+                            timestamp: Date.now() // For sorting
+                        });
+                    }
+                });
+
+                if (toAdd.length > 0) {
+                    for (const expense of toAdd) {
+                        await DB.saveExpense(expense);
+                    }
+                    // Refresh view
+                    if (dateStr === this.currentDate) {
+                        this.currentViewExpenses = [...this.currentViewExpenses, ...toAdd];
+                    }
+                }
+                return toAdd.length; // Return count for UI feedback
+            },
+
+            // --- GETTERS (Computed Properties) ---
+            get safeToSpend() {
+                // V4: Formula: Monthly Budget - (paid costs this month + expected costs this month)
+                // This shows how much you can still spend this month
+                return this.settings.baseAllowance - this.globalStats.monthlySpent;
+            },
+
+            // V4: Add monthlySpent to globalStats
+            get monthlySpent() {
+                return this.globalStats.monthlyPaid + this.globalStats.monthlyExpected;
+            }
+        });
+
+        // Expose Store for debugging
+        window.MicroSaveStore = Store;
+
+    </script>
+    <script>
+        /**
+         * ================================================================
+         * MODULE: COMPONENT LIBRARY (Atomic Design System)
+         * ================================================================
+         * These components encapsulate the "Cyberpunk/Glass" aesthetic
+         * and handle complex interactions like Swiping and Haptics.
+         */
+
+        // Define the Root App Shell (Logic will be injected in Part 4)
+        // We define it here so we can register components to it.
+        const MicroSaveApp = Vue.createApp({
+            setup() {
+                // This is a placeholder. The Real Logic comes in Part 4.
+                // We are exposing the Store to the template immediately.
+                return {
+                    store: MicroSaveStore,
+                    core: MicroSaveCore
+                };
+            }
+        });
+
+        // --- COMPONENT 1: MS-ICON (Iconography Wrapper) ---
+        MicroSaveApp.component('ms-icon', {
+            props: ['name', 'size', 'fill'],
+            computed: {
+                iconStyle() {
+                    return {
+                        fontSize: (this.size || 24) + 'px',
+                        fontVariationSettings: this.fill ? '"FILL" 1' : '"FILL" 0',
+                        userSelect: 'none'
+                    };
+                }
+            },
+            template: `
+                <span class="material-symbols-rounded" :style="iconStyle">
+                    {{ name }}
+                </span>
+            `
+        });
+
+        // --- COMPONENT 2: MS-BTN (Haptic Button) ---
+        MicroSaveApp.component('ms-btn', {
+            props: {
+                variant: { type: String, default: 'primary' }, // primary, danger, ghost, glass
+                block: { type: Boolean, default: false },
+                icon: { type: String, default: '' },
+                loading: { type: Boolean, default: false }
+            },
+            methods: {
+                trigger() {
+                    if (this.loading) return;
+                    // Haptic Feedback (if supported)
+                    if (navigator.vibrate) navigator.vibrate(10);
+                    this.$emit('click');
+                }
+            },
+            template: `
+                <button class="ms-btn" 
+                    :class="['variant-' + variant, { 'w-full': block, 'is-loading': loading }]"
+                    @click="trigger">
+                    
+                    <div v-if="loading" class="spinner"></div>
+                    
+                    <div v-else class="content-wrapper">
+                        <ms-icon v-if="icon" :name="icon" :size="20" style="margin-right: 6px;"></ms-icon>
+                        <slot></slot>
+                    </div>
+                </button>
+            `,
+            styles: `
+                /* Injected Styles for Buttons (Conceptual) */
+                /* See <style> block in Part 1 for reference classes */
+            `
+        });
+
+        // --- COMPONENT 3: MS-SWIPE-ITEM (Physics Gesture Engine) ---
+        // This is the most complex component. It handles raw touch physics.
+        MicroSaveApp.component('ms-swipe-item', {
+            props: ['bg'], // Background color for the reveal (e.g. Red for delete)
+            emits: ['swipe-left', 'swipe-right', 'click'],
+            data() {
+                return {
+                    offset: 0,
+                    startX: 0,
+                    isDragging: false,
+                    threshold: 100 // Pixel distance to trigger action
+                }
+            },
+            computed: {
+                style() {
+                    return {
+                        transform: `translateX(${this.offset}px)`,
+                        transition: this.isDragging ? 'none' : 'transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+                    }
+                },
+                actionIcon() {
+                    if (this.offset > 50) return 'check_circle'; // Right Swipe
+                    if (this.offset < -50) return 'delete';      // Left Swipe
+                    return '';
+                },
+                actionColor() {
+                    if (this.offset > 0) return 'var(--c-accent-success)';
+                    return 'var(--c-accent-danger)';
+                }
+            },
+            methods: {
+                start(e) {
+                    this.startX = e.touches[0].clientX;
+                    this.isDragging = true;
+                },
+                move(e) {
+                    if (!this.isDragging) return;
+                    const currentX = e.touches[0].clientX;
+                    const delta = currentX - this.startX;
+
+                    // Add resistance (rubber banding)
+                    // The further you pull, the harder it gets
+                    this.offset = delta * 0.7;
+                },
+                end() {
+                    this.isDragging = false;
+
+                    // Trigger Actions based on threshold
+                    if (this.offset > this.threshold) {
+                        if (navigator.vibrate) navigator.vibrate(20);
+                        this.$emit('swipe-right');
+                        this.offset = 0; // Reset
+                    }
+                    else if (this.offset < -this.threshold) {
+                        if (navigator.vibrate) navigator.vibrate([20, 50, 20]);
+                        this.$emit('swipe-left');
+                        this.offset = 0; // Reset
+                    }
+                    else {
+                        // Spring back to zero
+                        this.offset = 0;
+                    }
+                }
+            },
+            template: `
+                <div class="swipe-container relative overflow-hidden" style="border-radius: var(--radius-md);">
+                    <div class="action-layer absolute inset-0 flex items-center justify-between px-4"
+                         :style="{ background: 'rgba(0,0,0,0.3)' }">
+                         
+                        <div :style="{ opacity: offset > 20 ? 1 : 0, color: 'var(--c-accent-success)', transform: 'scale(' + (0.5 + Math.min(Math.abs(offset)/100, 1)) + ')' }" class="transition-transform">
+                            <ms-icon name="check_circle" :size="32"></ms-icon>
+                        </div>
+
+                        <div :style="{ opacity: offset < -20 ? 1 : 0, color: 'var(--c-accent-danger)', transform: 'scale(' + (0.5 + Math.min(Math.abs(offset)/100, 1)) + ')' }" class="transition-transform">
+                            <ms-icon name="delete" :size="32"></ms-icon>
+                        </div>
+                    </div>
+
+                    <div class="swipe-content relative bg-surface-1" 
+                         :style="style"
+                         @touchstart="start"
+                         @touchmove="move"
+                         @touchend="end"
+                         @click="$emit('click')">
+                        <slot></slot>
+                    </div>
+                </div>
+            `
+        });
+
+        // --- COMPONENT 4: MS-NUMPAD (Custom Keyboard) ---
+        // Native keyboards shift the layout and hide context. We build our own.
+        MicroSaveApp.component('ms-numpad', {
+            emits: ['input', 'delete', 'confirm'],
+            methods: {
+                tap(key) {
+                    if (navigator.vibrate) navigator.vibrate(5);
+                    this.$emit('input', key);
+                },
+                del() {
+                    if (navigator.vibrate) navigator.vibrate(10);
+                    this.$emit('delete');
+                },
+                done() {
+                    if (navigator.vibrate) navigator.vibrate(10);
+                    this.$emit('confirm');
+                }
+            },
+            template: `
+                <div class="numpad-grid">
+                    <button v-for="n in [1,2,3,4,5,6,7,8,9]" :key="n" 
+                            class="pad-key glass-panel" @click="tap(n)">{{ n }}</button>
+                    <button class="pad-key glass-panel" @click="tap('.')">.</button>
+                    <button class="pad-key glass-panel" @click="tap(0)">0</button>
+                    <button class="pad-key glass-panel text-danger" @click="del()">
+                        <ms-icon name="backspace"></ms-icon>
+                    </button>
+                </div>
+            `
+        });
+
+        // --- COMPONENT 5: MS-STAT-RING (SVG Visualization) ---
+        // Draws the variance circles using SVG stroke-dasharray
+        MicroSaveApp.component('ms-stat-ring', {
+            props: {
+                radius: { default: 60 },
+                stroke: { default: 8 },
+                progress: { default: 0 }, // 0 to 100
+                color: { default: 'var(--c-accent-brand)' }
+            },
+            computed: {
+                normalizedRadius() { return this.radius - this.stroke * 2; },
+                circumference() { return this.normalizedRadius * 2 * Math.PI; },
+                strokeDashoffset() {
+                    return this.circumference - (this.progress / 100) * this.circumference;
+                }
+            },
+            template: `
+                <svg :height="radius * 2" :width="radius * 2" class="stat-ring">
+                    <circle
+                        :stroke="color"
+                        stroke-opacity="0.2"
+                        :stroke-width="stroke"
+                        fill="transparent"
+                        :r="normalizedRadius"
+                        :cx="radius"
+                        :cy="radius"
+                    />
+                    <circle
+                        class="ring-progress"
+                        :stroke="color"
+                        :stroke-width="stroke"
+                        :stroke-dasharray="circumference + ' ' + circumference"
+                        :style="{ strokeDashoffset: strokeDashoffset }"
+                        stroke-linecap="round"
+                        fill="transparent"
+                        :r="normalizedRadius"
+                        :cx="radius"
+                        :cy="radius"
+                    />
+                </svg>
+            `
+        });
+
+        // --- COMPONENT 6: MS-MODAL (Centered Floating Card) ---
+        MicroSaveApp.component('ms-modal', {
+            props: ['modelValue', 'title'], // v-model for open/close
+            emits: ['update:modelValue'],
+            template: `
+                <transition name="fade">
+                    <div v-if="modelValue" class="modal-backdrop" @click="$emit('update:modelValue', false)"></div>
+                </transition>
+                
+                <transition name="modal-pop">
+                    <div v-if="modelValue" class="modal-floating-card">
+                        <!-- Red X Close Button -->
+                        <button class="modal-close-btn" @click="$emit('update:modelValue', false)">
+                            <ms-icon name="close" size="14"></ms-icon>
+                        </button>
+
+                        <div v-if="title" class="modal-header">
+                            <h3>{{ title }}</h3>
+                        </div>
+
+                        <div class="modal-body no-scrollbar">
+                            <slot></slot>
+                        </div>
+                    </div>
+                </transition>
+            `
+        });
+    </script>
+
+    <style>
+        /* --- COMPONENT STYLES --- */
+
+        /* FLOATING MODAL STYLES */
+        .modal-backdrop {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            z-index: var(--z-modal-backdrop);
+        }
+
+        .modal-floating-card {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: calc(100% - 32px);
+            max-width: 380px;
+            max-height: calc(100% - 48px);
+            background: var(--c-surface-2);
+            border: 1px solid var(--glass-panel-border);
+            border-radius: var(--radius-xl);
+            box-shadow: 0 25px 80px rgba(0, 0, 0, 0.6), 0 0 40px rgba(99, 102, 241, 0.15);
+            z-index: var(--z-modal);
+            display: flex;
+            flex-direction: column;
+            overflow: visible;
+            /* Allow X button to show outside */
+        }
+
+        /* V6: "The Perfect Positions" - Modal close button aligned with title */
+        .modal-close-btn {
+            position: absolute;
+            /* Perfect Position: Lower + More Left */
+            top: 20px;
+            right: 16px;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--c-accent-danger);
+            color: white;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+            box-shadow: 0 2px 8px rgba(244, 63, 94, 0.4);
+        }
+
+        .modal-close-btn:hover {
+            transform: scale(1.1);
+        }
+
+        .modal-close-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* V4: Custom Confirm Dialog */
+        .confirm-dialog-card {
+            position: fixed;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: min(85%, 320px);
+            background: var(--c-surface-2);
+            border: 1px solid var(--glass-panel-border);
+            border-radius: var(--radius-xl);
+            padding: 32px 24px 24px;
+            box-shadow: 0 25px 80px rgba(0, 0, 0, 0.6), 0 0 40px rgba(244, 63, 94, 0.15);
+            z-index: calc(var(--z-modal) + 10);
+        }
+
+        .confirm-dialog-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: rgba(244, 63, 94, 0.15);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 16px;
+        }
+
+        /* V5: Settings Blue Back Button */
+        .settings-back-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: var(--c-accent-brand);
+            color: white;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+            box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
+        }
+
+        .settings-back-btn:hover {
+            transform: scale(1.1);
+        }
+
+        .settings-back-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* V5: Edit Modal Input Labels (above inputs) */
+        .edit-input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .edit-input-label {
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--c-text-tertiary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* V5: Undo Payment Button (top-right in Edit modal) */
+        .undo-payment-btn {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 6px 12px;
+            border-radius: 8px;
+            background: rgba(251, 191, 36, 0.15);
+            border: 1px solid rgba(251, 191, 36, 0.3);
+            color: var(--c-accent-warning);
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .undo-payment-btn:hover {
+            background: rgba(251, 191, 36, 0.25);
+            transform: translateY(-1px);
+        }
+
+        .undo-payment-btn:active {
+            transform: scale(0.98);
+        }
+
+        /* V6: Subtle "Unpaid" Tag */
+        .unpaid-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            background: rgba(251, 191, 36, 0.12);
+            border: 1px solid rgba(251, 191, 36, 0.25);
+            color: var(--c-accent-warning);
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .unpaid-tag:hover {
+            background: rgba(251, 191, 36, 0.2);
+            border-color: rgba(251, 191, 36, 0.4);
+            transform: scale(1.02);
+        }
+
+        .unpaid-tag:active {
+            transform: scale(0.98);
+        }
+
+        /* V6: Premium Action Buttons (Edit Modal) */
+        .edit-action-btn {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 14px 16px;
+            border-radius: var(--radius-xl);
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+            text-transform: uppercase;
+            border: none;
+            cursor: pointer;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .edit-action-btn::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            transition: opacity 0.25s ease;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        .edit-action-btn:hover::before {
+            opacity: 1;
+        }
+
+        .edit-action-update {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            color: white;
+            box-shadow: 0 4px 20px rgba(99, 102, 241, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+
+        .edit-action-update::before {
+            background: linear-gradient(135deg, #818cf8 0%, #a78bfa 100%);
+        }
+
+        .edit-action-update:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 24px rgba(99, 102, 241, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+        }
+
+        .edit-action-update:active {
+            transform: translateY(0) scale(0.98);
+        }
+
+        .edit-action-delete {
+            background: linear-gradient(135deg, #ef4444 0%, #f43f5e 100%);
+            color: white;
+            box-shadow: 0 4px 20px rgba(244, 63, 94, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+
+        .edit-action-delete::before {
+            background: linear-gradient(135deg, #f87171 0%, #fb7185 100%);
+        }
+
+        .edit-action-delete:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 24px rgba(244, 63, 94, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+        }
+
+        .edit-action-delete:active {
+            transform: translateY(0) scale(0.98);
+        }
+
+        /* V7 PREMIUM BUTTONS */
+        .btn-premium-confirm {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            box-shadow: 0 4px 20px rgba(16, 185, 129, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+
+        .btn-premium-confirm:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 24px rgba(16, 185, 129, 0.45);
+        }
+
+        .btn-premium-confirm::before,
+        .btn-premium-free::before,
+        .btn-premium-add::before {
+            pointer-events: none;
+        }
+
+        .btn-premium-free {
+            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+            color: #451a03;
+            box-shadow: 0 4px 20px rgba(251, 191, 36, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+            border: none !important;
+        }
+
+        .btn-premium-free:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 24px rgba(251, 191, 36, 0.45);
+        }
+
+        .btn-premium-add {
+            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+            color: white;
+            box-shadow: 0 4px 20px rgba(99, 102, 241, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+
+        .btn-premium-add:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 24px rgba(99, 102, 241, 0.45);
+        }
+
+        .modal-header {
+            padding: 20px 24px 12px;
+        }
+
+        .modal-header h3 {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin: 0;
+        }
+
+        .modal-body {
+            padding: 0 24px 24px;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        /* Modal pop animation */
+        .modal-pop-enter-active {
+            transition: all 0.3s var(--ease-spring);
+        }
+
+        .modal-pop-leave-active {
+            transition: all 0.2s var(--ease-in-quart);
+        }
+
+        .modal-pop-enter-from {
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(0.9);
+        }
+
+        .modal-pop-leave-to {
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(0.95);
+        }
+
+        /* V3: Expense Pill - Compact Info Display */
+        .expense-pill {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 10px;
+            background: var(--c-surface-3);
+            border-radius: 100px;
+            font-size: 0.7rem;
+        }
+
+        .expense-pill-name {
+            font-weight: 600;
+            color: var(--c-text-secondary);
+            max-width: 80px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .expense-pill-sep {
+            color: var(--c-text-tertiary);
+        }
+
+        .expense-pill-amount {
+            font-weight: 700;
+            font-family: var(--font-mono);
+            color: var(--c-accent-brand-light);
+        }
+
+        /* V3: Premium Free Button - Gold/Amber aesthetic */
+        .free-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 12px 16px;
+            border-radius: var(--radius-xl);
+            font-weight: 700;
+            font-size: 0.9rem;
+            border: 1px solid rgba(251, 191, 36, 0.4);
+            background: linear-gradient(135deg, rgba(251, 191, 36, 0.15), rgba(245, 158, 11, 0.1));
+            color: #fbbf24;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 12px rgba(251, 191, 36, 0.2);
+        }
+
+        .free-btn:hover {
+            background: linear-gradient(135deg, rgba(251, 191, 36, 0.25), rgba(245, 158, 11, 0.15));
+            box-shadow: 0 4px 20px rgba(251, 191, 36, 0.3);
+            transform: translateY(-1px);
+        }
+
+        .free-btn:active {
+            transform: scale(0.98);
+        }
+
+        .free-btn .free-icon {
+            font-size: 1rem;
+        }
+
+        /* V3: Undo Payment Link */
+        .undo-paid-link {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 8px;
+            background: transparent;
+            border: none;
+            color: var(--c-text-tertiary);
+            font-size: 0.75rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: color 0.15s ease;
+        }
+
+        .undo-paid-link:hover {
+            color: var(--c-accent-danger);
+        }
+
+        /* MS-BTN STYLES */
+        .ms-btn {
+            position: relative;
+            padding: 14px 24px;
+            border-radius: var(--radius-xl);
+            font-weight: 600;
+            font-size: 0.95rem;
+            border: none;
+            cursor: pointer;
+            overflow: hidden;
+            transition: transform 0.1s ease, box-shadow 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .ms-btn:active {
+            transform: scale(0.96);
+        }
+
+        .ms-btn .content-wrapper {
+            position: relative;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .ms-btn.w-full {
+            width: 100%;
+        }
+
+        .variant-primary {
+            background: var(--c-accent-brand);
+            color: white;
+            box-shadow: 0 4px 12px var(--c-accent-brand-glow);
+        }
+
+        .variant-success {
+            background: var(--c-accent-success);
+            color: var(--c-canvas);
+            box-shadow: 0 4px 12px var(--c-accent-success-glow);
+        }
+
+        .variant-danger {
+            background: rgba(244, 63, 94, 0.15);
+            color: var(--c-accent-danger);
+            border: 1px solid rgba(244, 63, 94, 0.2);
+        }
+
+        .variant-ghost {
+            background: transparent;
+            color: var(--c-text-secondary);
+        }
+
+        /* NUMPAD GRID */
+        .numpad-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+
+        .pad-key {
+            padding: 20px 0;
+            font-size: 24px;
+            font-weight: 600;
+            font-family: var(--font-mono);
+            color: var(--c-text-primary);
+            border: none;
+            cursor: pointer;
+            background: var(--glass-panel-bg);
+            border-radius: var(--radius-md);
+            transition: background 0.2s;
+        }
+
+        .pad-key:active {
+            background: var(--c-surface-3);
+        }
+
+        .text-danger {
+            color: var(--c-accent-danger);
+        }
+
+        /* RING ANIMATION */
+        .ring-progress {
+            transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+            transform: rotate(-90deg);
+            transform-origin: 50% 50%;
+        }
+    </style>
+
+    <script>
+        /**
+         * ================================================================
+         * MODULE: MAIN CONTROLLER (Root Logic)
+         * ================================================================
+         * Wires the Store, Components, and View State together.
+         */
+
+        // Extend the App definition from Part 3
+        MicroSaveApp.mixin({
+            data() {
+                return {
+                    currentView: 'dashboard',
+                    dateWindow: [], // For the scroller
+
+                    // Modal States
+                    payModal: {
+                        open: false,
+                        item: null,
+                        amount: '0', // String for Numpad handling
+                        autoCleared: false // V2: Track if first input cleared
+                    },
+                    addModal: {
+                        open: false,
+                        isSubmitting: false, // V2: Prevent double-entry
+                        form: { name: '', cost: '', category: 'food' }
+                    },
+                    // V3: Edit Expense Modal
+                    editModal: {
+                        open: false,
+                        item: null,
+                        isTemplate: false, // V7: Flag for template editing
+                        form: { name: '', cost: 0, category: 'food', date: '' }
+                    },
+
+                    // V4: Custom Confirm Dialog (replaces native confirm())
+                    confirmDialog: {
+                        open: false,
+                        title: '',
+                        message: '',
+                        onConfirm: null
+                    },
+
+                    // V2: Category options for grid
+                    categoryOptions: [
+                        { id: 'transport', label: 'Transport', icon: 'directions_car' },
+                        { id: 'food', label: 'Food', icon: 'restaurant' },
+                        { id: 'utilities', label: 'Utilities', icon: 'bolt' },
+                        { id: 'tech', label: 'Tech', icon: 'devices' },
+                        { id: 'shopping', label: 'Shopping', icon: 'shopping_bag' },
+                        { id: 'other', label: 'Other', icon: 'category' }
+                    ]
+                }
+            },
+            computed: {
+                sortedExpenses() {
+                    // Sort by: Paid (bottom) vs Pending (top), then by Name
+                    return [...this.store.currentViewExpenses].sort((a, b) => {
+                        if (a.isPaid === b.isPaid) return 0;
+                        return a.isPaid ? 1 : -1;
+                    });
+                },
+                // V2: Month/Year context header
+                currentMonthYear() {
+                    const d = new Date(this.store.currentDate);
+                    return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                },
+                // V2: Daily summary - Expected total
+                dailyExpectedTotal() {
+                    return this.store.currentViewExpenses.reduce((sum, e) => sum + (e.expectedCost || 0), 0);
+                },
+                // V3: Daily summary - Paid total
+                dailyPaidTotal() {
+                    return this.store.currentViewExpenses
+                        .filter(e => e.isPaid)
+                        .reduce((sum, e) => sum + (e.actualPaid || 0), 0);
+                },
+                // V2: Check if any modal is open (for FAB hiding)
+                anyModalOpen() {
+                    return this.payModal.open || this.addModal.open || this.editModal.open || this.confirmDialog.open;
+                },
+                // V5: Weekly or monthly Safe to Spend display
+                displaySafeToSpend() {
+                    const monthly = this.store.safeToSpend;
+                    if (this.store.settings.safeToSpendMode === 'weekly') {
+                        return monthly / 4;
+                    }
+                    return monthly;
+                }
+            },
+            watch: {
+                // When date changes in store, update UI scroll
+                'store.currentDate': {
+                    handler(newVal) {
+                        this.centerDateScroller(newVal);
+                    }
+                }
+            },
+            methods: {
+                // --- INITIALIZATION ---
+                async initApp() {
+                    await this.store.init();
+                    this.dateWindow = this.core.Date.generateWindow(this.store.currentDate, 7, 21);
+                    this.$nextTick(() => this.centerDateScroller(this.store.currentDate));
+                },
+
+                // --- NAVIGATION ---
+                selectDate(iso) {
+                    this.store.loadDay(iso);
+                },
+                centerDateScroller(iso) {
+                    // Logic to scroll the date list to the selected item
+                    // We need to wait for DOM update
+                    this.$nextTick(() => {
+                        const el = this.$refs.dateScroller;
+                        const target = el.querySelector('.active');
+                        if (target) {
+                            el.scrollTo({
+                                left: target.offsetLeft - (el.clientWidth / 2) + (target.clientWidth / 2),
+                                behavior: 'smooth'
+                            });
+                        }
+                    });
+                },
+
+                // --- DATA ACTIONS ---
+                hasPending(iso) {
+                    // This is expensive to calculate for all dates, 
+                    // in a real large app we'd index this in DB stats.
+                    // For now, we trust the view logic or omit specific dots for performance.
+                    return false; // Placeholder for optimization
+                },
+
+                async autoFillToday() {
+                    const count = await this.store.autoFillDay(this.store.currentDate);
+                    if (count > 0) this.triggerConfetti();
+                },
+
+                // --- EXPENSE HANDLING ---
+                deleteExpense(id) {
+                    this.showConfirmDialog(
+                        'Delete this expense?',
+                        'This action cannot be undone.',
+                        () => {
+                            this.store.deleteExpense(id);
+                        }
+                    );
+                },
+
+                // V4: Show custom confirmation dialog
+                showConfirmDialog(title, message, onConfirm) {
+                    this.confirmDialog.title = title;
+                    this.confirmDialog.message = message;
+                    this.confirmDialog.onConfirm = onConfirm;
+                    this.confirmDialog.open = true;
+                },
+                handleConfirmDialogConfirm() {
+                    if (this.confirmDialog.onConfirm) {
+                        this.confirmDialog.onConfirm();
+                    }
+                    this.confirmDialog.open = false;
+                },
+                handleConfirmDialogCancel() {
+                    this.confirmDialog.open = false;
+                },
+
+                // V2: Helper to get variance stripe class
+                getVarianceStripeClass(expense) {
+                    if (!expense.isPaid) return 'stripe-neutral';
+                    if (expense.actualPaid === 0) return 'stripe-success'; // Free = gold stripe reuses success
+                    const variance = expense.expectedCost - expense.actualPaid;
+                    if (variance > 0) return 'stripe-success';
+                    if (variance < 0) return 'stripe-danger';
+                    return 'stripe-brand'; // On budget
+                },
+
+                // V2: Helper to get variance pill class
+                getVariancePillClass(expense) {
+                    if (expense.actualPaid === 0) return 'pill-gold';
+                    const variance = expense.expectedCost - expense.actualPaid;
+                    if (variance > 0) return 'pill-success';
+                    if (variance < 0) return 'pill-danger';
+                    return 'pill-brand'; // On budget
+                },
+
+                // --- PAYMENT MODAL LOGIC ---
+                openPayModal(item) {
+                    this.payModal.item = item;
+                    // Reset Numpad string. If paid, show paid amount. If not, show expected.
+                    this.payModal.amount = item.isPaid ? item.actualPaid.toString() : item.expectedCost.toString();
+                    this.payModal.autoCleared = false; // V2: Track if first input should clear
+                    this.payModal.open = true;
+                },
+
+                // V3: EDIT EXPENSE MODAL LOGIC
+                openEditModal(item, isTemplate = false) {
+                    this.editModal.isTemplate = isTemplate;
+                    this.editModal.item = item;
+                    this.editModal.form = {
+                        name: item.name,
+                        cost: item.expectedCost,
+                        category: item.category,
+                        date: isTemplate ? '' : item.date
+                    };
+                    this.editModal.open = true;
+                },
+                async saveEditedExpense() {
+                    if (!this.editModal.item) return;
+
+                    try {
+                        // HANDLE TEMPLATE SAVE
+                        if (this.editModal.isTemplate) {
+                            const template = this.editModal.item;
+                            template.name = this.editModal.form.name;
+                            template.expectedCost = parseFloat(this.editModal.form.cost) || 0;
+                            template.category = this.editModal.form.category;
+                            // Templates don't use Date
+
+                            await DB.saveTemplate(template);
+                            // Refresh templates list
+                            this.store.templates = await DB.getTemplates();
+                        }
+                        // HANDLE EXPENSE SAVE
+                        else {
+                            const expense = this.editModal.item;
+                            expense.name = this.editModal.form.name;
+                            expense.expectedCost = parseFloat(this.editModal.form.cost) || 0;
+                            expense.category = this.editModal.form.category;
+                            expense.date = this.editModal.form.date;
+
+                            await DB.saveExpense(expense);
+                            await this.store.loadDay(this.store.currentDate);
+                            await this.store.recalcGlobalStats();
+                        }
+                    } catch (e) {
+                        console.error("Save failed", e);
+                        alert("Failed to save changes.");
+                    } finally {
+                        this.editModal.open = false;
+                    }
+                },
+                async deleteEditedExpense() {
+                    if (!this.editModal.item) return;
+
+                    this.showConfirmDialog(
+                        this.editModal.isTemplate ? 'Delete this template?' : 'Delete this expense?',
+                        'This action cannot be undone.',
+                        async () => {
+                            try {
+                                if (this.editModal.isTemplate) {
+                                    await this.store.deleteTemplate(this.editModal.item.id);
+                                } else {
+                                    await this.store.deleteExpense(this.editModal.item.id);
+                                }
+                            } finally {
+                                this.editModal.open = false;
+                            }
+                        }
+                    );
+                },
+                async markUnpaidFromEdit() {
+                    if (!this.editModal.item) return;
+                    const expense = this.editModal.item;
+                    expense.isPaid = false;
+                    expense.actualPaid = 0;
+                    await DB.saveExpense(expense);
+                    await this.store.loadDay(this.store.currentDate);
+                    await this.store.recalcGlobalStats();
+                    this.editModal.open = false;
+                },
+
+                // V2: Smart numpad - auto-clear on first input
+                handleNumpadInput(key) {
+                    // Auto-clear on first keystroke (if value was pre-filled)
+                    if (!this.payModal.autoCleared && this.payModal.amount !== '0') {
+                        this.payModal.amount = '';
+                        this.payModal.autoCleared = true;
+                    }
+
+                    if (key === '.') {
+                        if (!this.payModal.amount.includes('.')) {
+                            this.payModal.amount = this.payModal.amount === '' ? '0.' : this.payModal.amount + '.';
+                        }
+                    } else {
+                        if (this.payModal.amount === '0') this.payModal.amount = key.toString();
+                        else this.payModal.amount += key.toString();
+                    }
+                },
+                handleNumpadDelete() {
+                    this.payModal.amount = this.payModal.amount.slice(0, -1);
+                    if (this.payModal.amount === '') this.payModal.amount = '0';
+                },
+
+                // V2: Quick amount adjusters
+                adjustAmount(delta) {
+                    let current = parseFloat(this.payModal.amount) || 0;
+                    current = Math.max(0, current + delta); // Don't go below 0
+                    this.payModal.amount = current.toString();
+                    this.payModal.autoCleared = true; // Mark as modified
+                },
+
+                // V2: Mark as Free (100% savings)
+                async markAsFree() {
+                    this.payModal.amount = '0';
+                    await this.commitPayment();
+                    this.triggerConfetti();
+                },
+
+                // V2: Get color class based on payment vs expected
+                getPaymentAmountClass() {
+                    if (!this.payModal.item) return '';
+                    const amount = parseFloat(this.payModal.amount) || 0;
+                    const expected = this.payModal.item.expectedCost;
+                    if (amount === 0) return 'text-lime-400'; // Free
+                    if (amount < expected) return 'text-success'; // Saved
+                    if (amount > expected) return 'text-danger'; // Overspent
+                    return 'text-brand-light'; // On budget
+                },
+
+                async commitPayment() {
+                    const amt = parseFloat(this.payModal.amount);
+                    if (isNaN(amt)) return;
+
+                    const item = this.payModal.item;
+                    const oldVariance = item.isPaid ? (item.expectedCost - item.actualPaid) : 0;
+
+                    // Update Item
+                    item.isPaid = true;
+                    item.actualPaid = amt;
+
+                    await this.store.updateExpense(JSON.parse(JSON.stringify(item)));
+
+                    // Check for "Savings Joy"
+                    const newVariance = item.expectedCost - amt;
+                    if (newVariance > oldVariance) {
+                        this.triggerConfetti();
+                    }
+
+                    this.payModal.open = false;
+                },
+                async markUnpaid() {
+                    const item = this.payModal.item;
+                    item.isPaid = false;
+                    item.actualPaid = 0;
+                    await this.store.updateExpense(JSON.parse(JSON.stringify(item)));
+                    this.payModal.open = false;
+                },
+
+                // --- ADD MODAL LOGIC ---
+                openAddModal() {
+                    this.addModal.form = { name: '', cost: '', category: 'food' };
+                    this.addModal.open = true;
+                },
+                async submitNewExpense() {
+                    // V2: Prevent double-entry with isSubmitting flag
+                    if (this.addModal.isSubmitting) return;
+                    if (!this.addModal.form.name) return;
+
+                    this.addModal.isSubmitting = true;
+                    try {
+                        await this.store.addExpense({
+                            name: this.addModal.form.name,
+                            expectedCost: this.addModal.form.cost || 0,
+                            category: this.addModal.form.category,
+                            actualPaid: 0,
+                            isPaid: false,
+                            date: this.store.currentDate
+                        });
+                        this.addModal.open = false;
+                    } finally {
+                        this.addModal.isSubmitting = false;
+                    }
+                },
+
+                // --- SETTINGS LOGIC ---
+                async saveSettings() {
+                    await this.core.DB.setSetting('baseAllowance', this.store.settings.baseAllowance);
+                    await this.store.recalcGlobalStats();
+                },
+                // V5: Set weekly/monthly safe to spend mode
+                async setSafeToSpendMode(mode) {
+                    this.store.settings.safeToSpendMode = mode;
+                    await this.core.DB.setSetting('safeToSpendMode', mode);
+                },
+                async deleteTemplate(id) {
+                    this.showConfirmDialog(
+                        'Delete Template?',
+                        'Are you sure you want to remove this auto-fill template?',
+                        async () => {
+                            await this.core.DB.deleteTemplate(id);
+                            this.store.templates = this.store.templates.filter(t => t.id !== id);
+                        }
+                    );
+                },
+                openTemplateModal() {
+                    // Simplified for prototype: Add a generic one
+                    const name = prompt("Template Name:");
+                    if (name) {
+                        const cost = parseFloat(prompt("Cost:") || 0);
+                        this.store.templates.push({
+                            id: this.core.UUID(),
+                            name, expectedCost: cost, category: 'other', recurrence: 'daily'
+                        });
+                        // Save to DB (In real app, we'd use a full modal)
+                    }
+                },
+                async exportData() {
+                    // V3: Actual JSON export implementation
+                    try {
+                        const data = {
+                            version: '3.0',
+                            exportedAt: new Date().toISOString(),
+                            settings: this.store.settings,
+                            templates: this.store.templates,
+                            expenses: await DB.getAllExpenses()
+                        };
+                        const jsonStr = JSON.stringify(data, null, 2);
+                        const blob = new Blob([jsonStr], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `microsave-backup-${new Date().toISOString().split('T')[0]}.json`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    } catch (err) {
+                        console.error('Export failed:', err);
+                        alert('Export failed. Check console for details.');
+                    }
+                },
+                importData(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+
+                    const reader = new FileReader();
+                    reader.onload = async (e) => {
+                        try {
+                            const data = JSON.parse(e.target.result);
+
+                            // Basic Validation
+                            if (!data.expenses || !data.settings) {
+                                throw new Error("Invalid backup file format");
+                            }
+
+                            if (confirm(`Restore backup from ${data.exportedAt}? Current data will be merged/overwritten.`)) {
+                                // 1. Restore Settings
+                                if (data.settings) {
+                                    this.store.settings = data.settings;
+                                    await this.core.DB.setSetting('baseAllowance', data.settings.baseAllowance);
+                                    await this.core.DB.setSetting('safeToSpendMode', data.settings.safeToSpendMode);
+                                }
+
+                                // 2. Restore Templates
+                                if (data.templates && Array.isArray(data.templates)) {
+                                    for (const t of data.templates) {
+                                        await this.core.DB.saveTemplate(t);
+                                    }
+                                    this.store.templates = await this.core.DB.getTemplates();
+                                }
+
+                                // 3. Restore Expenses
+                                if (data.expenses && Array.isArray(data.expenses)) {
+                                    for (const exp of data.expenses) {
+                                        await this.core.DB.saveExpense(exp);
+                                    }
+                                }
+
+                                // Refresh
+                                await this.store.recalcGlobalStats();
+                                await this.store.loadDay(this.store.currentDate);
+                                alert("Backup restored successfully!");
+                            }
+                        } catch (err) {
+                            console.error("Import error:", err);
+                            alert("Failed to import file. " + err.message);
+                        }
+                        // Clear input
+                        event.target.value = '';
+                    };
+                    reader.readAsText(file);
+                },
+                async resetApp() {
+                    this.showConfirmDialog(
+                        'Factory Reset?',
+                        'All data will be permanently deleted. This cannot be undone.',
+                        async () => {
+                            await DB.factoryReset();
+                            location.reload();
+                        }
+                    );
+                },
+
+                // --- HELPERS ---
+                getCategoryIcon(cat) {
+                    const map = {
+                        transport: 'directions_car',
+                        food: 'restaurant',
+                        utilities: 'bolt',
+                        tech: 'devices',
+                        shopping: 'shopping_bag',
+                        other: 'category'
+                    };
+                    return map[cat] || 'category';
+                },
+                getCategoryColor(cat) {
+                    const colors = {
+                        transport: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+                        food: 'linear-gradient(135deg, #f97316, #ea580c)',
+                        utilities: 'linear-gradient(135deg, #eab308, #ca8a04)',
+                        tech: 'linear-gradient(135deg, #a855f7, #9333ea)',
+                        shopping: 'linear-gradient(135deg, #ec4899, #be185d)',
+                        other: 'linear-gradient(135deg, #6b7280, #4b5563)'
+                    };
+                    return colors[cat] || colors.other;
+                },
+                triggerConfetti() {
+                    // Simple confetti effect (Part 1 CSS handles the dots)
+                    for (let i = 0; i < 15; i++) {
+                        const el = document.createElement('div');
+                        el.className = 'confetti';
+                        el.style.left = Math.random() * 100 + 'vw';
+                        el.style.backgroundColor = ['#10b981', '#6366f1', '#f43f5e'][Math.floor(Math.random() * 3)];
+                        document.body.appendChild(el);
+                        setTimeout(() => el.remove(), 1200);
+                    }
+                }
+            },
+            mounted() {
+                this.initApp();
+            }
+        });
+
+        /**
+         * ================================================================
+         * MODULE: GAMIFICATION & ANALYTICS ENGINE
+         * ================================================================
+         * Adds RPG mechanics to finance.
+         */
+
+        // --- 1. THE GAMIFICATION STORE ---
+        const GameStore = Vue.reactive({
+            xp: 0,
+            level: 1,
+            badges: [],
+
+            // Badge Definitions
+            definitions: [
+                { id: 'b1', name: 'Novice Saver', icon: 'star', req: 0 },
+                { id: 'b2', name: 'Variance Hunter', icon: 'gps_fixed', req: 50 },
+                { id: 'b3', name: 'Budget Master', icon: 'account_balance_wallet', req: 200 },
+                { id: 'b4', name: 'Grand Treasurer', icon: 'diamond', req: 1000 }
+            ],
+
+            calculate(totalSaved) {
+                // Formula: 1 SAR Saved = 10 XP
+                this.xp = Math.max(0, Math.floor(totalSaved * 10));
+
+                // Formula: Level = Sqrt(XP / 100)
+                const newLevel = Math.floor(Math.sqrt(this.xp / 100)) + 1;
+
+                if (newLevel > this.level) {
+                    this.level = newLevel;
+                    // Trigger Level Up Event (Visual only)
+                    // In a full app, we'd queue a toast here
+                }
+
+                // Check Badges
+                this.badges = this.definitions.filter(b => this.xp >= b.req);
+            },
+
+            getNextBadge() {
+                return this.definitions.find(b => this.xp < b.req) || { name: 'Maxed Out', req: this.xp };
+            }
+        });
+
+        // --- 2. COMPONENT: ANALYTICS CHART (SVG) ---
+        MicroSaveApp.component('ms-trend-chart', {
+            props: ['data'], // Array of numbers
+            template: `
+                <div class="w-full h-32 relative">
+                    <svg viewBox="0 0 100 40" preserveAspectRatio="none" class="w-full h-full overflow-visible">
+                        <defs>
+                            <linearGradient id="grad" x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" style="stop-color:var(--c-accent-brand);stop-opacity:0.5" />
+                                <stop offset="100%" style="stop-color:var(--c-accent-brand);stop-opacity:0" />
+                            </linearGradient>
+                        </defs>
+                        
+                        <path :d="areaPath" fill="url(#grad)" />
+                        
+                        <path :d="linePath" fill="none" stroke="var(--c-accent-brand)" stroke-width="2" vector-effect="non-scaling-stroke" />
+                        
+                        <circle v-for="p in points" :cx="p.x" :cy="p.y" r="1.5" fill="white" />
+                    </svg>
+                </div>
+            `,
+            computed: {
+                points() {
+                    if (!this.data || this.data.length === 0) return [];
+                    const max = Math.max(...this.data, 10);
+                    const min = Math.min(...this.data, 0);
+                    const range = max - min;
+
+                    return this.data.map((val, i) => ({
+                        x: (i / (this.data.length - 1)) * 100,
+                        y: 40 - ((val - min) / range) * 40
+                    }));
+                },
+                linePath() {
+                    if (this.points.length === 0) return '';
+                    return 'M' + this.points.map(p => `${p.x},${p.y}`).join(' L');
+                },
+                areaPath() {
+                    if (this.points.length === 0) return '';
+                    return this.linePath + ` L100,40 L0,40 Z`;
+                }
+            }
+        });
+
+        // --- 3. EXTEND ROOT APP WITH GAMIFICATION ---
+        MicroSaveApp.mixin({
+            data() {
+                return {
+                    showProfile: false,
+                    game: GameStore
+                };
+            },
+            watch: {
+                // Recalc Game Stats whenever savings change
+                'store.globalStats.netVariance': {
+                    handler(newVal) {
+                        this.game.calculate(newVal);
+                    },
+                    immediate: true
+                }
+            },
+            methods: {
+                getChartData() {
+                    // Mock data generator based on store stats
+                    // In real implementation, this would query DB history
+                    return [10, 15, 8, 12, 20, 18, 25, this.store.globalStats.netVariance];
+                }
+            }
+        });
+
+        // ================================================================
+        // FINAL INJECTION: PROFILE MODAL TEMPLATE
+        // ================================================================
+        // We inject this HTML dynamically because the root template is already defined.
+        // In a normal build step, this would be in the template file.
+        // Since we are doing a single-file hack, we append a component.
+
+        MicroSaveApp.component('ms-profile-overlay', {
+            props: ['open'],
+            emits: ['close'],
+            setup() { return { game: GameStore, store: MicroSaveStore } },
+            template: `
+                <ms-modal :modelValue="open" @update:modelValue="$emit('close')" title="Your Profile">
+                    <div class="flex flex-col gap-6">
+                        
+                        <div class="glass-panel p-6 flex items-center gap-4 bg-surface-1">
+                            <div class="w-16 h-16 rounded-full border-4 border-brand flex items-center justify-center text-2xl font-black bg-surface-2 relative">
+                                {{ game.level }}
+                                <div class="absolute -bottom-2 bg-brand text-xs px-2 rounded-full">LVL</div>
+                            </div>
+                            <div>
+                                <div class="text-xs font-bold text-secondary uppercase">Total XP</div>
+                                <div class="text-2xl font-mono font-bold">{{ game.xp }}</div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="text-xs font-bold text-secondary uppercase mb-3 ml-2">Badges Unlocked</div>
+                            <div class="grid grid-cols-4 gap-2">
+                                <div v-for="b in game.definitions" :key="b.id" 
+                                     class="aspect-square rounded-xl flex flex-col items-center justify-center gap-1 border transition-all"
+                                     :class="game.xp >= b.req ? 'bg-brand text-white border-brand' : 'bg-surface-1 text-secondary border-glass opacity-50 grayscale'">
+                                    <ms-icon :name="b.icon" size="20"></ms-icon>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="glass-panel p-4">
+                            <div class="flex justify-between text-xs font-bold mb-2">
+                                <span>Next: {{ game.getNextBadge().name }}</span>
+                                <span>{{ game.xp }} / {{ game.getNextBadge().req }}</span>
+                            </div>
+                            <div class="h-2 w-full bg-surface-1 rounded-full overflow-hidden">
+                                <div class="h-full bg-success transition-all duration-1000" 
+                                     :style="{ width: Math.min(100, (game.xp / game.getNextBadge().req) * 100) + '%' }"></div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="text-xs font-bold text-secondary uppercase mb-3 ml-2">Variance Trend (7 Days)</div>
+                            <div class="glass-panel p-4 pt-8 bg-surface-1 overflow-hidden">
+                                <ms-trend-chart :data="[5, 12, 8, 15, 10, 20, store.globalStats.netVariance]"></ms-trend-chart>
+                            </div>
+                        </div>
+
+                    </div>
+                </ms-modal>
+            `
+        });
+
+        // ================================================================
+        // FINAL SYSTEM LAUNCH
+        // ================================================================
+
+        // 1. Mount the App
+        const mountedApp = MicroSaveApp.mount('#app');
+
+        console.log("✅ MicroSave OS Fully Loaded.");
+
+    </script>
+
+</body>
+
+</html>
