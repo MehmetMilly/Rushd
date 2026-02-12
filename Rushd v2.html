@@ -920,6 +920,57 @@
             -webkit-appearance: none;
             margin: 0;
         }
+
+        /* Toast Notification */
+        .toast-notification {
+            position: fixed;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 20px;
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            backdrop-filter: blur(20px);
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            color: #fafafa;
+        }
+
+        .toast-enter-active {
+            animation: toast-in 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .toast-leave-active {
+            animation: toast-out 0.3s ease-in forwards;
+        }
+
+        @keyframes toast-in {
+            from {
+                opacity: 0;
+                transform: translateX(-50%) translateY(-20px) scale(0.95);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0) scale(1);
+            }
+        }
+
+        @keyframes toast-out {
+            from {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0) scale(1);
+            }
+
+            to {
+                opacity: 0;
+                transform: translateX(-50%) translateY(-20px) scale(0.95);
+            }
+        }
     </style>
 
     <script>
@@ -1051,7 +1102,7 @@
                 <div v-if="currentView === 'dashboard'" key="dashboard" class="flex flex-col h-full relative">
 
                     <!-- V6 Premium Header - More Breathing Room -->
-                    <header class="px-4 pt-5 pb-[8px]">
+                    <header class="px-4 pb-[8px]" style="padding-top: max(20px, env(safe-area-inset-top) + 20px);">
                         <!-- Top Bar: Brand Stack + Right Actions -->
                         <div class="flex items-center justify-between mb-[20px]">
                             <!-- Left: Brand Identity Stack -->
@@ -1131,7 +1182,7 @@
 
                     <!-- V3: Date Scroller - Month Top, Day Name Bottom -->
                     <div class="date-scroller no-scrollbar" ref="dateScroller">
-                        <div v-for="d in dateWindow" :key="d.iso" class="date-chip glass-panel"
+                        <div v-for="d in dateWindow" :key="d.iso" class="date-chip glass-panel" :data-iso="d.iso"
                             :class="{ active: d.iso === store.currentDate, today: d.isToday }"
                             @click="selectDate(d.iso)">
                             <!-- Month on Top -->
@@ -1167,7 +1218,7 @@
                             </ms-btn>
                         </div>
 
-                        <transition-group name="list" tag="div">
+                        <div>
                             <ms-swipe-item v-for="expense in sortedExpenses" :key="expense.id" class="mb-2"
                                 @swipe-left="deleteExpense(expense.id)" @swipe-right="openPayModal(expense)"
                                 @click="openEditModal(expense)">
@@ -1219,7 +1270,7 @@
                                 </div>
 
                             </ms-swipe-item>
-                        </transition-group>
+                        </div>
                     </div>
 
                     <!-- V2: FAB hidden when modal is open -->
@@ -1228,8 +1279,7 @@
                     </button>
                 </div>
 
-                <div v-else-if="currentView === 'settings'" key="settings"
-                    class="flex flex-col h-full relative p-5 overflow-y-auto">
+                <div v-else-if="currentView === 'settings'" key="settings" class="flex flex-col h-full relative px-5 pb-5 overflow-y-auto" style="padding-top: max(20px, env(safe-area-inset-top) + 20px);">
                     <!-- V5: Blue arrow back button + Settings title -->
                     <header class="mb-6 flex items-center gap-3">
                         <button @click="currentView = 'dashboard'" class="settings-back-btn">
@@ -1274,7 +1324,7 @@
                         <div class="glass-panel overflow-hidden">
                             <div v-for="t in store.templates" :key="t.id"
                                 class="p-4 border-b border-glass flex justify-between items-center cursor-pointer hover:bg-surface-2 transition-colors"
-                                @click="openEditModal(t, true)">
+                                @click="openEditModal(t, 'template')">
                                 <div class="flex items-center gap-3">
                                     <div
                                         class="w-8 h-8 rounded bg-surface-1 flex items-center justify-center text-secondary">
@@ -1287,12 +1337,15 @@
                                 </div>
                                 <div class="flex items-center gap-3">
                                     <div class="font-mono font-bold">{{ t.expectedCost }}</div>
+                                    <!-- Delete Button: Calls delete with confirm -->
                                     <button class="text-danger opacity-50 hover:opacity-100 p-2"
                                         @click.stop="deleteTemplate(t.id)">
                                         <ms-icon name="delete" size="20"></ms-icon>
                                     </button>
                                 </div>
                             </div>
+                            <!-- Helper clickable area for editing (using the row itself) -->
+                            <!-- Note: The row already has clicks, but let's make it explicit on the list item div -->
                             <button class="w-full p-4 text-brand font-bold text-sm hover:bg-surface-1 transition-colors"
                                 @click="openTemplateModal">
                                 + Add New Template
@@ -1387,7 +1440,7 @@
             <!-- ============================================ -->
             <!-- MODAL: Add New Expense - V2 Redesign -->
             <!-- ============================================ -->
-            <ms-modal v-model="addModal.open" title="New Expense">
+            <ms-modal v-model="addModal.open" :title="addModal.mode === 'template' ? 'New Template' : 'New Expense'">
                 <div class="flex flex-col gap-4">
                     <!-- Name Input with Floating Label -->
                     <div>
@@ -1428,12 +1481,31 @@
                         </div>
                     </div>
 
+                    <!-- Recurrence (only for templates) -->
+                    <div v-if="addModal.mode === 'template'">
+                        <label
+                            class="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-2 block">Recurrence</label>
+                        <div class="flex gap-2">
+                            <button @click="addModal.form.recurrence = 'daily'"
+                                class="flex-1 py-2.5 text-sm font-bold rounded-lg transition-all border"
+                                :class="addModal.form.recurrence === 'daily' ? 'bg-brand/20 border-brand text-brand-light' : 'bg-surface-1 border-glass text-zinc-400'">
+                                Daily
+                            </button>
+                            <button @click="addModal.form.recurrence = 'monthly'"
+                                class="flex-1 py-2.5 text-sm font-bold rounded-lg transition-all border"
+                                :class="addModal.form.recurrence === 'monthly' ? 'bg-brand/20 border-brand text-brand-light' : 'bg-surface-1 border-glass text-zinc-400'">
+                                Monthly
+                            </button>
+                        </div>
+                    </div>
+
                     <!-- Submit Button -->
                     <button class="ms-btn btn-premium-add mt-3 mb-0 rounded-[24px]" @click="submitNewExpense"
                         :loading="addModal.isSubmitting">
                         <div class="relative z-10 flex items-center justify-center">
                             <ms-icon name="add" size="18" class="mr-1"></ms-icon>
-                            <span>Add to {{ core.Date.humanize(store.currentDate) }}</span>
+                            <span>{{ addModal.mode === 'template' ? 'Add Template' : 'Add to ' +
+                                core.Date.humanize(store.currentDate) }}</span>
                         </div>
                     </button>
                 </div>
@@ -1446,12 +1518,19 @@
                 <div v-if="editModal.item" class="flex flex-col gap-4">
                     <!-- V6: Header with "Perfect Positions" - Title aligned with X -->
                     <div class="flex items-center justify-end gap-2 pr-10 pt-[18px]">
-                        <h3 class="modal-title-premium mr-auto">Edit Expense</h3>
-                        <!-- V6: Subtle "Unpaid" status tag (only if paid) -->
-                        <button v-if="editModal.item.isPaid" @click="markUnpaidFromEdit" class="unpaid-tag mt-[2px]">
+                        <h3 class="modal-title-premium mr-auto">
+                            {{ editModal.type === 'template' ? 'Edit Template' : 'Edit Expense' }}
+                        </h3>
+                        <!-- V6: Subtle "Unpaid" toggle (only if expense type, toggles form state) -->
+                        <button v-if="editModal.type === 'expense' && editModal.form.isPaid" @click="markUnpaidFromEdit"
+                            class="unpaid-tag mt-[2px]">
                             <span class="material-symbols-rounded" style="font-size: 12px;">undo</span>
                             Unpaid
                         </button>
+                        <span
+                            v-if="editModal.type === 'expense' && editModal.form.isPaid === false && editModal.item.isPaid"
+                            class="text-[10px] font-bold text-warning uppercase tracking-wider mt-[2px]">Will mark
+                            unpaid</span>
                     </div>
 
                     <!-- Name Input - Label ABOVE -->
@@ -1468,8 +1547,8 @@
                             step="0.01">
                     </div>
 
-                    <!-- Date Input - Label ABOVE -->
-                    <div class="edit-input-group" v-if="!editModal.isTemplate">
+                    <!-- Date Input - Label ABOVE (Hidden for Templates) -->
+                    <div class="edit-input-group" v-if="editModal.type === 'expense'">
                         <label class="edit-input-label">Date</label>
                         <input type="date" v-model="editModal.form.date" class="glass-input w-full">
                     </div>
@@ -1499,7 +1578,9 @@
                             <span class="material-symbols-rounded relative z-10" style="font-size: 18px;">check</span>
                             <span class="relative z-10">Update</span>
                         </button>
-                        <button @click="deleteEditedExpense" class="edit-action-btn edit-action-delete rounded-[24px]">
+                        <!-- Only show delete in modal if it is NOT a template (user requested removal for templates) -->
+                        <button v-if="editModal.type === 'expense'" @click="deleteEditedExpense"
+                            class="edit-action-btn edit-action-delete rounded-[24px]">
                             <span class="material-symbols-rounded relative z-10" style="font-size: 18px;">delete</span>
                             <span class="relative z-10">Delete</span>
                         </button>
@@ -1522,17 +1603,27 @@
                     <h3 class="modal-title-premium text-center mb-2">{{ confirmDialog.title }}</h3>
                     <p class="text-sm text-zinc-400 text-center mb-6">{{ confirmDialog.message }}</p>
                     <div class="flex gap-3">
-                        <!-- V5: Delete on LEFT, Cancel on RIGHT with styled button -->
+                        <!-- V5: Dynamic Confirm Button (Color/Text) -->
                         <button @click="handleConfirmDialogConfirm"
-                            class="flex-1 py-3 px-4 rounded-xl bg-danger text-white font-semibold hover:brightness-110 transition-all shadow-lg"
-                            style="box-shadow: 0 4px 16px rgba(244, 63, 94, 0.4);">
-                            Delete
+                            class="flex-1 py-3 px-4 rounded-xl text-white font-semibold hover:brightness-110 transition-all shadow-lg"
+                            :class="confirmDialog.confirmColor === 'brand' ? 'bg-brand' : 'bg-danger'"
+                            :style="{ boxShadow: confirmDialog.confirmColor === 'brand' ? '0 4px 16px rgba(59, 130, 246, 0.4)' : '0 4px 16px rgba(244, 63, 94, 0.4)' }">
+                            {{ confirmDialog.confirmText || 'Delete' }}
                         </button>
                         <button @click="handleConfirmDialogCancel"
                             class="flex-1 py-3 px-4 rounded-xl bg-surface-2 border border-glass text-zinc-300 font-semibold hover:bg-surface-3 hover:border-zinc-500 transition-all">
                             Cancel
                         </button>
                     </div>
+                </div>
+            </transition>
+
+            <!-- Toast Notification -->
+            <transition name="toast">
+                <div v-if="toastVisible" class="toast-notification">
+                    <span class="material-symbols-rounded"
+                        style="font-size: 20px; color: var(--c-accent-success);">check_circle</span>
+                    <span class="font-semibold text-sm">{{ toastMessage }}</span>
                 </div>
             </transition>
 
@@ -1595,16 +1686,33 @@
             },
 
             // --- GENERIC HELPER: TRANSACTION WRAPPER ---
+            // Resilient: auto-reconnects if DB connection is stale or closed
             async transaction(storeName, mode, callback) {
                 if (!this.db) await this.connect();
-                return new Promise((resolve, reject) => {
-                    const tx = this.db.transaction(storeName, mode);
-                    const store = tx.objectStore(storeName);
-                    const request = callback(store);
-
-                    tx.oncomplete = () => resolve(request.result);
-                    tx.onerror = () => reject(tx.error);
-                });
+                try {
+                    return await new Promise((resolve, reject) => {
+                        const tx = this.db.transaction(storeName, mode);
+                        const store = tx.objectStore(storeName);
+                        const request = callback(store);
+                        tx.oncomplete = () => resolve(request.result);
+                        tx.onerror = () => reject(tx.error);
+                    });
+                } catch (e) {
+                    // If connection was closed/stale, reconnect and retry once
+                    if (e.name === 'InvalidStateError') {
+                        console.warn('⚠️ DB connection stale, reconnecting...');
+                        this.db = null;
+                        await this.connect();
+                        return new Promise((resolve, reject) => {
+                            const tx = this.db.transaction(storeName, mode);
+                            const store = tx.objectStore(storeName);
+                            const request = callback(store);
+                            tx.oncomplete = () => resolve(request.result);
+                            tx.onerror = () => reject(tx.error);
+                        });
+                    }
+                    throw e;
+                }
             },
 
             // --- API METHODS ---
@@ -1623,12 +1731,8 @@
 
             // Templates
             async getTemplates() {
-                return new Promise(async (resolve) => {
-                    if (!this.db) await this.connect();
-                    const tx = this.db.transaction('templates', 'readonly');
-                    const request = tx.objectStore('templates').getAll();
-                    request.onsuccess = () => resolve(request.result || []);
-                });
+                const result = await this.transaction('templates', 'readonly', store => store.getAll());
+                return result || [];
             },
 
             async saveTemplate(template) {
@@ -1641,13 +1745,11 @@
 
             // Expenses
             async getExpensesByDate(dateStr) {
-                return new Promise(async (resolve) => {
-                    if (!this.db) await this.connect();
-                    const tx = this.db.transaction('expenses', 'readonly');
-                    const index = tx.objectStore('expenses').index('date');
-                    const request = index.getAll(IDBKeyRange.only(dateStr));
-                    request.onsuccess = () => resolve(request.result || []);
+                const result = await this.transaction('expenses', 'readonly', store => {
+                    const index = store.index('date');
+                    return index.getAll(IDBKeyRange.only(dateStr));
                 });
+                return result || [];
             },
 
             async getAllExpenses() {
@@ -1666,6 +1768,7 @@
             async factoryReset() {
                 return new Promise((resolve, reject) => {
                     if (this.db) this.db.close();
+                    this.db = null; // Prevent stale connection usage
                     const req = indexedDB.deleteDatabase(this.dbName);
                     req.onsuccess = () => resolve();
                     req.onerror = () => reject();
@@ -1685,6 +1788,8 @@
         const Store = reactive({
             // --- STATE ---
             isReady: false,
+            _loadGen: 0, // Generation counter for race-safe loadDay
+            _autoFillLock: false, // Prevent double auto-fill invocations
             currentDate: Core.Date.getTodayISO(),
             settings: {
                 baseAllowance: 1000,
@@ -1715,10 +1820,17 @@
                 this.settings.baseAllowance = await DB.getSetting('baseAllowance', 1000);
                 this.settings.safeToSpendMode = await DB.getSetting('safeToSpendMode', 'weekly');
 
-                // Load Templates (Seed if empty)
+                // Load Templates
                 this.templates = await DB.getTemplates();
-                if (this.templates.length === 0) {
-                    await this.seedTemplates();
+
+                // One-time cleanup: remove old seed templates that may conflict with user templates
+                const seedIds = ['t1', 't2', 't3', 't4', 't5', 't6'];
+                const hasSeedData = this.templates.some(t => seedIds.includes(t.id));
+                if (hasSeedData) {
+                    for (const id of seedIds) {
+                        try { await DB.deleteTemplate(id); } catch (e) { }
+                    }
+                    this.templates = await DB.getTemplates(); // Reload without seeds
                 }
 
                 // Calculate Global Variance (Heavy calculation, done once on load)
@@ -1732,8 +1844,14 @@
             },
 
             async loadDay(dateStr) {
+                const gen = ++this._loadGen;
                 this.currentDate = dateStr;
-                this.currentViewExpenses = await DB.getExpensesByDate(dateStr);
+                this.currentViewExpenses = []; // Clear immediately to avoid stale data
+                const expenses = await DB.getExpensesByDate(dateStr);
+                // Only apply if no newer request was made
+                if (gen === this._loadGen) {
+                    this.currentViewExpenses = expenses;
+                }
             },
 
             // The "Variance Engine" Logic
@@ -1826,21 +1944,23 @@
 
             // The "Auto-Fill" Logic
             async autoFillDay(dateStr) {
-                const d = new Date(dateStr);
-                const dayNum = d.getDate();
-                const existing = await DB.getExpensesByDate(dateStr);
-                const existingNames = new Set(existing.map(e => e.name));
+                // Prevent double invocation
+                if (this._autoFillLock) return 0;
+                this._autoFillLock = true;
+                try {
+                    // FORCE SYNC: Ensure we have the absolute latest templates from DB
+                    this.templates = await DB.getTemplates();
 
-                const toAdd = [];
+                    const existing = await DB.getExpensesByDate(dateStr);
+                    const existingNames = new Set(existing.map(e => e.name));
 
-                this.templates.forEach(t => {
-                    if (existingNames.has(t.name)) return;
+                    const toAdd = [];
 
-                    let shouldAdd = false;
-                    if (t.recurrence === 'daily') shouldAdd = true;
-                    if (t.recurrence === 'monthly' && t.days && t.days.includes(dayNum)) shouldAdd = true;
+                    this.templates.forEach(t => {
+                        if (existingNames.has(t.name)) return;
+                        // Only add daily templates via auto-fill
+                        if (t.recurrence !== 'daily') return;
 
-                    if (shouldAdd) {
                         toAdd.push({
                             id: Core.UUID(),
                             name: t.name,
@@ -1849,21 +1969,24 @@
                             isPaid: false,
                             category: t.category,
                             date: dateStr,
-                            timestamp: Date.now() // For sorting
+                            timestamp: Date.now()
                         });
-                    }
-                });
+                    });
 
-                if (toAdd.length > 0) {
-                    for (const expense of toAdd) {
-                        await DB.saveExpense(expense);
+                    if (toAdd.length > 0) {
+                        for (const expense of toAdd) {
+                            await DB.saveExpense(expense);
+                        }
+                        // Refresh view from DB to avoid duplicates
+                        if (dateStr === this.currentDate) {
+                            this.currentViewExpenses = await DB.getExpensesByDate(dateStr);
+                        }
+                        await this.recalcGlobalStats();
                     }
-                    // Refresh view
-                    if (dateStr === this.currentDate) {
-                        this.currentViewExpenses = [...this.currentViewExpenses, ...toAdd];
-                    }
+                    return toAdd.length;
+                } finally {
+                    this._autoFillLock = false;
                 }
-                return toAdd.length; // Return count for UI feedback
             },
 
             // --- GETTERS (Computed Properties) ---
@@ -1899,6 +2022,7 @@
                 // This is a placeholder. The Real Logic comes in Part 4.
                 // We are exposing the Store to the template immediately.
                 return {
+                    isRoot: true,
                     store: MicroSaveStore,
                     core: MicroSaveCore
                 };
@@ -2665,6 +2789,8 @@
                 return {
                     currentView: 'dashboard',
                     dateWindow: [], // For the scroller
+                    toastMessage: '', // For toast notifications
+                    toastVisible: false,
 
                     // Modal States
                     payModal: {
@@ -2682,7 +2808,7 @@
                     editModal: {
                         open: false,
                         item: null,
-                        isTemplate: false, // V7: Flag for template editing
+                        type: 'expense', // 'expense' or 'template'
                         form: { name: '', cost: 0, category: 'food', date: '' }
                     },
 
@@ -2691,6 +2817,8 @@
                         open: false,
                         title: '',
                         message: '',
+                        confirmText: 'Delete', // New: Custom text
+                        confirmColor: 'danger', // New: 'danger' or 'brand'
                         onConfirm: null
                     },
 
@@ -2745,35 +2873,60 @@
                 // When date changes in store, update UI scroll
                 'store.currentDate': {
                     handler(newVal) {
-                        this.centerDateScroller(newVal);
+                        if (this.isRoot) this.centerDateScroller(newVal);
+                    }
+                },
+                // When returning to dashboard, auto-scroll to current day after transition
+                currentView(newView) {
+                    if (newView === 'dashboard') {
+                        // Wait for the v-if transition to finish rendering the DOM
+                        setTimeout(() => this.centerDateScroller(this.core.Date.getTodayISO(), 'instant'), 350);
                     }
                 }
             },
             methods: {
                 // --- INITIALIZATION ---
                 async initApp() {
+                    if (!this.isRoot) return;
                     await this.store.init();
-                    this.dateWindow = this.core.Date.generateWindow(this.store.currentDate, 7, 21);
-                    this.$nextTick(() => this.centerDateScroller(this.store.currentDate));
+                    // Always center date window on today
+                    const today = this.core.Date.getTodayISO();
+                    this.dateWindow = this.core.Date.generateWindow(today, 60, 60);
+                    // Use instant scroll on initial load so user sees today immediately
+                    this.$nextTick(() => this.centerDateScroller(this.core.Date.getTodayISO(), 'instant'));
+
+                    // Check for import success flag (using localStorage to avoid URL issues on mobile)
+                    if (localStorage.getItem('microsave_import_success')) {
+                        localStorage.removeItem('microsave_import_success');
+                        this.showToast('Import Successful!');
+                    }
                 },
 
                 // --- NAVIGATION ---
                 selectDate(iso) {
                     this.store.loadDay(iso);
                 },
-                centerDateScroller(iso) {
-                    // Logic to scroll the date list to the selected item
-                    // We need to wait for DOM update
-                    this.$nextTick(() => {
+                centerDateScroller(iso, behavior = 'smooth') {
+                    // Retry up to 10 times with 150ms intervals (handles v-if transition delays)
+                    let attempts = 0;
+                    const tryScroll = () => {
                         const el = this.$refs.dateScroller;
-                        const target = el.querySelector('.active');
+                        if (!el) {
+                            if (++attempts < 10) setTimeout(tryScroll, 150);
+                            return;
+                        }
+                        // Find target by data attribute or .active class
+                        const target = el.querySelector('.active') || el.querySelector(`[data-iso="${iso}"]`);
                         if (target) {
                             el.scrollTo({
                                 left: target.offsetLeft - (el.clientWidth / 2) + (target.clientWidth / 2),
-                                behavior: 'smooth'
+                                behavior: behavior
                             });
+                        } else if (++attempts < 10) {
+                            setTimeout(tryScroll, 150);
                         }
-                    });
+                    };
+                    this.$nextTick(tryScroll);
                 },
 
                 // --- DATA ACTIONS ---
@@ -2801,10 +2954,12 @@
                 },
 
                 // V4: Show custom confirmation dialog
-                showConfirmDialog(title, message, onConfirm) {
+                showConfirmDialog(title, message, onConfirm, confirmText = 'Delete', confirmColor = 'danger') {
                     this.confirmDialog.title = title;
                     this.confirmDialog.message = message;
                     this.confirmDialog.onConfirm = onConfirm;
+                    this.confirmDialog.confirmText = confirmText;
+                    this.confirmDialog.confirmColor = confirmColor;
                     this.confirmDialog.open = true;
                 },
                 handleConfirmDialogConfirm() {
@@ -2845,81 +3000,105 @@
                     this.payModal.open = true;
                 },
 
-                // V3: EDIT EXPENSE MODAL LOGIC
-                openEditModal(item, isTemplate = false) {
-                    this.editModal.isTemplate = isTemplate;
+                // V3: EDIT EXPENSE / TEMPLATE MODAL LOGIC
+                openEditModal(item, type = 'expense') {
                     this.editModal.item = item;
+                    this.editModal.type = type; // 'expense' or 'template'
+
                     this.editModal.form = {
                         name: item.name,
                         cost: item.expectedCost,
                         category: item.category,
-                        date: isTemplate ? '' : item.date
+                        date: item.date || '', // Templates don't have dates
+                        isPaid: !!item.isPaid,
+                        actualPaid: item.actualPaid || 0
                     };
                     this.editModal.open = true;
                 },
                 async saveEditedExpense() {
                     if (!this.editModal.item) return;
 
-                    try {
-                        // HANDLE TEMPLATE SAVE
-                        if (this.editModal.isTemplate) {
-                            const template = this.editModal.item;
-                            template.name = this.editModal.form.name;
-                            template.expectedCost = parseFloat(this.editModal.form.cost) || 0;
-                            template.category = this.editModal.form.category;
-                            // Templates don't use Date
+                    const form = this.editModal.form;
+                    const original = this.editModal.item;
 
-                            await DB.saveTemplate(template);
-                            // Refresh templates list
-                            this.store.templates = await DB.getTemplates();
+                    if (this.editModal.type === 'template') {
+                        // Update Template
+                        const updatedTemplate = {
+                            ...original,
+                            name: form.name,
+                            expectedCost: parseFloat(form.cost) || 0,
+                            category: form.category
+                        };
+
+                        try {
+                            // Update in DB - Fix: Strip reactivity to avoid DataCloneError
+                            await DB.saveTemplate(JSON.parse(JSON.stringify(updatedTemplate)));
+
+                            // Update in Store
+                            const idx = this.store.templates.findIndex(t => t.id === updatedTemplate.id);
+                            if (idx !== -1) {
+                                this.store.templates[idx] = updatedTemplate;
+                            }
+                        } catch (e) {
+                            console.error("Template Save Failed", e);
+                            alert("Failed to save template: " + e.message);
                         }
-                        // HANDLE EXPENSE SAVE
-                        else {
-                            const expense = this.editModal.item;
-                            expense.name = this.editModal.form.name;
-                            expense.expectedCost = parseFloat(this.editModal.form.cost) || 0;
-                            expense.category = this.editModal.form.category;
-                            expense.date = this.editModal.form.date;
 
-                            await DB.saveExpense(expense);
-                            await this.store.loadDay(this.store.currentDate);
+                    } else {
+                        // Update Expense
+                        const expense = { ...original }; // Clone
+                        expense.name = form.name;
+                        expense.expectedCost = parseFloat(form.cost) || 0;
+                        expense.category = form.category;
+                        expense.date = form.date;
+
+                        // Apply unpaid toggle if changed
+                        if (form.isPaid === false && original.isPaid === true) {
+                            expense.isPaid = false;
+                            expense.actualPaid = 0;
+                        }
+
+                        // Update Expense - Fix: Strip reactivity to avoid DataCloneError
+                        await this.store.updateExpense(JSON.parse(JSON.stringify(expense)));
+
+                        // If date was changed, remove from current view and refresh
+                        if (form.date !== original.date) {
+                            this.store.currentViewExpenses = this.store.currentViewExpenses.filter(e => e.id !== original.id);
                             await this.store.recalcGlobalStats();
                         }
-                    } catch (e) {
-                        console.error("Save failed", e);
-                        alert("Failed to save changes.");
-                    } finally {
-                        this.editModal.open = false;
                     }
+
+                    this.editModal.open = false;
                 },
                 async deleteEditedExpense() {
                     if (!this.editModal.item) return;
 
-                    this.showConfirmDialog(
-                        this.editModal.isTemplate ? 'Delete this template?' : 'Delete this expense?',
-                        'This action cannot be undone.',
-                        async () => {
-                            try {
-                                if (this.editModal.isTemplate) {
-                                    await this.store.deleteTemplate(this.editModal.item.id);
-                                } else {
-                                    await this.store.deleteExpense(this.editModal.item.id);
-                                }
-                            } finally {
+                    if (this.editModal.type === 'template') {
+                        this.showConfirmDialog(
+                            'Delete this template?',
+                            'This will stop future auto-fills.',
+                            async () => {
+                                await DB.deleteTemplate(this.editModal.item.id);
+                                this.store.templates = this.store.templates.filter(t => t.id !== this.editModal.item.id);
                                 this.editModal.open = false;
                             }
-                        }
-                    );
+                        );
+                    } else {
+                        this.showConfirmDialog(
+                            'Delete this expense?',
+                            'This action cannot be undone.',
+                            async () => {
+                                await this.store.deleteExpense(this.editModal.item.id);
+                                this.editModal.open = false;
+                            }
+                        );
+                    }
                 },
-                async markUnpaidFromEdit() {
-                    if (!this.editModal.item) return;
-                    const expense = this.editModal.item;
-                    expense.isPaid = false;
-                    expense.actualPaid = 0;
-                    await DB.saveExpense(expense);
-                    await this.store.loadDay(this.store.currentDate);
-                    await this.store.recalcGlobalStats();
-                    this.editModal.open = false;
+                markUnpaidFromEdit() {
+                    if (!this.editModal.item || this.editModal.type === 'template') return;
+                    // Just toggle form state — actual save happens on "Update" click
+                    this.editModal.form.isPaid = false;
+                    this.editModal.form.actualPaid = 0;
                 },
 
                 // V2: Smart numpad - auto-clear on first input
@@ -3001,7 +3180,8 @@
 
                 // --- ADD MODAL LOGIC ---
                 openAddModal() {
-                    this.addModal.form = { name: '', cost: '', category: 'food' };
+                    this.addModal.form = { name: '', cost: '', category: 'food', recurrence: 'daily' };
+                    this.addModal.mode = 'expense';
                     this.addModal.open = true;
                 },
                 async submitNewExpense() {
@@ -3011,14 +3191,28 @@
 
                     this.addModal.isSubmitting = true;
                     try {
-                        await this.store.addExpense({
-                            name: this.addModal.form.name,
-                            expectedCost: this.addModal.form.cost || 0,
-                            category: this.addModal.form.category,
-                            actualPaid: 0,
-                            isPaid: false,
-                            date: this.store.currentDate
-                        });
+                        if (this.addModal.mode === 'template') {
+                            // Save as template
+                            const template = {
+                                id: this.core.UUID(),
+                                name: this.addModal.form.name,
+                                expectedCost: this.addModal.form.cost || 0,
+                                category: this.addModal.form.category,
+                                recurrence: this.addModal.form.recurrence || 'daily'
+                            };
+                            await DB.saveTemplate(JSON.parse(JSON.stringify(template)));
+                            this.store.templates.push(template);
+                        } else {
+                            // Save as expense
+                            await this.store.addExpense({
+                                name: this.addModal.form.name,
+                                expectedCost: this.addModal.form.cost || 0,
+                                category: this.addModal.form.category,
+                                actualPaid: 0,
+                                isPaid: false,
+                                date: this.store.currentDate
+                            });
+                        }
                         this.addModal.open = false;
                     } finally {
                         this.addModal.isSubmitting = false;
@@ -3027,35 +3221,30 @@
 
                 // --- SETTINGS LOGIC ---
                 async saveSettings() {
-                    await this.core.DB.setSetting('baseAllowance', this.store.settings.baseAllowance);
+                    await DB.setSetting('baseAllowance', this.store.settings.baseAllowance);
                     await this.store.recalcGlobalStats();
                 },
                 // V5: Set weekly/monthly safe to spend mode
                 async setSafeToSpendMode(mode) {
                     this.store.settings.safeToSpendMode = mode;
-                    await this.core.DB.setSetting('safeToSpendMode', mode);
+                    await DB.setSetting('safeToSpendMode', mode);
                 },
                 async deleteTemplate(id) {
+                    // V4: Use custom confirm dialog
                     this.showConfirmDialog(
-                        'Delete Template?',
-                        'Are you sure you want to remove this auto-fill template?',
+                        'Delete this template?',
+                        'This will stop future auto-fills for this item.',
                         async () => {
-                            await this.core.DB.deleteTemplate(id);
+                            await DB.deleteTemplate(id);
                             this.store.templates = this.store.templates.filter(t => t.id !== id);
                         }
                     );
                 },
                 openTemplateModal() {
-                    // Simplified for prototype: Add a generic one
-                    const name = prompt("Template Name:");
-                    if (name) {
-                        const cost = parseFloat(prompt("Cost:") || 0);
-                        this.store.templates.push({
-                            id: this.core.UUID(),
-                            name, expectedCost: cost, category: 'other', recurrence: 'daily'
-                        });
-                        // Save to DB (In real app, we'd use a full modal)
-                    }
+                    // Open the add modal in template mode
+                    this.addModal.form = { name: '', cost: '', category: 'food', recurrence: 'daily' };
+                    this.addModal.mode = 'template';
+                    this.addModal.open = true;
                 },
                 async exportData() {
                     // V3: Actual JSON export implementation
@@ -3092,53 +3281,73 @@
                             const data = JSON.parse(e.target.result);
 
                             // Basic Validation
-                            if (!data.expenses || !data.settings) {
+                            if (!data.expenses || !Array.isArray(data.expenses)) {
                                 throw new Error("Invalid backup file format");
                             }
 
-                            if (confirm(`Restore backup from ${data.exportedAt}? Current data will be merged/overwritten.`)) {
-                                // 1. Restore Settings
-                                if (data.settings) {
-                                    this.store.settings = data.settings;
-                                    await this.core.DB.setSetting('baseAllowance', data.settings.baseAllowance);
-                                    await this.core.DB.setSetting('safeToSpendMode', data.settings.safeToSpendMode);
-                                }
+                            // Confirm Overwrite
+                            this.showConfirmDialog(
+                                'Import Backup?',
+                                'This will merge/overwrite your current data. Existing entries with same IDs will be updated.',
+                                async () => {
+                                    try {
+                                        // 1. Restore Settings
+                                        if (data.settings) {
+                                            await DB.setSetting('baseAllowance', data.settings.baseAllowance);
+                                            await DB.setSetting('safeToSpendMode', data.settings.safeToSpendMode);
+                                        }
 
-                                // 2. Restore Templates
-                                if (data.templates && Array.isArray(data.templates)) {
-                                    for (const t of data.templates) {
-                                        await this.core.DB.saveTemplate(t);
+                                        // 2. Restore Templates
+                                        if (data.templates && Array.isArray(data.templates)) {
+                                            for (const t of data.templates) {
+                                                await DB.saveTemplate(t);
+                                            }
+                                        }
+
+                                        // 3. Restore Expenses
+                                        for (const exp of data.expenses) {
+                                            await DB.saveExpense(exp);
+                                        }
+
+                                        // 4. Set flag in localStorage and re-init (no navigation)
+                                        localStorage.setItem('microsave_import_success', '1');
+                                        await this.store.init();
+                                        this.dateWindow = this.core.Date.generateWindow(this.core.Date.getTodayISO(), 60, 60);
+                                        this.$nextTick(() => this.centerDateScroller(this.store.currentDate));
+                                        this.currentView = 'dashboard';
+                                        this.showToast('Import Successful!');
+                                        localStorage.removeItem('microsave_import_success');
+                                    } catch (err) {
+                                        console.error('Import save failed:', err);
+                                        alert('Import failed during save: ' + err.message);
                                     }
-                                    this.store.templates = await this.core.DB.getTemplates();
-                                }
+                                },
+                                'Import', // Button Text
+                                'brand'   // Button Color
+                            );
 
-                                // 3. Restore Expenses
-                                if (data.expenses && Array.isArray(data.expenses)) {
-                                    for (const exp of data.expenses) {
-                                        await this.core.DB.saveExpense(exp);
-                                    }
-                                }
-
-                                // Refresh
-                                await this.store.recalcGlobalStats();
-                                await this.store.loadDay(this.store.currentDate);
-                                alert("Backup restored successfully!");
-                            }
                         } catch (err) {
-                            console.error("Import error:", err);
-                            alert("Failed to import file. " + err.message);
+                            console.error("Import Error:", err);
+                            alert("Failed to import: " + err.message);
                         }
-                        // Clear input
-                        event.target.value = '';
                     };
                     reader.readAsText(file);
+
+                    // Reset input so same file can be selected again if needed
+                    event.target.value = '';
                 },
                 async resetApp() {
                     this.showConfirmDialog(
                         'Factory Reset?',
                         'All data will be permanently deleted. This cannot be undone.',
                         async () => {
-                            await DB.factoryReset();
+                            try {
+                                await DB.factoryReset();
+                            } catch (e) {
+                                console.warn('Factory reset error (non-fatal):', e);
+                            }
+                            // Clear any localStorage flags too
+                            localStorage.removeItem('microsave_import_success');
                             location.reload();
                         }
                     );
@@ -3177,10 +3386,17 @@
                         document.body.appendChild(el);
                         setTimeout(() => el.remove(), 1200);
                     }
+                },
+                showToast(message) {
+                    this.toastMessage = message;
+                    this.toastVisible = true;
+                    setTimeout(() => { this.toastVisible = false; }, 3000);
                 }
             },
             mounted() {
-                this.initApp();
+                if (this.isRoot) {
+                    this.initApp();
+                }
             }
         });
 
@@ -3283,7 +3499,9 @@
                 // Recalc Game Stats whenever savings change
                 'store.globalStats.netVariance': {
                     handler(newVal) {
-                        this.game.calculate(newVal);
+                        if (this.isRoot && this.game) {
+                            this.game.calculate(newVal);
+                        }
                     },
                     immediate: true
                 }
