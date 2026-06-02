@@ -3,7 +3,7 @@
 ## Short Term
 
 - Add a short demo walkthrough or hosted GitHub Pages link.
-- Expand manual QA into repeatable browser checks for dashboard, plans, vault, import/export, and reset flows.
+- Expand browser checks beyond add-expense persistence into plans, vault, import/export, and reset flows.
 - Add more focused tests for month-end settlement, recurring templates, import/export validation, and date handling.
 - Improve SAR formatting consistency and isolate all mixed RTL/LTR currency text.
 - Review mobile spacing, modal height, and bottom navigation behavior on common phone sizes.

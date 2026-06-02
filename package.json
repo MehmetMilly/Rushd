@@ -4,7 +4,11 @@
   "private": false,
   "description": "Arabic-first personal finance assistant for tracking expenses, budgets, goals, and spending insights.",
   "scripts": {
-    "test": "node scripts/smoke-check.mjs && node scripts/finance-rules.test.mjs"
+    "test": "node scripts/smoke-check.mjs && node scripts/finance-rules.test.mjs",
+    "test:browser": "node scripts/browser-smoke.cjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.60.0"
   },
   "license": "MIT"
 }

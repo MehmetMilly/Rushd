@@ -42,4 +42,6 @@ The app recalculates statistics from stored expenses, templates, settings, vault
 
 The first extracted finance-rule helpers live in `scripts/finance-rules.mjs` with tests in `scripts/finance-rules.test.mjs`. They are intentionally small and mirror current app formulas while the main app still lives in `index.html`.
 
+The browser smoke test lives in `scripts/browser-smoke.cjs`. It starts a local static server, opens Rushd with Playwright, adds a fake expense, checks persistence after refresh, and captures a populated dashboard screenshot.
+
 A later React/Vite or Vue/Vite migration could make sense, but only after more behavior-preserving tests and screenshots exist.

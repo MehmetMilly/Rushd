@@ -20,6 +20,8 @@ assert.equal(
   -250
 );
 
+// Flexible usage mirrors the live app: it counts the expected cost against
+// the monthly flexible budget, even after an expense is marked paid.
 const flexibleUsage = calculateFlexibleUsage(
   { id: 'coffee', monthlyBudget: 120, maxUsesPerMonth: 4 },
   [
@@ -32,8 +34,8 @@ const flexibleUsage = calculateFlexibleUsage(
 assert.deepEqual(flexibleUsage, {
   monthlyBudget: 120,
   maxUsesPerMonth: 4,
-  usedBudget: 50,
-  remainingBudget: 70,
+  usedBudget: 55,
+  remainingBudget: 65,
   uses: 2,
   remainingUses: 2
 });

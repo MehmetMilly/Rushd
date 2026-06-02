@@ -4,6 +4,7 @@ Use this checklist before publishing changes.
 
 - App opens at `index.html` or local server URL without a blank screen.
 - Screenshots in `docs/assets/screenshots/` are refreshed after visible UI changes.
+- Optional browser smoke test passes with `npm run test:browser`.
 - Browser console has no relevant app errors.
 - Arabic RTL layout works on the dashboard.
 - English mode can be selected and the UI still renders.

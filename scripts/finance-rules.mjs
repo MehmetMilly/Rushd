@@ -17,10 +17,7 @@ export function calculateFlexibleUsage(definition, expenses = []) {
   const maxUsesPerMonth = Math.max(0, Math.trunc(toFiniteNumber(definition?.maxUsesPerMonth, 0)));
   const matchingExpenses = expenses.filter((expense) => expense?.flexibleDefinitionId === id);
   const usedBudget = matchingExpenses.reduce((sum, expense) => {
-    const amount = expense?.isPaid
-      ? toFiniteNumber(expense?.actualPaid, 0)
-      : toFiniteNumber(expense?.expectedCost, 0);
-    return sum + Math.max(0, amount);
+    return sum + Math.max(0, toFiniteNumber(expense?.expectedCost, 0));
   }, 0);
 
   return {

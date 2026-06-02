@@ -37,6 +37,8 @@ These screenshots are captured from the current local app with default local dat
 
 ![Rushd dashboard in a wide browser viewport](docs/assets/screenshots/dashboard-wide.png)
 
+![Rushd dashboard after adding a test expense](docs/assets/screenshots/dashboard-with-expense.png)
+
 ## Run Locally
 
 Open `index.html` directly in a browser, or serve the folder locally:
@@ -53,7 +55,16 @@ Optional smoke check:
 npm test
 ```
 
-The current test command checks repository structure, key app markers, and extracted finance-rule examples. It is not a full browser test suite yet.
+The current test command checks repository structure, key app markers, and extracted finance-rule examples.
+
+Optional browser smoke test:
+
+```bash
+npm install
+npm run test:browser
+```
+
+The browser smoke test serves the static app locally, adds a fake expense, verifies it persists after refresh, and refreshes `docs/assets/screenshots/dashboard-with-expense.png`.
 
 ## Deployment
 
