@@ -16,7 +16,14 @@ Before opening a pull request, run:
 npm test
 ```
 
-Also use `docs/manual-qa.md` for browser checks.
+For browser validation, install dependencies and run:
+
+```bash
+npm install
+npm run test:browser
+```
+
+Also use `docs/manual-qa.md` for manual browser checks.
 
 Please create a branch with a clear name, keep changes focused, and explain what you tested. Arabic copy, RTL layout improvements, accessibility fixes, calculation fixes, documentation, and privacy improvements are welcome.
 

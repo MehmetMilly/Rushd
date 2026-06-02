@@ -49,7 +49,7 @@ python -m http.server 8000
 
 Then open `http://localhost:8000`.
 
-Optional smoke check:
+Optional checks:
 
 ```bash
 npm test

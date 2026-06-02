@@ -30,6 +30,13 @@ Run the lightweight repository and finance-rule checks:
 npm test
 ```
 
+Run the optional browser smoke test after installing dependencies:
+
+```bash
+npm install
+npm run test:browser
+```
+
 Manual QA checklist lives in `docs/manual-qa.md`.
 
 ## Important Files
@@ -40,6 +47,8 @@ Manual QA checklist lives in `docs/manual-qa.md`.
 - `docs/data-model.md`: implemented and planned entities.
 - `docs/privacy-notes.md`: finance-data privacy notes.
 - `scripts/smoke-check.mjs`: static repository smoke check.
+- `scripts/finance-rules.mjs`: first extracted finance-rule helpers.
+- `scripts/browser-smoke.cjs`: optional Playwright browser smoke test.
 
 ## Coding Guidelines
 

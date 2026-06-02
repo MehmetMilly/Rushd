@@ -2,7 +2,7 @@
 
 ## Short Version
 
-I am a student developer building useful Arabic-first software. Rushd / رُشد is my Arabic-first personal finance assistant for tracking expenses, budgets, savings goals, recurring plans, and spending insights. It is currently a static Vue/JavaScript prototype with local browser storage, export/import backup, RTL UI, SAR-focused money tracking, screenshots from the running app, and honest documentation. Codex would help me turn it from a practical prototype into a cleaner, better-tested, maintainable open-source project.
+I am a student developer building useful Arabic-first software. Rushd / رُشد is my Arabic-first personal finance assistant for tracking expenses, budgets, savings goals, recurring plans, and spending insights. It is currently a static Vue/JavaScript prototype with local browser storage, export/import backup, RTL UI, SAR-focused money tracking, screenshots from the running app, browser smoke testing, and honest documentation. Codex would help me turn it from a practical prototype into a cleaner, better-tested, maintainable open-source project.
 
 ## Longer Version
 
@@ -24,4 +24,4 @@ Important repository docs:
 - `docs/roadmap.md`
 - `docs/manual-qa.md`
 
-The honest status is active prototype / in development. It is a real useful app with enough product depth to grow into respectable open-source work, but it still needs tests, screenshots, accessibility review, and continued privacy work.
+The honest status is active prototype / in development. It is a real useful app with enough product depth to grow into respectable open-source work, but it still needs broader tests, accessibility review, and continued privacy work.
