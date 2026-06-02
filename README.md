@@ -68,7 +68,7 @@ The browser smoke test serves the static app locally, adds a fake expense, verif
 
 ## Deployment
 
-The app is prepared for static hosting. GitHub Pages can serve `index.html` from the repository root. A GitHub Pages workflow is included in `.github/workflows/pages.yml`.
+The app is prepared for static hosting. GitHub Pages can serve `index.html` from the repository root once Pages is enabled for the repository. A Pages workflow can be added later by a token/user with GitHub `workflow` permission.
 
 ## Privacy Notes
 
