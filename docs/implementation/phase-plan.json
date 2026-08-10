@@ -1,0 +1,330 @@
+{
+  "schema": "rushd.phase-plan.v1",
+  "plan_version": "2026-08-10-final",
+  "repository_baseline": "ed45d83d235e230f9d530de6c421f68c3dd5020b",
+  "canonical_plan": "docs/RUSHD_MASTER_PLAN_FINAL.md",
+  "execution_protocol": "docs/RUSHD_EXECUTION_PROTOCOL.md",
+  "state_template": "docs/implementation/state-template.json",
+  "path_policy": "protected_paths_override_allowed_paths",
+  "protected_paths": [
+    "docs/RUSHD_FOUNDER_FEEDBACK_2026-08-10.md",
+    "docs/RUSHD_FOUNDER_REVIEW.md",
+    "docs/RUSHD_MASTER_PLAN.md",
+    "docs/RUSHD_PRODUCT_DISCUSSION_2026-08-10.md",
+    "docs/RUSHD_FINAL_FOUNDER_BRIEF.md",
+    "docs/RUSHD_MASTER_PLAN_FINAL.md",
+    "docs/RUSHD_EXECUTION_PROTOCOL.md",
+    "docs/RUSHD_PHASE_PROMPTS.md",
+    "docs/implementation/phase-plan.json",
+    "docs/implementation/P0-P1-INVENTORY.md",
+    "docs/implementation/*-template.json",
+    ".agents/skills/rushd-phase-orchestrator/**",
+    ".agents/skills/rushd-motion-lab/**",
+    ".codex/agents/**"
+  ],
+  "global_required_commands": [
+    "npm test"
+  ],
+  "final_audit_checks": {
+    "finance_migration": [
+      "finance-formulas",
+      "cycles-dates-currency",
+      "obligations-reconciliation",
+      "migration-portability",
+      "idempotency-rollback"
+    ],
+    "auth_sync_security_privacy": [
+      "ownership-rls",
+      "identity-cache-separation",
+      "guest-merge-signout",
+      "sync-convergence-conflicts",
+      "lifecycle-backup-privacy"
+    ],
+    "ai": [
+      "proposal-authority",
+      "schema-domain-stale-state",
+      "eval-integrity-subgroups",
+      "injection-privacy-gateway",
+      "offline-kill-switch-undo"
+    ],
+    "bilingual_ux_accessibility_motion": [
+      "hierarchy-core-journeys",
+      "arabic-rtl-english-ltr",
+      "accessibility-input",
+      "motion-profiles-quality",
+      "notifications-momentum"
+    ],
+    "pwa_performance_operations": [
+      "install-update-offline",
+      "performance-memory",
+      "reproducible-build-ci",
+      "monitoring-support",
+      "backup-rollback-incident"
+    ]
+  },
+  "phases": [
+    {
+      "id": "P00",
+      "title": "Protect authority and baseline",
+      "objective": "Create immutable decision, visual, storage, migration, bug-reproduction, accessibility, and performance evidence before product implementation.",
+      "depends_on": [],
+      "risk": "hard",
+      "allowed_paths": ["docs/**", "tests/fixtures/**", "tests/characterization/**", "scripts/**", "package.json", "package-lock.json", ".github/workflows/**", ".gitignore"],
+      "acceptance": [
+        {"id": "P00-A1", "text": "Source baseline SHA, authority commit SHA, authority/file hashes, supersession log, and protected-path inventory are verified; all new P00 evidence is present in the exact reviewed patch."},
+        {"id": "P00-A2", "text": "Sanitized v1 storage and backup fixtures cover empty, populated, paid-generated, plan-edit, legacy-vault, malformed, boundary, and large-history cases."},
+        {"id": "P00-A3", "text": "Every documented P0/P1 has an executable reproduction or an explicitly justified manual reproduction."},
+        {"id": "P00-A4", "text": "The exact P0/P1 inventory, 390x844/1024x1366/1440x900 Arabic/English light/dark PNG baseline and WebM/MP4 motion evidence, browser versions, and structured manual attestation are complete without normal tests overwriting them."},
+        {"id": "P00-A5", "text": "Dependencies are pinned with a lockfile and tests/build artifacts are isolated from source assets."}
+      ],
+      "required_commands": ["npm test"],
+      "manual_qa": ["P00-M1: Complete docs/baseline/P00-manual-qa.json from the human-attestation template for the exact matrix in P0-P1-INVENTORY.md using only fake/sanitized financial data."]
+    },
+    {
+      "id": "P01",
+      "title": "Immediate corruption containment",
+      "objective": "Fix or visibly block the current prototype workflows that can corrupt, duplicate, erase, or materially misstate financial data.",
+      "depends_on": ["P00"],
+      "risk": "hard",
+      "allowed_paths": ["index.html", "scripts/**", "tests/**", "docs/baseline/**", "docs/manual-qa.md", "docs/architecture.md", "docs/data-model.md", "package.json", "package-lock.json"],
+      "acceptance": [
+        {"id": "P01-A1", "text": "Paid generated activity cannot be mutated by plan reconciliation."},
+        {"id": "P01-A2", "text": "Plan apply, import, and cycle settlement are atomic or safely blocked; settlement retry is idempotent."},
+        {"id": "P01-A3", "text": "Unpaid reserved commitments affect cycle availability/settlement and each goal uses only its own allocation."},
+        {"id": "P01-A4", "text": "Legacy vault value, reset blockage, UTC date, historical budget, and import validation risks have regression coverage or temporary containment."},
+        {"id": "P01-A5", "text": "Ordinary capture/export continues to work and no temporary containment is presented as final product design."},
+        {"id": "P01-A6", "text": "docs/baseline/P01-risk-matrix.json maps every canonical P0/P1 ID to an executable regression plus a verified fix or explicit visible dogfooding containment and final owning phase; no listed defect remains silently reachable."}
+      ],
+      "required_commands": ["npm test", "npm run test:browser"],
+      "manual_qa": ["P01-M1: Run ordinary add/edit/export/reload flows and every temporarily blocked danger flow in Arabic and English."]
+    },
+    {
+      "id": "P02",
+      "title": "Production foundation and mechanical split",
+      "objective": "Replace the single-file delivery mechanism with a buildable modular Vue/Vite/TypeScript foundation while preserving behavior and legacy data access.",
+      "depends_on": ["P01"],
+      "risk": "medium",
+      "allowed_paths": ["index.html", "src/**", "public/**", "tests/**", "scripts/**", ".github/workflows/**", "package.json", "package-lock.json", "vite.config.*", "tsconfig*.json", "eslint.config.*", "playwright.config.*", "docs/**", ".gitignore"],
+      "acceptance": [
+        {"id": "P02-A1", "text": "Production build uses local Vue/assets, a lockfile, lint, typecheck, tests, and CI without runtime CDNs."},
+        {"id": "P02-A2", "text": "Template, styles, storage compatibility, and business logic no longer live as one 10k-line source file."},
+        {"id": "P02-A3", "text": "Current legitimate data opens unchanged and legacy database naming remains preserved."},
+        {"id": "P02-A4", "text": "Characterization screenshots and flows show no unexplained behavioral or visual drift."},
+        {"id": "P02-A5", "text": "New modules have explicit ownership boundaries and no replacement global finance blob."}
+      ],
+      "required_commands": ["npm run lint", "npm run typecheck", "npm test", "npm run build", "npm run test:browser"],
+      "manual_qa": ["P02-M1: Compare the modular build to Phase 0 baselines at the locked viewport/language/theme matrix."]
+    },
+    {
+      "id": "P03",
+      "title": "Canonical finance domain and action registry",
+      "objective": "Implement the deterministic, currency-aware, cycle-aware financial domain and the single command/action boundary used by UI, import, sync, and AI.",
+      "depends_on": ["P02"],
+      "risk": "hard",
+      "allowed_paths": ["src/domain/**", "src/application/**", "src/shared/**", "tests/domain/**", "tests/property/**", "docs/data-model.md", "docs/architecture.md", "package.json", "package-lock.json"],
+      "acceptance": [
+        {"id": "P03-A1", "text": "Money uses checked integer ISO minor units; local civil dates and payday/calendar cycles are explicit."},
+        {"id": "P03-A2", "text": "Availability, mid-cycle boundary, pool/classification completeness, shortfall, pacing, partial/residual obligations, multiple payments, returns, signed reconciliation adjustments, and allocations match the final plan."},
+        {"id": "P03-A3", "text": "Plans cannot rewrite paid facts; cycle close/carry/reopen/backdated propagation and allocation funding/assignment/release are explicit, atomic, and idempotent."},
+        {"id": "P03-A4", "text": "Every mutation passes through a typed command, invariant validation, action receipt, revision/idempotency identity, and undo/reversal policy."},
+        {"id": "P03-A5", "text": "A provider-neutral pre-P04 ADR freezes identity separation, ownership, action/outbox schema, cursors, tombstones, conflict rules, guest merge, sign-out/cache safety, and the authorized provider-amendment path; example, boundary, property, and regression tests exercise production code."},
+        {"id": "P03-A6", "text": "Property/state tests prove the completeness reducer, recovered classified activity, disputed paid/unpaid reservations, expected refunds, timezone/payday effective dates, open-cycle rebase, closed-cycle immutability, UTC/DST/short-month boundaries, retry/reopen behavior, and Reality Check currency invariants: observations/adjustments use the active ISO currency while explicit mismatches or ambiguous symbols yield clarification and no write with no FX."}
+      ],
+      "required_commands": ["npm run lint", "npm run typecheck", "npm test", "npm run test:property", "npm run build"],
+      "manual_qa": []
+    },
+    {
+      "id": "P04",
+      "title": "Local data v2, migration, and PWA",
+      "objective": "Deliver resilient offline guest storage, legacy migration, versioned portability, and installable/update-safe PWA behavior.",
+      "depends_on": ["P03"],
+      "risk": "hard",
+      "allowed_paths": ["src/data/**", "src/pwa/**", "src/application/**", "public/**", "tests/data/**", "tests/pwa/**", "tests/fixtures/**", "vite.config.*", "playwright.config.*", "package.json", "package-lock.json", "docs/**"],
+      "acceptance": [
+        {"id": "P04-A1", "text": "Guest mode reads/writes a disconnected local v2 database and never contacts account/cloud services."},
+        {"id": "P04-A2", "text": "Legacy migration converts canonical SAR major-unit decimals to halalas exactly without rounding, rejects/quarantines excess precision/invalid/ambiguous values, retains original source values, preserves provisional essential reservations and unallocated vault opening value, maps each verified legacy budget settlement to one named carry-in and vault settlement to one allocation funding movement, never infers goal allocations, and survives every fixture/failure point with rollback evidence."},
+        {"id": "P04-A3", "text": "Versioned export/import/reset are atomic, validated, cancelable, and available offline."},
+        {"id": "P04-A4", "text": "Cold installed launch, asset caching, offline reload/write, update lifecycle, two-tab behavior, and recovery pass on automated and physical targets."},
+        {"id": "P04-A5", "text": "Local write and action/outbox receipt are atomic and idempotent."},
+        {"id": "P04-A6", "text": "A physical-device VFS ADR benchmarks IndexedDB and supported cooperative OPFS/per-platform options; the selected adapter passes Safari/iOS/iPadOS/Android/desktop two-tab locking, crash/reload, quota/private-mode, migration, install/update, and rollback gates."},
+        {"id": "P04-A7", "text": "Home/Add/Ask/Plan/Insights/Goals/detail URLs and supported Add/Ask manifest shortcuts preserve destination across refresh, installed offline launch, update, and authentication interruption without false platform claims."}
+      ],
+      "required_commands": ["npm run lint", "npm run typecheck", "npm test", "npm run test:data", "npm run test:pwa", "npm run build"],
+      "manual_qa": ["P04-M1: Install/update/offline test on real iOS/iPadOS Safari and Android Chrome; retain structured device/OS attestation and evidence."]
+    },
+    {
+      "id": "P05",
+      "title": "Design system, locked shell, and Motion Lab",
+      "objective": "Establish Rushd's bilingual visual system, invariant navigation hierarchy, accessible interaction foundation, and empirically approved signature motion language.",
+      "depends_on": ["P04"],
+      "risk": "medium",
+      "required_skills": ["frontend-design", "rushd-motion-lab"],
+      "allowed_paths": ["src/app/**", "src/components/**", "src/design-system/**", "src/motion/**", "src/styles/**", "src/assets/**", "tests/ui/**", "tests/visual/**", "docs/design/**", "package.json", "package-lock.json", "playwright.config.*"],
+      "acceptance": [
+        {"id": "P05-A1", "text": "Home, Plan, Ask Rushd, Insights, and Goals retain the same meaning/order on phone, tablet, and laptop; a persistent Settings action remains outside permanent navigation."},
+        {"id": "P05-A2", "text": "IBM Plex Sans Arabic and Noto Kufi Arabic roles/licenses/self-hosted assets plus English typography, direction, numeric isolation, density, focus, dialogs, safe areas, pointer, keyboard, and touch foundations are documented and tested."},
+        {"id": "P05-A3", "text": "One motion-token/profile source drives Full, Balanced, and OS-overridden Reduced behavior."},
+        {"id": "P05-A4", "text": "All six Motion Lab prototypes have Full/Balanced/Reduced recordings, interaction tests, performance traces, and an explicit selected/rejected decision."},
+        {"id": "P05-A5", "text": "No core behavior or accessible meaning depends on motion; no transition engine competes for the same property."},
+        {"id": "P05-A6", "text": "The frozen 0–4 quality rubric is independently scored for every prototype; selection requires every dimension >=3, distinctiveness and delight =4, cited disagreement resolution, and no behavior/accessibility/performance failure."}
+      ],
+      "required_commands": ["npm run lint", "npm run typecheck", "npm test", "npm run test:ui", "npm run test:visual", "npm run build"],
+      "manual_qa": ["P05-M1: Review motion timing and interaction on target physical devices and with VoiceOver/TalkBack and reduced motion; retain structured attestation/evidence."]
+    },
+    {
+      "id": "P06",
+      "title": "Core product vertical slice",
+      "objective": "Deliver onboarding, Home, capture, history, availability, reality check, notifications, and daily recovery on the new foundation.",
+      "depends_on": ["P05"],
+      "risk": "medium",
+      "allowed_paths": ["src/features/onboarding/**", "src/features/home/**", "src/features/capture/**", "src/features/activity/**", "src/features/notifications/**", "src/app/**", "src/components/**", "src/application/**", "src/data/**", "tests/**", "docs/**"],
+      "acceptance": [
+        {"id": "P06-A1", "text": "Fast and field-equivalent guest/manual onboarding paths resume after interruption, enforce the 18+ self-attestation/safe under-18 exit without default full-birth-date collection, confirm timezone/week start, and support mid-cycle boundary semantics, unknown history, import, and later sign-in; Smart Setup is a truthful disabled/preview route until P10."},
+        {"id": "P06-A2", "text": "Home contains the exact final-plan hierarchy, microphone affordance, notification button, View All Transactions, Momentum entry placeholder, and honest sync/offline state; its bilingual accessible Add menu has Manual, Smart text/voice, Flexible preset, and Receipt/photo entries with working manual/preset destinations and truthful pre-P09 availability states."},
+        {"id": "P06-A3", "text": "Manual and saved-preset capture, selected-day activity, and full offline transaction history cover period browsing, search/filter, detail, edit/correct/reverse/undo, linked returns, bulk review, export, and audit receipts with expected items visually separate."},
+        {"id": "P06-A4", "text": "Availability/shortfall, freshness/completeness, explanation, optional pacing, and reality check remain mathematically consistent through every mutation; Reality Check visibly and accessibly names the active ISO currency and its bilingual typed/voice flows reject explicit foreign-currency or ambiguous-symbol observations as clarification-only non-writes."},
+        {"id": "P06-A5", "text": "Flexible-definition links are optional, editable, and monitoring-only; Arabic/English, phone/tablet/laptop, keyboard/touch, a11y, rapid-interaction, and visual gates pass."}
+      ],
+      "required_commands": ["npm run lint", "npm run typecheck", "npm test", "npm run test:e2e", "npm run test:visual", "npm run test:a11y", "npm run build"],
+      "manual_qa": ["P06-M1: Complete manual/fast onboarding and a full daily loop on phone, tablet, and laptop in both languages, including visible/announced active Reality Check currency plus foreign-currency and ambiguous-symbol non-write clarification cases."]
+    },
+    {
+      "id": "P07",
+      "title": "Plan, reconciliation, Insights, and Goals",
+      "objective": "Deliver the complete deterministic planning, monitoring, scenario, goal, and cycle-review experience.",
+      "depends_on": ["P06"],
+      "risk": "hard",
+      "allowed_paths": ["src/features/plan/**", "src/features/insights/**", "src/features/goals/**", "src/features/reviews/**", "src/domain/**", "src/application/**", "src/data/**", "tests/**", "docs/**"],
+      "acceptance": [
+        {"id": "P07-A1", "text": "Payday/calendar cycle, commitments, flexible rules/presets, buffer, templates/profiles, preview/apply, and expected-to-actual reconciliation satisfy the financial contract."},
+        {"id": "P07-A2", "text": "Insights answer concrete questions, expose accessible text/table equivalents, inherit completeness and assumptions, and keep actual, expected, pacing, and completeness concepts distinct."},
+        {"id": "P07-A3", "text": "What-if scenarios are deterministic and never present assumptions as affordability guarantees."},
+        {"id": "P07-A4", "text": "Tracked-pool funding, unallocated-to-goal assignment, named-cycle release, and legacy opening allocations cannot double count or imply custody; corrections and cycle close remain auditable/idempotent."},
+        {"id": "P07-A5", "text": "Cycle review, missed-day recovery, plan conflict, closed-period correction, and large-ledger flows pass all gates."}
+      ],
+      "required_commands": ["npm run lint", "npm run typecheck", "npm test", "npm run test:property", "npm run test:e2e", "npm run test:a11y", "npm run build"],
+      "manual_qa": ["P07-M1: Review a full cycle from setup through close, including shortfall, plan edit after payment, goal reallocation, and recovery after a gap."]
+    },
+    {
+      "id": "P08",
+      "title": "Accounts, production sync, and cloud lifecycle",
+      "objective": "Deliver authenticated multi-device sync, safe guest merge, conflict recovery, cloud data rights, and operational backup lifecycle.",
+      "depends_on": ["P07"],
+      "risk": "hard",
+      "human_gate": "Provider region/legal decision and founder-owned Supabase/PowerSync credentials are required before production provisioning; local mocks and migrations proceed without them.",
+      "allowed_paths": ["src/auth/**", "src/sync/**", "src/data/**", "src/features/settings/**", "backend/**", "infra/**", "supabase/**", "powersync/**", "firebase/**", "tests/sync/**", "tests/security/**", "docs/adr/**", "docs/operations/**", "package.json", "package-lock.json"],
+      "acceptance": [
+        {"id": "P08-A1", "text": "Auth creation/recovery, sessions/devices, RLS, server ownership, transactional write validation, per-identity local cache, and non-bypassable 18+ account boundary pass authorization/privacy tests."},
+        {"id": "P08-A2", "text": "Guest merge is explicit/idempotent, never overwrites remote data silently, and supports Keep Local; sign-out prevents cross-account exposure and cannot erase unacknowledged outbox/conflict intent without verified export plus explicit destructive override."},
+        {"id": "P08-A3", "text": "Two-device edit, delete-vs-edit, duplicate/reordered requests, expired auth, months offline, queue error, and retry-after-timeout converge without loss or duplication."},
+        {"id": "P08-A4", "text": "Conflicts retain local intent and have a usable resolution path; visible sync state never falsely reports Saved."},
+        {"id": "P08-A5", "text": "Cloud export/deletion, backup/PITR, recovery, rollback, retention, and incident runbooks are implemented and drilled."}
+      ],
+      "required_commands": ["npm run lint", "npm run typecheck", "npm test", "npm run test:sync", "npm run test:security", "npm run test:e2e", "npm run build"],
+      "manual_qa": ["P08-M1: Use two physical devices and two accounts to verify merge, convergence, offline/failed-sync sign-out cache safety, deletion/export, and recovery."]
+    },
+    {
+      "id": "P09",
+      "title": "AI platform and smart capture",
+      "objective": "Deliver an authenticated, evaluated AI proposal platform with text, push-to-talk, batch, correction, matching, and receipt/image capture.",
+      "depends_on": ["P08"],
+      "risk": "hard",
+      "required_skills": ["openai-docs"],
+      "human_gate": "Founder-owned candidate-provider projects (including OpenAI), billing controls, server secrets, retention settings, and privacy/legal approval are required before real-data external testing or production provider lock.",
+      "allowed_paths": ["src/ai/**", "src/features/capture/**", "src/application/**", "src/domain/**", "supabase/functions/**", "tests/ai/**", "evals/**", "docs/ai/**", "docs/privacy-notes.md", "package.json", "package-lock.json"],
+      "acceptance": [
+        {"id": "P09-A1", "text": "No model/API secret ships to the client; authenticated gateway, limits, redaction, store/retention settings, and kill switch are verified."},
+        {"id": "P09-A2", "text": "Every valid write-capable proposal is schema-valid, deterministically revalidated, previewed, appropriately confirmed, committed only through the action registry, audited, and undoable/reversible as defined; read-only, clarification, refusal, timeout, malformed, stale, failure, explicit foreign-currency Reality Check, and ambiguous-currency outcomes remain truthful non-writes with no FX or active-currency reinterpretation."},
+        {"id": "P09-A3", "text": "The frozen 1,200+ case, 30% holdout publishes denominators/confidence intervals and meets every exact zero-tolerance, first-schema, critical-slot, end-to-end task-success, batch precision/recall, ambiguity, grounding, per-language/modality/capability, noisy-voice, human-review, failure, and regression threshold in the final plan."},
+        {"id": "P09-A4", "text": "Receipt/photo/screenshot extraction meets the exact >=97.5% overall/>=95% condition field thresholds plus privacy, duplicate, crop/rotation, unsupported abstention, and review-correction gates."},
+        {"id": "P09-A5", "text": "Offline behavior is truthful and usable; analytics/error events contain no raw financial or AI content."},
+        {"id": "P09-A6", "text": "The Home Add menu activates Smart text/voice and Receipt/photo without regressing Manual or Flexible preset; all four entries, availability/offline states, and destinations pass bilingual E2E and accessibility tests."},
+        {"id": "P09-A7", "text": "OpenAI and at least one production-eligible alternative run the untouched benchmark; the versioned decision record selects only a hard-gate passer using the frozen 45/20/15/15/5 quality/Arabic-latency/privacy-cost weights, with no provider-specific domain coupling."}
+      ],
+      "required_commands": ["npm run lint", "npm run typecheck", "npm test", "npm run test:ai", "npm run eval:ai", "npm run test:security", "npm run test:e2e", "npm run build"],
+      "manual_qa": ["P09-M1: Human-review the frozen stratified AI sample and all high-impact/ambiguous proposal experiences in both languages."]
+    },
+    {
+      "id": "P10",
+      "title": "Ask Rushd and contextual AI",
+      "objective": "Deliver grounded conversation and broad product control through the four approved AI surfaces.",
+      "depends_on": ["P09"],
+      "risk": "hard",
+      "required_skills": ["openai-docs"],
+      "allowed_paths": ["src/ai/**", "src/features/ask/**", "src/features/onboarding/**", "src/features/plan/**", "src/features/insights/**", "src/features/goals/**", "src/features/activity/**", "supabase/functions/**", "tests/ai/**", "evals/**", "docs/ai/**"],
+      "acceptance": [
+        {"id": "P10-A1", "text": "Global, Home, contextual, and full-conversation surfaces use one permissioned action/tool contract and coherent history."},
+        {"id": "P10-A2", "text": "Onboarding extraction, plan/goal edits, grounded explanations, what-if, cross-date/cycle batches, clarification, cancellation, multi-step review, and typed/spoken Reality Check currency mismatch or ambiguity non-write handling pass bilingual evals."},
+        {"id": "P10-A3", "text": "Assistant memory/preferences are visible, editable, deletable, scoped, and never infer sensitive traits silently."},
+        {"id": "P10-A4", "text": "Read answers cite the app calculation basis/data-as-of state; action answers cannot bypass confirmation or stale-read checks."},
+        {"id": "P10-A5", "text": "Spoken/full-duplex voice ships only if interruption, latency, privacy, accessibility, and safety thresholds pass; otherwise push-to-talk remains complete."},
+        {"id": "P10-A6", "text": "Smart Setup passes bilingual E2E/a11y for typed/spoken input, ambiguity, accept/edit/skip/manual continuation, one-review confirmation, interruption/resume, sign-in loss/offline fallback, and guest-to-account handoff without a modal trap."}
+      ],
+      "required_commands": ["npm run lint", "npm run typecheck", "npm test", "npm run test:ai", "npm run eval:ai", "npm run test:e2e", "npm run test:a11y", "npm run build"],
+      "manual_qa": ["P10-M1: Complete realistic multi-turn financial discussions and cross-domain commands in Arabic, English, and mixed speech."]
+    },
+    {
+      "id": "P11",
+      "title": "Momentum and full motion application",
+      "objective": "Deliver the motivating daily check-in system and apply the approved extreme motion language across complete product flows.",
+      "depends_on": ["P10"],
+      "risk": "medium",
+      "required_skills": ["frontend-design", "rushd-motion-lab"],
+      "allowed_paths": ["src/features/momentum/**", "src/features/notifications/**", "src/motion/**", "src/design-system/**", "src/features/**", "src/assets/**", "tests/momentum/**", "tests/ui/**", "tests/visual/**", "docs/design/**", "docs/metrics/**"],
+      "acceptance": [
+        {"id": "P11-A1", "text": "Check-in marks, reviewed-as-of/cutoff/later-activity states, streak, day boundary, 48-hour repair, one earned token, corrected-day behavior, journey, mastery, weekly mission, and rewards are deterministic/idempotent across sync."},
+        {"id": "P11-A2", "text": "No progress depends on money amount, wealth, transaction count, category, screen visit, or destructive recovery exercise; farming tests pass."},
+        {"id": "P11-A3", "text": "Reminder opt-in/suppression/privacy, hide-streak, lapse recovery, pressure feedback, and stop-condition instrumentation are implemented."},
+        {"id": "P11-A4", "text": "Approved signature transitions are applied coherently; rapid interaction, save errors, navigation interruption, and reduced motion never change behavior."},
+        {"id": "P11-A5", "text": "Full/Balanced/Reduced motion passes target-device performance, visual timing, accessibility, memory/leak, and battery-sensitive-loop gates."},
+        {"id": "P11-A6", "text": "Settings/Profile and the Home notification center provide permission timing, independent routine/risk controls, generic lock-screen previews, revocation, motion/account controls, and authenticated/offline-safe focused deep links across RTL/LTR device tests."}
+      ],
+      "required_commands": ["npm run lint", "npm run typecheck", "npm test", "npm run test:momentum", "npm run test:e2e", "npm run test:visual", "npm run test:a11y", "npm run test:performance", "npm run build"],
+      "manual_qa": ["P11-M1: Review one full check-in/repair/missed-streak cycle and every signature transition on all physical target classes with structured evidence."]
+    },
+    {
+      "id": "P12",
+      "title": "Extreme QA, security, performance, and release candidate",
+      "objective": "Find and fix every release blocker through independent adversarial verification and produce a reproducible release candidate.",
+      "depends_on": ["P11"],
+      "risk": "hard",
+      "allowed_paths": ["src/**", "tests/**", "evals/**", "scripts/**", "public/**", "supabase/**", "powersync/**", ".github/workflows/**", "docs/**", "package.json", "package-lock.json", "*.config.*"],
+      "acceptance": [
+        {"id": "P12-A1", "text": "Finance property/mutation, migration, import/export, sync fault, AI eval, authz/security, and backup/restore/rollback gates have no blocker."},
+        {"id": "P12-A2", "text": "Full automated browser/language/theme/motion/viewport/a11y matrix and physical-device PWA matrix pass with retained evidence."},
+        {"id": "P12-A3", "text": "Performance budgets pass with realistic data and no unresolved interaction/motion hotspot or memory leak."},
+        {"id": "P12-A4", "text": "Privacy copy, data controls, telemetry redaction, operational runbooks, incident response, kill switches, and support diagnostics are complete."},
+        {"id": "P12-A5", "text": "The worker checkpoint proves a reproducible release artifact, clean/explained working tree, and no open P0/P1; the mandatory fresh Sol-high phase review occurs only after checkpoint validation through the normal review transition."}
+      ],
+      "required_commands": ["npm run ci", "npm run test:all", "npm run test:mutation", "npm run eval:ai", "npm run test:security", "npm run test:performance", "npm run build"],
+      "manual_qa": ["P12-M1: Complete structured attestations for the release checklist, physical-device matrix, migration/restore drill, and privacy/security review."]
+    },
+    {
+      "id": "P13",
+      "title": "Controlled beta and release readiness",
+      "objective": "Provision approved services, reach beta readiness, run a controlled four-week evidence period, respond through tested changes, and produce the independently auditable public release candidate without deploying it prematurely.",
+      "depends_on": ["P12"],
+      "risk": "hard",
+      "human_gate": "Founder approval, billing, credentials, DNS/domain changes, legal/privacy sign-off, beta recruitment, and public deployment are required.",
+      "mandatory_human_gates": [
+        {
+          "id": "P13-BETA",
+          "kind": "external",
+          "requirement": "P13-BETA: Founder attests that the controlled beta evidence covers at least four complete weeks, includes the pre-registered tester/attrition and Momentum pressure/farming results, freezes any required reduced-scope rerun evidence, and is ready for independent release review.",
+          "minimum_duration_days": 28
+        }
+      ],
+      "allowed_paths": ["src/**", "tests/**", "evals/**", "supabase/**", "powersync/**", ".github/workflows/**", "docs/operations/**", "docs/release/**", "package.json", "package-lock.json"],
+      "acceptance": [
+        {"id": "P13-A1", "text": "Production services, domain, secrets, backups, alerts, staged rollout, rollback, status/support, and release provenance are verified."},
+        {"id": "P13-A2", "text": "Closed beta completes at least four weeks and the pre-registered >=40-tester Momentum gate retains >=16 activated and >=14 two-pulse respondents per randomized arm plus >=28 week-four testers, treats missing responses explicitly, blocks >15-point differential attrition/nonresponse, and passes pressure/farming thresholds; a breach reduces scope and reruns >=2 weeks before release."},
+        {"id": "P13-A3", "text": "Every beta fix passes its relevant phase gate and migration/recovery requirements; no production-only drift exists."},
+        {"id": "P13-A4", "text": "Public claims, 18+ age gate/terms and under-18 safe exit, privacy/terms, deletion/export, support and device policies are legally reviewed and accurate in Arabic and English; the Arabic headline passes the documented eight-user comprehension threshold."},
+        {"id": "P13-A5", "text": "The four-week beta evidence is frozen and a reproducible public release candidate is ready for the five final audits; no public deployment or founder authorization is claimed yet."},
+        {"id": "P13-A6", "text": "At least 12 testers (>=4 Arabic-first, >=4 English-first) rate signature flows; median beauty/fun <4/5 or >=20% same-flow confusion/dizziness/slowness reopens P11 and affected gates before release, with denominators/device/language evidence retained."}
+      ],
+      "required_commands": ["npm run ci", "npm run test:all", "npm run eval:ai", "npm run test:security", "npm run test:performance", "npm run build"],
+      "manual_qa": ["P13-M1: Complete beta production smoke, real account/device sync, PWA install/update, AI kill-switch, restore, and rollback drills before final audits."]
+    }
+  ]
+}
