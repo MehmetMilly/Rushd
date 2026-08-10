@@ -8,3 +8,7 @@
 /node_modules/
 /dist/
 /coverage/
+/.codex/runs/
+/playwright-report/
+/test-results/
+/artifacts/

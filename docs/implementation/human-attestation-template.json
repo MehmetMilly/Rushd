@@ -1,0 +1,27 @@
+{
+  "schema": "rushd.human-attestation.v1",
+  "run_id": "REPLACE",
+  "phase_id": "P00",
+  "gate_id": "P00-M1",
+  "gate_kind": "manual_qa",
+  "gate_request_sha256": "REPLACE_SHA256",
+  "actor": "phase_implementer",
+  "actor_task_id": "REPLACE",
+  "performed_at": "REPLACE_ISO_8601",
+  "subject_sha": null,
+  "period_started_at": null,
+  "period_ended_at": null,
+  "evidence_root": "REPLACE",
+  "evidence_hashes": {"REPLACE": "REPLACE_SHA256"},
+  "environment": {
+    "device": "REPLACE",
+    "os": "REPLACE",
+    "browser": "REPLACE",
+    "browser_version": "REPLACE",
+    "locale": "REPLACE"
+  },
+  "requirement": "REPLACE",
+  "result": "pass",
+  "evidence_paths": ["REPLACE"],
+  "limitations": []
+}

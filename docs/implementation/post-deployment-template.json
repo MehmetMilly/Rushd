@@ -1,0 +1,21 @@
+{
+  "schema": "rushd.post-deployment.v1",
+  "run_id": "REPLACE",
+  "release_sha": "REPLACE",
+  "status": "fail",
+  "launch_receipt_path": "REPLACE",
+  "deployment_id": "REPLACE",
+  "deployment_url": "REPLACE",
+  "checked_at": "REPLACE_ISO_8601",
+  "evidence_root": "REPLACE",
+  "evidence_hashes": {"REPLACE": "REPLACE_SHA256"},
+  "checks": [
+    {"id": "root", "status": "fail", "evidence": ["REPLACE"]},
+    {"id": "direct-deep-link", "status": "fail", "evidence": ["REPLACE"]},
+    {"id": "api-health", "status": "fail", "evidence": ["REPLACE"]},
+    {"id": "install-update-offline", "status": "fail", "evidence": ["REPLACE"]},
+    {"id": "rollback-ready", "status": "fail", "evidence": ["REPLACE"]}
+  ],
+  "rollback_ready": false,
+  "unexplained_changes": []
+}

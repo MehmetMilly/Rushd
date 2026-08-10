@@ -1,0 +1,26 @@
+{
+  "schema": "rushd.final-audit.v1",
+  "run_id": "REPLACE",
+  "audit_id": "finance_migration",
+  "release_sha": "REPLACE",
+  "verdict": "needs_changes",
+  "reviewer_source_diff": "clean",
+  "auditor_receipt_path": "REPLACE",
+  "evidence_root": "REPLACE",
+  "evidence_hashes": {"REPLACE": "REPLACE_SHA256"},
+  "commands": [
+    {"command": "npm run ci", "exit_code": 0, "summary": "REPLACE_SUMMARY", "log_path": "REPLACE_CI_LOG", "log_sha256": "REPLACE", "started_at": "REPLACE_ISO_8601", "finished_at": "REPLACE_ISO_8601", "cwd": "REPLACE", "runner_task_id": "REPLACE"},
+    {"command": "npm run test:property", "exit_code": 0, "summary": "REPLACE_SUMMARY", "log_path": "REPLACE_PROPERTY_LOG", "log_sha256": "REPLACE", "started_at": "REPLACE_ISO_8601", "finished_at": "REPLACE_ISO_8601", "cwd": "REPLACE", "runner_task_id": "REPLACE"},
+    {"command": "npm run test:data", "exit_code": 0, "summary": "REPLACE_SUMMARY", "log_path": "REPLACE_DATA_LOG", "log_sha256": "REPLACE", "started_at": "REPLACE_ISO_8601", "finished_at": "REPLACE_ISO_8601", "cwd": "REPLACE", "runner_task_id": "REPLACE"}
+  ],
+  "checks": [
+    {"id": "finance-formulas", "status": "fail", "evidence": ["REPLACE_FINANCE_FORMULAS_EVIDENCE"]},
+    {"id": "cycles-dates-currency", "status": "pass", "evidence": ["REPLACE_CYCLES_EVIDENCE"]},
+    {"id": "obligations-reconciliation", "status": "pass", "evidence": ["REPLACE_RECONCILIATION_EVIDENCE"]},
+    {"id": "migration-portability", "status": "pass", "evidence": ["REPLACE_MIGRATION_EVIDENCE"]},
+    {"id": "idempotency-rollback", "status": "pass", "evidence": ["REPLACE_ROLLBACK_EVIDENCE"]}
+  ],
+  "findings": [
+    {"id": "FINAL-F1", "severity": "blocking", "owner_phase": "P03", "location": "REPLACE", "evidence": ["REPLACE"], "required_change": "REPLACE"}
+  ]
+}

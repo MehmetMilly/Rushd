@@ -2,11 +2,20 @@
 
 ## Project Overview
 
-Rushd / رُشد is an Arabic-first personal finance assistant. The current app is a static single-file Vue 3 prototype in `index.html`, focused on expenses, plans, budgets, savings goals, and spending insights.
+Rushd / رُشد is a bilingual personal-finance assistant for younger people managing one dominant spending pool. The current app is a static single-file Vue 3 prototype in `index.html`. The approved destination is an offline-capable, account-synced PWA with deterministic financial logic, deeply integrated AI, and a premium Arabic/English experience.
 
 ## Source Of Truth
 
 The repository entry point is `index.html`.
+
+Product and implementation authority, in order:
+
+1. `docs/RUSHD_MASTER_PLAN_FINAL.md`
+2. `docs/implementation/phase-plan.json`
+3. `docs/RUSHD_EXECUTION_PROTOCOL.md`
+4. This file
+
+The July `docs/RUSHD_MASTER_PLAN.md` and August founder discussion/feedback files are preserved decision history. They are superseded wherever the final master plan differs.
 
 Historical migration note for this local workspace: the latest version used to update this repository originally came from:
 
@@ -49,12 +58,18 @@ Manual QA checklist lives in `docs/manual-qa.md`.
 - `scripts/smoke-check.mjs`: static repository smoke check.
 - `scripts/finance-rules.mjs`: first extracted finance-rule helpers.
 - `scripts/browser-smoke.cjs`: optional Playwright browser smoke test.
+- `docs/RUSHD_FINAL_FOUNDER_BRIEF.md`: concise approved product description.
+- `docs/RUSHD_MASTER_PLAN_FINAL.md`: canonical product and technical contract.
+- `docs/implementation/phase-plan.json`: machine-readable phases and acceptance gates.
+- `docs/RUSHD_EXECUTION_PROTOCOL.md`: manager/worker/reviewer state machine.
+- `.agents/skills/rushd-phase-orchestrator/SKILL.md`: reusable phase orchestration workflow.
+- `.agents/skills/rushd-motion-lab/SKILL.md`: Rushd-specific signature-motion prototype and verification loop.
 
 ## Coding Guidelines
 
-Keep changes conservative. Preserve the current UI and behavior before restructuring. If you refactor the single HTML file, do it in small steps with browser checks after each step.
+Keep migration changes conservative and phase-bounded. Protect the current data and characterized behavior before restructuring; do not preserve a known bug as the final product. Refactor the single HTML file only through the approved phase gates and browser/data checks.
 
-Arabic is the primary UX language. Preserve RTL layout, use `dir="ltr"` or `unicode-bidi: isolate` for numeric/currency fragments when needed, and avoid mixing English labels into Arabic views unless the app already supports that mode.
+Arabic and English are equal-quality launch languages. Preserve the current Arabic fonts subject to license verification. Preserve RTL layout, use `dir="ltr"`, `bdi`, or `unicode-bidi: isolate` for numeric/currency fragments when needed, and design English/LTR intentionally rather than as an afterthought.
 
 Financial calculations should be explicit and testable. Do not silently change budget, safe-to-spend, vault, or recurring-template behavior without documenting the reason and testing realistic edge cases.
 
@@ -68,7 +83,11 @@ Do not commit secrets, API keys, `.env` files, real financial data, personal scr
 - Do not remove export/import or reset flows without replacing them.
 - Do not claim model integration, cloud sync, authentication, or production security unless implemented.
 - Do not add heavy frameworks unless the user accepts a migration plan.
+- Do not change the locked permanent hierarchy: Home, Plan, Ask Rushd, Insights, Goals. Transactions remains a secondary full-history screen from Home.
+- Do not reward spending amount, underspending, wealth, transaction count, or app opens in Momentum.
+- Do not let AI write canonical finance data directly; it must use typed proposals and the deterministic command/action layer.
+- Do not claim PWA, sync, account, AI, security, backup, residency, or release readiness until its phase gate has passed.
 
 ## Future Agent Workflow
 
-Inspect `index.html`, run `npm test`, serve the app, perform the manual QA flow, then edit. For substantial changes, update docs and the manual QA checklist in the same branch.
+Read the final plan and exact phase record, inspect the relevant code, run the current baseline, then edit only phase-owned paths. Use the `rushd-phase-orchestrator` skill for implementation phases. Every phase requires a structured checkpoint and fresh independent review; only one write-capable agent works at a time. For substantial changes, update docs and the manual QA checklist in the same phase commit.

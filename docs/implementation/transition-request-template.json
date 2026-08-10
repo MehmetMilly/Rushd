@@ -1,0 +1,17 @@
+{
+  "schema": "rushd.state-transition.v1",
+  "event_id": "REPLACE_UNIQUE_EVENT_ID",
+  "from": "not_started",
+  "to": "worker_running",
+  "transition_kind": "start_phase",
+  "note": "REPLACE",
+  "evidence": ["REPLACE"],
+  "evidence_hashes": {"REPLACE": "REPLACE_SHA256"},
+  "changes": {
+    "current_phase": "P00",
+    "current_attempt": 1,
+    "active_worker": "REPLACE_THREAD_ID",
+    "active_worker_receipt_path": "REPLACE_CREATED_RECEIPT_PATH",
+    "base_sha": "REPLACE_HEAD_SHA"
+  }
+}

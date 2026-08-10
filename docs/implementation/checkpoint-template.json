@@ -1,0 +1,34 @@
+{
+  "schema": "rushd.phase-checkpoint.v1",
+  "run_id": "REPLACE",
+  "phase_id": "P00",
+  "attempt": 1,
+  "status": "ready_for_review",
+  "base_sha": "REPLACE",
+  "patch_sha256": "REPLACE",
+  "patch_manifest_path": "REPLACE",
+  "worker_receipt_path": "REPLACE",
+  "evidence_root": "REPLACE",
+  "evidence_hashes": {"REPLACE": "REPLACE_SHA256"},
+  "changed_files": [
+    {"path": "REPLACE", "change": "modified", "purpose": "REPLACE"}
+  ],
+  "acceptance": [
+    {"id": "P00-A1", "status": "pass", "evidence": ["REPLACE_P00_A1_EVIDENCE"]},
+    {"id": "P00-A2", "status": "pass", "evidence": ["REPLACE_P00_A2_EVIDENCE"]},
+    {"id": "P00-A3", "status": "pass", "evidence": ["REPLACE_P00_A3_EVIDENCE"]},
+    {"id": "P00-A4", "status": "pass", "evidence": ["REPLACE_P00_A4_EVIDENCE"]},
+    {"id": "P00-A5", "status": "pass", "evidence": ["REPLACE_P00_A5_EVIDENCE"]}
+  ],
+  "commands": [
+    {"command": "npm test", "exit_code": 0, "summary": "REPLACE_SUMMARY", "log_path": "REPLACE", "log_sha256": "REPLACE", "started_at": "REPLACE_ISO_8601", "finished_at": "REPLACE_ISO_8601", "cwd": "REPLACE", "runner_task_id": "REPLACE"}
+  ],
+  "manual_qa": [
+    {"requirement": "P00-M1: Complete docs/baseline/P00-manual-qa.json from the human-attestation template for the exact matrix in P0-P1-INVENTORY.md using only fake/sanitized financial data.", "status": "pass", "attestation_path": "REPLACE", "attestation_sha256": "REPLACE_SHA256"}
+  ],
+  "mandatory_human_gates": [],
+  "risks": [],
+  "deviations": [],
+  "blocking_questions": [],
+  "unrelated_changes_observed": []
+}

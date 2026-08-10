@@ -1,0 +1,16 @@
+{
+  "schema": "rushd.phase-adjudication.v1",
+  "run_id": "REPLACE",
+  "phase_id": "P00",
+  "attempts_reviewed": [1, 2, 3],
+  "verdict": "implementation_violation",
+  "reviewer_source_diff": "clean",
+  "adjudicator_receipt_path": "REPLACE",
+  "evidence_root": "REPLACE",
+  "evidence_hashes": {"REPLACE": "REPLACE_SHA256"},
+  "evidence": ["REPLACE"],
+  "findings": [
+    {"id": "P00-X1", "location": "REPLACE", "evidence": ["REPLACE"], "required_action": "REPLACE_ACTION"}
+  ],
+  "next_action": "correct"
+}

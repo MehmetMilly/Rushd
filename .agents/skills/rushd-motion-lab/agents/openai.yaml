@@ -1,0 +1,4 @@
+interface:
+  display_name: "Rushd Motion Lab"
+  short_description: "Prototype and verify Rushd signature motion"
+  default_prompt: "Use $rushd-motion-lab to prototype, measure, and verify a Rushd motion sequence."

@@ -1,0 +1,16 @@
+{
+  "schema": "rushd.publication-authority.v1",
+  "run_id": "REPLACE",
+  "release_sha": "REPLACE",
+  "status": "approved",
+  "actor": "founder",
+  "actor_task_id": "REPLACE",
+  "approved_at": "REPLACE_ISO_8601",
+  "exact_scope": "REPLACE_EXACT_DEPLOYMENT_SCOPE",
+  "attestation_path": "REPLACE",
+  "attestation_sha256": "REPLACE_SHA256",
+  "evidence_root": "REPLACE",
+  "evidence_hashes": {"REPLACE": "REPLACE_SHA256"},
+  "deployment_targets": ["REPLACE"],
+  "evidence_paths": ["REPLACE"]
+}

@@ -1,0 +1,21 @@
+{
+  "schema": "rushd.phase-commit.v1",
+  "run_id": "REPLACE",
+  "phase_id": "P00",
+  "commit_kind": "phase",
+  "attempt": 1,
+  "base_sha": "REPLACE",
+  "patch_sha256": "REPLACE",
+  "checkpoint_path": "REPLACE",
+  "checkpoint_sha256": "REPLACE",
+  "review_path": "REPLACE",
+  "review_sha256": "REPLACE",
+  "worker_receipt_path": "REPLACE",
+  "worker_receipt_sha256": "REPLACE",
+  "commit_sha": "REPLACE",
+  "committed_at": "REPLACE_ISO_8601",
+  "commit_subject": "Rushd P00: REPLACE",
+  "changed_files": ["REPLACE"],
+  "working_tree_status": "clean",
+  "unexplained_changes": []
+}

@@ -1,0 +1,18 @@
+{
+  "schema": "rushd.plan-amendment.v1",
+  "amendment_id": "REPLACE_UNIQUE_ID",
+  "from_plan_version": "2026-08-10-final",
+  "to_plan_version": "REPLACE_NEW_VERSION",
+  "requested_at": "REPLACE_ISO_8601",
+  "requested_by_task_id": "REPLACE",
+  "rationale": "REPLACE_SPECIFIC_REASON",
+  "affected_phases": ["P00"],
+  "protected_paths_to_change": ["docs/RUSHD_MASTER_PLAN_FINAL.md"],
+  "safe_work_while_waiting": "REPLACE",
+  "founder_decision": {
+    "status": "approved",
+    "actor": "founder",
+    "approved_at": "REPLACE_ISO_8601",
+    "exact_scope": "REPLACE_EXACT_SCOPE"
+  }
+}

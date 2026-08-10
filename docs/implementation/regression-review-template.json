@@ -1,0 +1,32 @@
+{
+  "schema": "rushd.regression-review.v1",
+  "run_id": "REPLACE",
+  "remediation_owner_phase": "P03",
+  "target_phase": "P04",
+  "remediation_commit_sha": "REPLACE",
+  "verdict": "needs_changes",
+  "reviewer_receipt_path": "REPLACE",
+  "reviewer_source_diff": "clean",
+  "evidence_root": "REPLACE",
+  "evidence_hashes": {"REPLACE": "REPLACE_SHA256"},
+  "commands": [
+    {"command": "npm run lint", "exit_code": 0, "summary": "REPLACE_SUMMARY", "log_path": "REPLACE_LINT_LOG", "log_sha256": "REPLACE", "started_at": "REPLACE_ISO_8601", "finished_at": "REPLACE_ISO_8601", "cwd": "REPLACE", "runner_task_id": "REPLACE"},
+    {"command": "npm run typecheck", "exit_code": 0, "summary": "REPLACE_SUMMARY", "log_path": "REPLACE_TYPECHECK_LOG", "log_sha256": "REPLACE", "started_at": "REPLACE_ISO_8601", "finished_at": "REPLACE_ISO_8601", "cwd": "REPLACE", "runner_task_id": "REPLACE"},
+    {"command": "npm test", "exit_code": 0, "summary": "REPLACE_SUMMARY", "log_path": "REPLACE_TEST_LOG", "log_sha256": "REPLACE", "started_at": "REPLACE_ISO_8601", "finished_at": "REPLACE_ISO_8601", "cwd": "REPLACE", "runner_task_id": "REPLACE"},
+    {"command": "npm run test:data", "exit_code": 0, "summary": "REPLACE_SUMMARY", "log_path": "REPLACE_DATA_LOG", "log_sha256": "REPLACE", "started_at": "REPLACE_ISO_8601", "finished_at": "REPLACE_ISO_8601", "cwd": "REPLACE", "runner_task_id": "REPLACE"},
+    {"command": "npm run test:pwa", "exit_code": 0, "summary": "REPLACE_SUMMARY", "log_path": "REPLACE_PWA_LOG", "log_sha256": "REPLACE", "started_at": "REPLACE_ISO_8601", "finished_at": "REPLACE_ISO_8601", "cwd": "REPLACE", "runner_task_id": "REPLACE"},
+    {"command": "npm run build", "exit_code": 0, "summary": "REPLACE_SUMMARY", "log_path": "REPLACE_BUILD_LOG", "log_sha256": "REPLACE", "started_at": "REPLACE_ISO_8601", "finished_at": "REPLACE_ISO_8601", "cwd": "REPLACE", "runner_task_id": "REPLACE"}
+  ],
+  "checks": [
+    {"id": "P04-A1", "status": "fail", "evidence": ["REPLACE_P04_A1_EVIDENCE"]},
+    {"id": "P04-A2", "status": "pass", "evidence": ["REPLACE_P04_A2_EVIDENCE"]},
+    {"id": "P04-A3", "status": "pass", "evidence": ["REPLACE_P04_A3_EVIDENCE"]},
+    {"id": "P04-A4", "status": "pass", "evidence": ["REPLACE_P04_A4_EVIDENCE"]},
+    {"id": "P04-A5", "status": "pass", "evidence": ["REPLACE_P04_A5_EVIDENCE"]},
+    {"id": "P04-A6", "status": "pass", "evidence": ["REPLACE_P04_A6_EVIDENCE"]},
+    {"id": "P04-A7", "status": "pass", "evidence": ["REPLACE_P04_A7_EVIDENCE"]}
+  ],
+  "findings": [
+    {"id": "P04-RF1", "severity": "blocking", "location": "REPLACE", "evidence": ["REPLACE"], "required_change": "REPLACE_ACTION"}
+  ]
+}

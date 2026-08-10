@@ -1,0 +1,21 @@
+{
+  "schema": "rushd.full-gate.v1",
+  "run_id": "REPLACE",
+  "release_sha": "REPLACE",
+  "status": "fail",
+  "runner_receipt_path": "REPLACE",
+  "evidence_root": "REPLACE",
+  "evidence_hashes": {"REPLACE": "REPLACE_SHA256"},
+  "commands": [
+    {"command": "npm run ci", "exit_code": 0, "summary": "REPLACE_SUMMARY", "log_path": "REPLACE_CI_LOG", "log_sha256": "REPLACE", "started_at": "REPLACE_ISO_8601", "finished_at": "REPLACE_ISO_8601", "cwd": "REPLACE", "runner_task_id": "REPLACE"},
+    {"command": "npm run test:all", "exit_code": 0, "summary": "REPLACE_SUMMARY", "log_path": "REPLACE_ALL_LOG", "log_sha256": "REPLACE", "started_at": "REPLACE_ISO_8601", "finished_at": "REPLACE_ISO_8601", "cwd": "REPLACE", "runner_task_id": "REPLACE"},
+    {"command": "npm run test:mutation", "exit_code": 0, "summary": "REPLACE_SUMMARY", "log_path": "REPLACE_MUTATION_LOG", "log_sha256": "REPLACE", "started_at": "REPLACE_ISO_8601", "finished_at": "REPLACE_ISO_8601", "cwd": "REPLACE", "runner_task_id": "REPLACE"},
+    {"command": "npm run eval:ai", "exit_code": 0, "summary": "REPLACE_SUMMARY", "log_path": "REPLACE_AI_LOG", "log_sha256": "REPLACE", "started_at": "REPLACE_ISO_8601", "finished_at": "REPLACE_ISO_8601", "cwd": "REPLACE", "runner_task_id": "REPLACE"},
+    {"command": "npm run test:security", "exit_code": 0, "summary": "REPLACE_SUMMARY", "log_path": "REPLACE_SECURITY_LOG", "log_sha256": "REPLACE", "started_at": "REPLACE_ISO_8601", "finished_at": "REPLACE_ISO_8601", "cwd": "REPLACE", "runner_task_id": "REPLACE"},
+    {"command": "npm run test:performance", "exit_code": 0, "summary": "REPLACE_SUMMARY", "log_path": "REPLACE_PERFORMANCE_LOG", "log_sha256": "REPLACE", "started_at": "REPLACE_ISO_8601", "finished_at": "REPLACE_ISO_8601", "cwd": "REPLACE", "runner_task_id": "REPLACE"},
+    {"command": "npm run build", "exit_code": 0, "summary": "REPLACE_SUMMARY", "log_path": "REPLACE_BUILD_LOG", "log_sha256": "REPLACE", "started_at": "REPLACE_ISO_8601", "finished_at": "REPLACE_ISO_8601", "cwd": "REPLACE", "runner_task_id": "REPLACE"}
+  ],
+  "evidence_paths": ["REPLACE"],
+  "working_tree_status": "clean",
+  "unexplained_changes": []
+}
