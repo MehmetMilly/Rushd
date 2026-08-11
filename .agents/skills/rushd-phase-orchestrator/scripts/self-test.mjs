@@ -10,6 +10,7 @@ import {
   canonicalCommitSandboxApprovalPath,
   canonicalCommitSandboxPrompt,
   commitSandboxApprovalMismatch,
+  commitSandboxBlockerParentMismatch,
   commitSandboxCompletionMismatch,
   commitSandboxContinuationMismatch,
   isStrictlyAfterIso,
@@ -135,6 +136,8 @@ try {
   if (!commitSandboxApprovalMismatch(runId, 'copied-approval.json', approval, approvalManifest, seal)) throw new Error('Copied enabling approval path was accepted');
   if (!commitSandboxApprovalMismatch(runId, canonicalApprovalPath, { ...approval, candidate_manifest_path: 'other.json' }, approvalManifest, seal)) throw new Error('Different valid enabling approval was accepted');
   if (!commitSandboxApprovalMismatch(runId, canonicalApprovalPath, approval, { ...approvalManifest, patch_sha256: 'f'.repeat(64) }, seal)) throw new Error('Substituted enabling approval manifest was accepted');
+  if (commitSandboxBlockerParentMismatch(head, head) !== null || !commitSandboxBlockerParentMismatch('f'.repeat(40), head)) throw new Error('Blocker-era authority parent binding is invalid');
+  console.log('PASS blocker binds to pre-amendment authority parent');
   console.log('PASS exact reviewed-phase commit sandbox capability');
 
   const priorRemediation = {

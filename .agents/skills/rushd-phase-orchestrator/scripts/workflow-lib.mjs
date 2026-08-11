@@ -246,6 +246,9 @@ export const isStrictlyAfterIso = (later, earlier) =>
 export const sameInstant = (left, right) =>
   Number.isFinite(Date.parse(left)) && Number.isFinite(Date.parse(right)) && Date.parse(left) === Date.parse(right);
 
+export const commitSandboxBlockerParentMismatch = (reportedParent, enablingCommitParent) =>
+  reportedParent === enablingCommitParent ? null : 'commit sandbox blocker parent is not the authority tip that existed before the enabling amendment';
+
 export const commitSandboxApprovalMismatch = (runId, approvalPath, approval, approvalManifest, seal) => {
   const canonicalPath = canonicalCommitSandboxApprovalPath(runId);
   if (approvalPath !== canonicalPath || seal?.rule?.approval !== canonicalPath) return 'commit sandbox enabling approval path is not canonical';

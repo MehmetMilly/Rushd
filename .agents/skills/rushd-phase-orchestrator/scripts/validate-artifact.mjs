@@ -16,6 +16,7 @@ import {
   assertJournalChain,
   canonicalCommitSandboxPrompt,
   commitSandboxApprovalMismatch,
+  commitSandboxBlockerParentMismatch,
   commitSandboxCompletionMismatch,
   commitSandboxContinuationMismatch,
   git,
@@ -223,6 +224,7 @@ const sealedAuthorityRule = (amendmentId, runId) => ({
   'RUSHD-20260811-PHASE-COMMIT-SANDBOX-CONTINUATION': {
     path: 'docs/implementation/PLAN_AMENDMENT_2026-08-11_PHASE_COMMIT_SANDBOX_CONTINUATION.json',
     approval: `.codex/runs/${runId}/controller/authority-amendment-phase-commit-sandbox-approval.json`,
+    correctionApproval: `.codex/runs/${runId}/controller/authority-amendment-phase-commit-sandbox-correction-01-approval.json`,
     paths: [
       '.agents/skills/rushd-phase-orchestrator/SKILL.md',
       '.agents/skills/rushd-phase-orchestrator/scripts/self-test.mjs',
@@ -243,7 +245,8 @@ const requireSealedAuthorityCommit = (commit, runId, planVersion) => {
   if (amendmentPaths.length !== 1) throw new Error(`Authority overlay commit requires exactly one explicit plan amendment record: ${commit}`);
   const amendment = JSON.parse(git('show', `${commit}:${amendmentPaths[0]}`));
   const rule = sealedAuthorityRule(amendment.amendment_id, runId);
-  const approval = rule ? validateNested(rule.approval, 'rushd.authority-amendment-approval.v1') : null;
+  const approvalPath = amendment.correction_revision === 1 ? rule?.correctionApproval : rule?.approval;
+  const approval = approvalPath ? validateNested(approvalPath, 'rushd.authority-amendment-approval.v1') : null;
   const approvedManifest = approval ? validateNested(approval.candidate_manifest_path, 'rushd.patch-manifest.v1') : null;
   const parentPlan = JSON.parse(git('show', `${parents[1]}:docs/implementation/phase-plan.json`));
   const amendedPlan = JSON.parse(git('show', `${commit}:docs/implementation/phase-plan.json`));
@@ -966,7 +969,9 @@ switch (value.schema) {
         const completed = loadJson(blocked.turn_completed_path);
         const messages = (completed.params?.turn?.items ?? []).filter((item) => item?.type === 'agentMessage').map((item) => item.text).filter((text) => typeof text === 'string');
         const reports = messages.flatMap((text) => { try { return [JSON.parse(text)]; } catch { return []; } });
-        const exactBlocker = reports.some((report) => report.run_id === value.run_id && report.phase_id === value.phase_id && report.attempt === value.attempt && report.commit_sha === null && report.parent_sha === value.authority_parent_sha && report.commit_subject === value.commit_subject && report.reviewed_base_sha === value.source_sha && report.patch_sha256 === value.patch_sha256 && report.manifest_path === value.patch_manifest_path && report.checkpoint_path === value.checkpoint_path && report.review_path === value.review_path && sameJson(report.changed_files, value.changed_files) && /\.git/i.test(String(report.working_tree_status)) && /read-only|read only/i.test(String(report.working_tree_status)) && /index remains clean/i.test(String(report.working_tree_status)) && Array.isArray(report.unexplained_changes) && report.unexplained_changes.length === 0 && report.committed_at === null);
+        const enablingParents = git('rev-list', '--parents', '-n', '1', value.enabling_authority_commit_sha).trim().split(/\s+/);
+        if (enablingParents.length !== 2) throw new Error('enabling authority commit is not single-parented');
+        const exactBlocker = reports.some((report) => report.run_id === value.run_id && report.phase_id === value.phase_id && report.attempt === value.attempt && report.commit_sha === null && commitSandboxBlockerParentMismatch(report.parent_sha, enablingParents[1]) === null && report.commit_subject === value.commit_subject && report.reviewed_base_sha === value.source_sha && report.patch_sha256 === value.patch_sha256 && report.manifest_path === value.patch_manifest_path && report.checkpoint_path === value.checkpoint_path && report.review_path === value.review_path && sameJson(report.changed_files, value.changed_files) && /\.git/i.test(String(report.working_tree_status)) && /read-only|read only/i.test(String(report.working_tree_status)) && /index remains clean/i.test(String(report.working_tree_status)) && Array.isArray(report.unexplained_changes) && report.unexplained_changes.length === 0 && report.committed_at === null);
         if (blockedRequest.params?.sandboxPolicy?.type !== 'workspaceWrite' || !exactBlocker) fail('Commit sandbox authorization lacks the exact preserved workspace-write Git-metadata blocker');
       } catch (error) { fail(`Commit sandbox blocker evidence is invalid: ${error.message}`); }
     }
@@ -980,7 +985,7 @@ switch (value.schema) {
         const changed = git('diff-tree', '--no-commit-id', '--name-only', '-r', cursor).split('\n').filter(Boolean);
         const amendmentPath = changed.find((path) => /^docs\/implementation\/PLAN_AMENDMENT_[A-Z0-9_-]+\.json$/.test(path));
         const amendment = amendmentPath ? JSON.parse(git('show', `${cursor}:${amendmentPath}`)) : null;
-        if (amendment?.amendment_id === 'RUSHD-20260811-PHASE-COMMIT-SANDBOX-CONTINUATION') {
+        if (amendment?.amendment_id === 'RUSHD-20260811-PHASE-COMMIT-SANDBOX-CONTINUATION' && amendment.correction_revision === undefined) {
           if (cursor !== value.enabling_authority_commit_sha) throw new Error('enabling authority commit identity changed');
           foundEnablingCommit = true;
           enablingSeal = seal;
@@ -1011,6 +1016,7 @@ switch (value.schema) {
     for (const phaseId of value.affected_phases ?? []) if (!phaseFor(plan, phaseId)) fail(`Unknown affected phase ${phaseId}`);
     for (const path of value.protected_paths_to_change ?? []) if (!matchesAny(path, plan.protected_paths)) fail(`Amendment path is not protected: ${path}`);
     if (value.founder_decision?.status !== 'approved' || value.founder_decision?.actor !== 'founder' || (!isIsoUtc(value.founder_decision?.approved_at) && !String(value.founder_decision?.approved_at).startsWith('REPLACE')) || typeof value.founder_decision?.exact_scope !== 'string' || value.founder_decision.exact_scope.length < 8) fail('Plan amendment requires exact founder approval');
+    if (value.correction_revision !== undefined && value.correction_revision !== 1) fail('Plan amendment correction revision is invalid');
     break;
   }
 

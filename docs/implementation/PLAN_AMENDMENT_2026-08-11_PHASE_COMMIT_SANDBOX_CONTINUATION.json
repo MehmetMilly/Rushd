@@ -3,9 +3,10 @@
   "amendment_id": "RUSHD-20260811-PHASE-COMMIT-SANDBOX-CONTINUATION",
   "from_plan_version": "2026-08-10-final",
   "to_plan_version": "2026-08-10-final",
+  "correction_revision": 1,
   "requested_at": "2026-08-11T17:05:00.000Z",
   "requested_by_task_id": "019fe804-05b8-75a0-bc27-c75ff184967d",
-  "rationale": "Repair the proven phase-commit deadlock in which the same PASS-reviewed P00 task could not stage its exact reviewed paths because the mandatory App Server workspace-write sandbox protects Git metadata. Permit only a receipt-bound same-task commit continuation with the installed runtime's dangerFullAccess policy, while preserving the reviewed patch, task identity, attempt, gates, authority chain, and manager non-implementation boundary.",
+  "rationale": "Repair the proven phase-commit deadlock in which the same PASS-reviewed P00 task could not stage its exact reviewed paths because the mandatory App Server workspace-write sandbox protects Git metadata. Correction revision 1 distinguishes the blocker-era authority tip (the original enabling amendment's parent) from the later sealed authorization parent, which is required because the amendment itself necessarily lands after the preserved blocker. Permit only a receipt-bound same-task commit continuation with the installed runtime's dangerFullAccess policy, while preserving the reviewed patch, task identity, attempt, gates, authority chain, and manager non-implementation boundary.",
   "affected_phases": [
     "P00",
     "P01",

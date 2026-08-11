@@ -352,7 +352,7 @@ try {
   const recoveredState = JSON.parse(readFileSync(resolve(testRoot, statePath), 'utf8'));
   if (recoveredState.status !== 'worker_running' || recoveredState.state_revision !== 1 || recoveredState.current_attempt !== 1 || recoveredState.active_worker !== 'thread-p00' || recoveredState.active_worker_receipt_path !== followup.createdPath || recoveredState.base_sha !== currentBase) throw new Error('Worker-turn recovery weakened or changed phase identity');
   console.log('PASS journaled same-thread/same-phase/same-attempt worker-turn recovery');
-  console.log('PASS preserved pre-amendment worker patch across sealed disjoint authority commit');
+  console.log('PASS preserved pre-amendment worker patch across sealed disjoint authority commit and correction tip');
 
   const plan = JSON.parse(readFileSync(resolve(testRoot, 'docs/implementation/phase-plan.json'), 'utf8'));
   const exactRequest = plan.phases.find((phase) => phase.id === 'P00').manual_qa[0];

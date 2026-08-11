@@ -315,6 +315,10 @@ authorization identity field. The authorization must be issued strictly after bo
 blocker and PASS-review lifecycles complete, and the elevated turn must start strictly after
 authorization.
 The sealed parent chain must contain this exact independently approved enabling amendment.
+If a separately reviewed correction revision sits above that enabling commit, the preserved
+workspaceWrite blocker remains bound to the enabling commit's single parent: the authority
+tip that actually existed when the blocker completed. The live authorization parent remains
+the latest sealed correction tip. Conflating those two parents invalidates recovery.
 Before the phase commit it must equal live HEAD; afterward it must be the actual parent of
 the exact authorized subject/product commit. `rushd.phase-commit.v1` cross-links the
 authorization path/hash, parent, subject, patch, and changed files. It also requires the

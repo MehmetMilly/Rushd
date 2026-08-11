@@ -74,6 +74,8 @@ correction, commit, escalation, or final-audit prompt.
     completed elevated-turn receipt and exact clean commit report to the actual phase commit
     parent, subject, manifest, changed files, and actual Git committer time, strictly between
     the elevated turn's creation and completion.
+    A preserved blocker names the parent of the original enabling amendment, while the
+    authorization names the latest independently sealed correction tip; validate both.
 - **Advance:** record the commit and immediately start the next fresh phase task.
 - **Escalate:** after two failed correction cycles, use one Sol-xhigh adjudicator.
 - **Remediate committed work:** seal the interrupted patch, use a clean remediation
