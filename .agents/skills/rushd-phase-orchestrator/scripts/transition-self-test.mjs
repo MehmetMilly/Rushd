@@ -4,7 +4,8 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { sha256Bytes, sha256File } from './workflow-lib.mjs';
+import { pathToFileURL } from 'node:url';
+import { sameJson, sha256Bytes, sha256File } from './workflow-lib.mjs';
 
 const sourceRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim();
 const validator = resolve(import.meta.dirname, 'validate-artifact.mjs');
@@ -19,6 +20,13 @@ const writeJson = (path, value) => {
 };
 const git = (...args) => execFileSync('git', args, { cwd: testRoot, encoding: 'utf8' }).trim();
 const node = (args) => spawnSync(process.execPath, args, { cwd: testRoot, encoding: 'utf8' });
+const overlayRange = (baseSha, commitSha) => JSON.parse(execFileSync(process.execPath, [
+  '--input-type=module',
+  '--eval',
+  `import { phaseCommitOverlayRange } from ${JSON.stringify(pathToFileURL(resolve(sourceRoot, '.agents/skills/rushd-phase-orchestrator/scripts/workflow-lib.mjs')).href)}; console.log(JSON.stringify(phaseCommitOverlayRange(process.argv[1], process.argv[2])));`,
+  baseSha,
+  commitSha
+], { cwd: testRoot, encoding: 'utf8' }));
 const requireSuccess = (label, result) => {
   if (result.status !== 0) throw new Error(`${label} failed:\n${result.stdout}\n${result.stderr}`);
 };
@@ -27,6 +35,16 @@ const expectRejected = (label, result, pattern) => {
   const output = `${result.stdout}\n${result.stderr}`;
   if (pattern && !pattern.test(output)) throw new Error(`${label}: wrong rejection:\n${output}`);
   console.log(`PASS reject ${label}`);
+};
+const expectThrown = (label, action, pattern) => {
+  try {
+    action();
+  } catch (error) {
+    if (pattern && !pattern.test(error.message)) throw new Error(`${label}: wrong rejection: ${error.message}`);
+    console.log(`PASS reject ${label}`);
+    return;
+  }
+  throw new Error(`${label}: unexpectedly accepted`);
 };
 let candidateRoot = null;
 
@@ -564,6 +582,76 @@ try {
   const externallyResumed = JSON.parse(readFileSync(resolve(testRoot, statePath), 'utf8'));
   if (externallyResumed.status !== 'worker_running' || externallyResumed.state_revision !== 5 || externallyResumed.current_attempt !== 1 || externallyResumed.active_worker !== 'thread-p00' || externallyResumed.active_worker_receipt_path !== externalFollowup.createdPath || externallyResumed.base_sha !== currentBase) throw new Error('External continuation weakened phase identity or state');
   console.log('PASS journaled founder-attested external worker continuation with sealed authority chain');
+
+  git('checkout', '--quiet', '--detach', externalAuthoritySha);
+  const protocolPath = resolve(testRoot, 'docs/RUSHD_EXECUTION_PROTOCOL.md');
+  writeFileSync(protocolPath, `${readFileSync(protocolPath, 'utf8')}\nunsealed synthetic authority overlay\n`);
+  git('add', 'docs/RUSHD_EXECUTION_PROTOCOL.md');
+  git('commit', '--quiet', '-m', 'Rushd authority: unsealed synthetic overlay');
+  expectRejected('unsealed authority overlay before phase commit', node([validator, statePath]), /Later workflow authority/);
+
+  git('checkout', '--quiet', '--detach', externalAuthoritySha);
+  git('add', phasePatchPath);
+  git('commit', '--quiet', '-m', 'Rushd P00: synthetic reviewed phase');
+  const validPhaseCommitSha = git('rev-parse', 'HEAD');
+  const validPhaseRange = overlayRange(currentBase, validPhaseCommitSha);
+  if (validPhaseRange.parent_sha !== externalAuthoritySha || !validPhaseRange.authority_manifest || !sameJson(validPhaseRange.product_manifest, manifest)) throw new Error('Valid phase commit did not preserve the exact reviewed product manifest above the authority overlay');
+  console.log('PASS phase commit above exact sealed authority overlay');
+
+  git('checkout', '--quiet', '--detach', externalAuthoritySha);
+  writeFileSync(resolve(testRoot, 'rogue-overlay.txt'), 'unreviewed product overlay\n');
+  git('add', 'rogue-overlay.txt');
+  git('commit', '--quiet', '-m', 'synthetic non-authority overlay');
+  writeFileSync(resolve(testRoot, phasePatchPath), 'preserved pre-amendment phase patch\n');
+  git('add', phasePatchPath);
+  git('commit', '--quiet', '-m', 'Rushd P00: synthetic phase after rogue overlay');
+  const rogueOverlayPhaseSha = git('rev-parse', 'HEAD');
+  expectThrown('non-authority parent overlay', () => overlayRange(currentBase, rogueOverlayPhaseSha), /non-authority commit/);
+
+  git('checkout', '--quiet', '--detach', externalAuthoritySha);
+  writeFileSync(resolve(testRoot, 'reverted-product.txt'), 'hidden product ancestry\n');
+  git('add', 'reverted-product.txt');
+  git('commit', '--quiet', '-m', 'synthetic hidden product commit');
+  rmSync(resolve(testRoot, 'reverted-product.txt'));
+  git('add', '-u', 'reverted-product.txt');
+  git('commit', '--quiet', '-m', 'synthetic hidden product revert');
+  writeFileSync(resolve(testRoot, phasePatchPath), 'preserved pre-amendment phase patch\n');
+  git('add', phasePatchPath);
+  git('commit', '--quiet', '-m', 'Rushd P00: synthetic phase after reverted product ancestry');
+  const revertedProductPhaseSha = git('rev-parse', 'HEAD');
+  expectThrown('reverted non-authority ancestry', () => overlayRange(currentBase, revertedProductPhaseSha), /non-authority commit/);
+
+  git('checkout', '--quiet', '-b', 'synthetic-net-zero-overlay', externalAuthoritySha);
+  writeFileSync(resolve(testRoot, 'merged-product.txt'), 'hidden merged product ancestry\n');
+  git('add', 'merged-product.txt');
+  git('commit', '--quiet', '-m', 'synthetic merged product commit');
+  rmSync(resolve(testRoot, 'merged-product.txt'));
+  git('add', '-u', 'merged-product.txt');
+  git('commit', '--quiet', '-m', 'synthetic merged product revert');
+  git('checkout', '--quiet', '--detach', externalAuthoritySha);
+  git('merge', '--quiet', '--no-ff', 'synthetic-net-zero-overlay', '-m', 'synthetic net-zero overlay merge');
+  writeFileSync(resolve(testRoot, phasePatchPath), 'preserved pre-amendment phase patch\n');
+  git('add', phasePatchPath);
+  git('commit', '--quiet', '-m', 'Rushd P00: synthetic phase after net-zero merge ancestry');
+  const netZeroMergePhaseSha = git('rev-parse', 'HEAD');
+  expectThrown('net-zero merge ancestry', () => overlayRange(currentBase, netZeroMergePhaseSha), /contiguous single-parent chain/);
+
+  git('checkout', '--quiet', '--detach', externalAuthoritySha);
+  writeFileSync(protocolPath, `${readFileSync(protocolPath, 'utf8')}\nphase overlap synthetic change\n`);
+  git('add', 'docs/RUSHD_EXECUTION_PROTOCOL.md');
+  git('commit', '--quiet', '-m', 'Rushd P00: synthetic authority overlap');
+  const overlappingPhaseSha = git('rev-parse', 'HEAD');
+  expectThrown('phase commit authority overlap', () => overlayRange(currentBase, overlappingPhaseSha), /overlaps the sealed authority overlay/);
+
+  git('checkout', '--quiet', '--detach', externalAuthoritySha);
+  writeFileSync(resolve(testRoot, phasePatchPath), 'preserved pre-amendment phase patch\n');
+  writeFileSync(resolve(testRoot, 'extra-product.txt'), 'unexpected extra product byte\n');
+  git('add', phasePatchPath, 'extra-product.txt');
+  git('commit', '--quiet', '-m', 'Rushd P00: synthetic extra product');
+  const extraProductRange = overlayRange(currentBase, git('rev-parse', 'HEAD'));
+  if (extraProductRange.product_manifest.patch_sha256 === manifest.patch_sha256) throw new Error('Extra product byte did not change the reviewed phase manifest hash');
+  console.log('PASS reject phase commit extra product byte by reviewed manifest hash');
+  git('checkout', '--quiet', '--detach', validPhaseCommitSha);
 
   const journalPath = resolve(testRoot, externallyResumed.transition_journal_path);
   const events = readFileSync(journalPath, 'utf8').trim().split('\n').map((line) => JSON.parse(line));

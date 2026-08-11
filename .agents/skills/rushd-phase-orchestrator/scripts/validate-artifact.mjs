@@ -26,6 +26,7 @@ import {
   loadJson,
   manifestForCommitRange,
   matchesAny,
+  phaseCommitOverlayRange,
   phaseFor,
   readPlan,
   sameJson,
@@ -168,6 +169,70 @@ const validateArtifactRecord = (record, schema, label, related = null) => {
   }
   requireArtifactHash(record.artifact_path, record.artifact_sha256, label);
   return validateNested(record.artifact_path, schema, related, true);
+};
+const sealedAuthorityRule = (amendmentId, runId) => ({
+  'RUSHD-20260811-WORKER-TURN-RECOVERY': {
+    path: 'docs/implementation/PLAN_AMENDMENT_2026-08-11_WORKER_TURN_RECOVERY.json',
+    approval: `.codex/runs/${runId}/controller/authority-amendment-approval.json`,
+    paths: [
+      '.agents/skills/rushd-phase-orchestrator/SKILL.md',
+      '.agents/skills/rushd-phase-orchestrator/scripts/transition-self-test.mjs',
+      '.agents/skills/rushd-phase-orchestrator/scripts/transition-state.mjs',
+      '.agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs',
+      '.agents/skills/rushd-phase-orchestrator/scripts/workflow-lib.mjs',
+      'docs/RUSHD_EXECUTION_PROTOCOL.md',
+      'docs/implementation/PLAN_AMENDMENT_2026-08-11_WORKER_TURN_RECOVERY.json',
+      'docs/implementation/phase-plan.json'
+    ],
+    planChange: 'protect-amendments'
+  },
+  'RUSHD-20260811-EXTERNAL-WORKER-CONTINUATION': {
+    path: 'docs/implementation/PLAN_AMENDMENT_2026-08-11_EXTERNAL_WORKER_CONTINUATION.json',
+    approval: `.codex/runs/${runId}/controller/authority-amendment-external-continuation-approval.json`,
+    paths: [
+      '.agents/skills/rushd-phase-orchestrator/SKILL.md',
+      '.agents/skills/rushd-phase-orchestrator/scripts/transition-self-test.mjs',
+      '.agents/skills/rushd-phase-orchestrator/scripts/transition-state.mjs',
+      '.agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs',
+      'docs/RUSHD_EXECUTION_PROTOCOL.md',
+      'docs/implementation/PLAN_AMENDMENT_2026-08-11_EXTERNAL_WORKER_CONTINUATION.json'
+    ],
+    planChange: 'none'
+  },
+  'RUSHD-20260811-SEALED-AUTHORITY-PHASE-COMMIT': {
+    path: 'docs/implementation/PLAN_AMENDMENT_2026-08-11_SEALED_AUTHORITY_PHASE_COMMIT.json',
+    approval: `.codex/runs/${runId}/controller/authority-amendment-sealed-phase-commit-approval.json`,
+    paths: [
+      '.agents/skills/rushd-phase-orchestrator/SKILL.md',
+      '.agents/skills/rushd-phase-orchestrator/scripts/transition-self-test.mjs',
+      '.agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs',
+      '.agents/skills/rushd-phase-orchestrator/scripts/workflow-lib.mjs',
+      'docs/RUSHD_EXECUTION_PROTOCOL.md',
+      'docs/implementation/PLAN_AMENDMENT_2026-08-11_SEALED_AUTHORITY_PHASE_COMMIT.json'
+    ],
+    planChange: 'none'
+  }
+}[amendmentId]);
+const requireSealedAuthorityCommit = (commit, runId, planVersion) => {
+  const parents = git('rev-list', '--parents', '-n', '1', commit).trim().split(/\s+/);
+  const changed = git('diff-tree', '--no-commit-id', '--name-only', '-r', commit).split('\n').filter(Boolean);
+  if (parents.length !== 2 || changed.length === 0 || changed.some((path) => !matchesAny(path, AUTHORITY_PATHS))) throw new Error(`Authority overlay commit must be single-parented, nonempty, and authority-only: ${commit}`);
+  const amendmentPaths = changed.filter((path) => /^docs\/implementation\/PLAN_AMENDMENT_[A-Z0-9_-]+\.json$/.test(path));
+  if (amendmentPaths.length !== 1) throw new Error(`Authority overlay commit requires exactly one explicit plan amendment record: ${commit}`);
+  const amendment = JSON.parse(git('show', `${commit}:${amendmentPaths[0]}`));
+  const rule = sealedAuthorityRule(amendment.amendment_id, runId);
+  const approval = rule ? validateNested(rule.approval, 'rushd.authority-amendment-approval.v1') : null;
+  const approvedManifest = approval ? validateNested(approval.candidate_manifest_path, 'rushd.patch-manifest.v1') : null;
+  const parentPlan = JSON.parse(git('show', `${parents[1]}:docs/implementation/phase-plan.json`));
+  const amendedPlan = JSON.parse(git('show', `${commit}:docs/implementation/phase-plan.json`));
+  const expectedPlan = structuredClone(parentPlan);
+  if (rule?.planChange === 'protect-amendments') {
+    const index = expectedPlan.protected_paths.indexOf('docs/implementation/phase-plan.json');
+    expectedPlan.protected_paths.splice(index + 1, 0, 'docs/implementation/PLAN_AMENDMENT_*.json');
+  }
+  const committedManifest = manifestForCommitRange(parents[1], commit);
+  const subject = git('show', '-s', '--format=%s', commit).trim();
+  if (!rule || amendmentPaths[0] !== rule.path || amendment.schema !== 'rushd.plan-amendment.v1' || amendment.founder_decision?.status !== 'approved' || amendment.founder_decision?.actor !== 'founder' || !isIsoUtc(amendment.founder_decision?.approved_at) || amendment.from_plan_version !== planVersion || amendment.to_plan_version !== planVersion || !sameJson([...changed].sort(), [...rule.paths].sort()) || !sameJson([...amendment.protected_paths_to_change].sort(), [...rule.paths].sort()) || !sameJson(amendedPlan, expectedPlan) || !subject.startsWith('Rushd authority: ') || approval?.run_id !== runId || approval?.amendment_id !== amendment.amendment_id || !sameJson(committedManifest, approvedManifest)) throw new Error(`Authority overlay commit is invalid, unreviewed, or differs from the exact approved candidate: ${commit}`);
 };
 
 switch (value.schema) {
@@ -675,20 +740,18 @@ switch (value.schema) {
     const expectedWorkerRole = value.commit_kind === 'remediation' ? 'remediation_worker' : 'phase_worker';
     if (!['phase', 'remediation'].includes(value.commit_kind)) fail('Phase commit commit_kind is invalid');
     if (receipt && (receipt.role !== expectedWorkerRole || receipt.run_id !== value.run_id || receipt.phase_id !== value.phase_id || receipt.attempt !== value.attempt || receipt.source_sha !== value.base_sha)) fail('Phase commit worker receipt mismatch');
-    let parent = null;
+    let commitRange = null;
     try {
-      const parents = git('rev-list', '--parents', '-n', '1', value.commit_sha).trim().split(/\s+/);
-      if (parents.length !== 2) throw new Error('not a single-parent commit');
-      parent = parents[1];
-    } catch { fail('Phase commit must have exactly one parent'); }
-    if (parent !== value.base_sha) fail('Phase commit parent must equal reviewed base SHA');
+      commitRange = phaseCommitOverlayRange(value.base_sha, value.commit_sha);
+      for (const authorityCommit of commitRange.authority_commits) requireSealedAuthorityCommit(authorityCommit, value.run_id, plan.plan_version);
+    } catch (error) { fail(`Phase commit parent/authority overlay is invalid: ${error.message}`); }
     if (!isAncestor(value.base_sha, value.commit_sha)) fail('Phase commit is not descended from base SHA');
     const expectedSubject = `Rushd ${value.phase_id}: `;
     let actualSubject = '';
     try { actualSubject = git('show', '-s', '--format=%s', value.commit_sha).trim(); } catch { /* already failed */ }
     if (!value.commit_subject.startsWith(expectedSubject) || actualSubject !== value.commit_subject) fail('Phase commit subject is invalid');
     try {
-      const manifest = manifestForCommitRange(value.base_sha, value.commit_sha);
+      const manifest = commitRange?.product_manifest ?? manifestForCommitRange(value.base_sha, value.commit_sha);
       if (manifest.patch_sha256 !== value.patch_sha256) fail('Committed manifest hash does not match reviewed patch');
       if (!sameJson(manifest.files.map((file) => file.path), value.changed_files)) fail('Phase commit changed_files do not match committed tree');
     } catch (error) { fail(`Could not verify committed manifest: ${error.message}`); }
@@ -875,6 +938,19 @@ switch (value.schema) {
                 '.agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs',
                 'docs/RUSHD_EXECUTION_PROTOCOL.md',
                 'docs/implementation/PLAN_AMENDMENT_2026-08-11_EXTERNAL_WORKER_CONTINUATION.json'
+              ],
+              planChange: 'none'
+            },
+            'RUSHD-20260811-SEALED-AUTHORITY-PHASE-COMMIT': {
+              path: 'docs/implementation/PLAN_AMENDMENT_2026-08-11_SEALED_AUTHORITY_PHASE_COMMIT.json',
+              approval: `.codex/runs/${value.run_id}/controller/authority-amendment-sealed-phase-commit-approval.json`,
+              paths: [
+                '.agents/skills/rushd-phase-orchestrator/SKILL.md',
+                '.agents/skills/rushd-phase-orchestrator/scripts/transition-self-test.mjs',
+                '.agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs',
+                '.agents/skills/rushd-phase-orchestrator/scripts/workflow-lib.mjs',
+                'docs/RUSHD_EXECUTION_PROTOCOL.md',
+                'docs/implementation/PLAN_AMENDMENT_2026-08-11_SEALED_AUTHORITY_PHASE_COMMIT.json'
               ],
               planChange: 'none'
             }

@@ -1,0 +1,40 @@
+{
+  "schema": "rushd.plan-amendment.v1",
+  "amendment_id": "RUSHD-20260811-SEALED-AUTHORITY-PHASE-COMMIT",
+  "from_plan_version": "2026-08-10-final",
+  "to_plan_version": "2026-08-10-final",
+  "requested_at": "2026-08-11T15:35:00.000Z",
+  "requested_by_task_id": "019fe804-05b8-75a0-bc27-c75ff184967d",
+  "rationale": "Repair the proven P00 commit deadlock created by two required, independently reviewed authority-only commits that were sealed after the unchanged P00 reviewed base. Preserve those authority commits while allowing the phase worker to make one additive product commit whose parent-to-child manifest remains byte-identical to the approved checkpoint patch.",
+  "affected_phases": [
+    "P00",
+    "P01",
+    "P02",
+    "P03",
+    "P04",
+    "P05",
+    "P06",
+    "P07",
+    "P08",
+    "P09",
+    "P10",
+    "P11",
+    "P12",
+    "P13"
+  ],
+  "protected_paths_to_change": [
+    ".agents/skills/rushd-phase-orchestrator/SKILL.md",
+    ".agents/skills/rushd-phase-orchestrator/scripts/transition-self-test.mjs",
+    ".agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs",
+    ".agents/skills/rushd-phase-orchestrator/scripts/workflow-lib.mjs",
+    "docs/RUSHD_EXECUTION_PROTOCOL.md",
+    "docs/implementation/PLAN_AMENDMENT_2026-08-11_SEALED_AUTHORITY_PHASE_COMMIT.json"
+  ],
+  "safe_work_while_waiting": "Preserve the P00 attempt-2 patch, PASS review, checkpoint, receipts, and revision-11 state; do not create another product writer, alter the phase attempt, or commit P00 until this exact workflow-only amendment is independently reviewed and committed.",
+  "founder_decision": {
+    "status": "approved",
+    "actor": "founder",
+    "approved_at": "2026-08-11T15:35:00.000Z",
+    "exact_scope": "Under the founder's standing instruction to make the approved workflow continue without routine permission requests, permit only the workflow authority needed to commit an unchanged reviewed phase patch atop the exact sealed authority-only chain. Preserve phase identity, attempt, base, patch hash, acceptance criteria, review, human gates, one-writer rule, and every immutable artifact; reject unsealed, non-authority, overlapping, or substituted overlays."
+  }
+}

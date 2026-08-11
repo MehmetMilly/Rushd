@@ -441,9 +441,13 @@ The manager then sends the phase task a commit instruction. The phase task must:
 4. Return the commit SHA and a clean/unexplained-change report.
 
 The manager persists and validates `rushd.phase-commit.v1`. Validation requires a real
-single-parent Git commit whose parent is the reviewed base, canonical commit-range manifest
-equals the checkpoint patch hash/files, subject is `Rushd Pxx: ...`, checkpoint/review/
-worker-receipt hashes match, and no unexplained tree change remains. State records the
+single-parent Git commit whose parent is either the reviewed base or the exact tip of a
+sealed, authority-only, independently approved amendment chain descended from that base.
+When that chain exists, validation subtracts its disjoint authority manifest and requires
+the parent-to-phase-commit product manifest to equal the checkpoint patch hash/files
+byte-for-byte; any non-authority overlay, unsealed amendment, overlap, or extra product byte
+is rejected. The subject is `Rushd Pxx: ...`, checkpoint/review/worker-receipt hashes match,
+and no unexplained tree change remains. State records the
 artifact path/hash with `commit_sha`, `patch_sha256`, `attempt`, `committed_at`, and
 `purpose`; the transition can append exactly one current-phase entry. It archives the
 phase task and immediately starts the next phase. After P13 and after any audit remediation,

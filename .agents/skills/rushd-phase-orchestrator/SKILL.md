@@ -57,9 +57,11 @@ correction, commit, escalation, or final-audit prompt.
   its unique candidate manifest and completed reviewer receipt in the canonical
   `rushd.authority-amendment-approval.v1` record, and prove the committed manifest is
   byte-exactly the approved manifest. Path-set equality alone is never approval.
-- **Commit a phase:** only after PASS; persist `rushd.phase-commit.v1`, verify its real Git
-  parent/manifest and exact checkpoint/review/receipt hashes, then append exactly one state
-  record.
+- **Commit a phase:** only after PASS; persist `rushd.phase-commit.v1`. Its single parent is
+  the reviewed base or the exact tip of a sealed authority-only amendment chain descended
+  from that base. In the latter case subtract that disjoint authority overlay and require
+  the parent-to-commit product manifest to match the reviewed checkpoint byte-for-byte.
+  Verify exact checkpoint/review/receipt hashes, then append exactly one state record.
 - **Advance:** record the commit and immediately start the next fresh phase task.
 - **Escalate:** after two failed correction cycles, use one Sol-xhigh adjudicator.
 - **Remediate committed work:** seal the interrupted patch, use a clean remediation

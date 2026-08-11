@@ -136,6 +136,38 @@ export const manifestForCommitRange = (baseSha, commitSha) => {
   return { ...manifest, patch_sha256: canonicalJsonSha256(manifest) };
 };
 
+export const phaseCommitOverlayRange = (reviewedBaseSha, commitSha) => {
+  const parents = git('rev-list', '--parents', '-n', '1', commitSha).trim().split(/\s+/);
+  if (parents.length !== 2) throw new Error('Phase commit must have exactly one parent');
+  const parentSha = parents[1];
+  if (!isAncestor(reviewedBaseSha, parentSha)) throw new Error('Phase commit parent is not descended from the reviewed base SHA');
+  const committedProduct = manifestForCommitRange(parentSha, commitSha);
+  const productCore = { schema: 'rushd.patch-manifest.v1', base_sha: reviewedBaseSha, files: committedProduct.files };
+  const productManifest = { ...productCore, patch_sha256: canonicalJsonSha256(productCore) };
+  if (parentSha === reviewedBaseSha) return { parent_sha: parentSha, authority_commits: [], authority_manifest: null, product_manifest: productManifest };
+  const authorityCommits = [];
+  let cursor = parentSha;
+  while (cursor !== reviewedBaseSha) {
+    const lineage = git('rev-list', '--parents', '-n', '1', cursor).trim().split(/\s+/);
+    if (lineage.length !== 2) throw new Error('Phase commit authority overlay must be a contiguous single-parent chain');
+    const changed = git('diff-tree', '--no-commit-id', '--name-only', '-r', cursor).split('\n').filter(Boolean);
+    if (changed.length === 0 || changed.some((path) => !matchesAny(path, AUTHORITY_PATHS))) {
+      throw new Error('Phase commit authority overlay contains a non-authority commit');
+    }
+    authorityCommits.unshift(cursor);
+    cursor = lineage[1];
+  }
+  const authorityManifest = manifestForCommitRange(reviewedBaseSha, parentSha);
+  if (authorityManifest.files.length === 0 || authorityManifest.files.some((file) => !matchesAny(file.path, AUTHORITY_PATHS))) {
+    throw new Error('Phase commit parent overlay is not authority-only');
+  }
+  const authorityPaths = new Set(authorityManifest.files.map((file) => file.path));
+  if (productManifest.files.some((file) => authorityPaths.has(file.path) || matchesAny(file.path, AUTHORITY_PATHS))) {
+    throw new Error('Phase commit product manifest overlaps the sealed authority overlay');
+  }
+  return { parent_sha: parentSha, authority_commits: authorityCommits, authority_manifest: authorityManifest, product_manifest: productManifest };
+};
+
 export const isPathInside = (path, root) => {
   if (typeof path !== 'string' || typeof root !== 'string') return false;
   const rootResolved = resolve(root);
