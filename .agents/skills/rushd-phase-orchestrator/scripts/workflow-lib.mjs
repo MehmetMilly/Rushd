@@ -45,6 +45,20 @@ export const POST_DEPLOYMENT_CHECKS = [
   'root', 'direct-deep-link', 'api-health', 'install-update-offline', 'rollback-ready'
 ];
 
+export const COMMIT_SANDBOX_ALLOWED_ACTIONS = [
+  'recompute_reviewed_patch',
+  'stage_exact_reviewed_paths',
+  'create_single_parent_phase_commit',
+  'report_commit_status'
+];
+
+export const COMMIT_SANDBOX_FORBIDDEN_ACTIONS = [
+  'edit_product_or_authority_files',
+  'stage_unreviewed_paths',
+  'amend_or_rewrite_history',
+  'push_publish_or_deploy'
+];
+
 export const P13_BETA_REQUIREMENT = 'P13-BETA: Founder attests that the controlled beta evidence covers at least four complete weeks, includes the pre-registered tester/attrition and Momentum pressure/farming results, freezes any required reduced-scope rerun evidence, and is ready for independent release review.';
 
 export const AUTHORITY_PATHS = [
@@ -222,6 +236,104 @@ export const artifactRecord = (artifactPath, fields = {}) => ({
 });
 
 export const sameJson = (left, right) => JSON.stringify(left) === JSON.stringify(right);
+
+export const canonicalCommitSandboxApprovalPath = (runId) =>
+  `.codex/runs/${runId}/controller/authority-amendment-phase-commit-sandbox-approval.json`;
+
+export const isStrictlyAfterIso = (later, earlier) =>
+  isIsoUtc(later) && isIsoUtc(earlier) && Date.parse(later) > Date.parse(earlier);
+
+export const sameInstant = (left, right) =>
+  Number.isFinite(Date.parse(left)) && Number.isFinite(Date.parse(right)) && Date.parse(left) === Date.parse(right);
+
+export const commitSandboxApprovalMismatch = (runId, approvalPath, approval, approvalManifest, seal) => {
+  const canonicalPath = canonicalCommitSandboxApprovalPath(runId);
+  if (approvalPath !== canonicalPath || seal?.rule?.approval !== canonicalPath) return 'commit sandbox enabling approval path is not canonical';
+  if (!isObject(approval) || !sameJson(approval, seal?.approval)) return 'commit sandbox enabling approval content was substituted';
+  if (!sameJson(approvalManifest, seal?.approvedManifest)) return 'commit sandbox enabling approval manifest was substituted';
+  if (approval.run_id !== runId || approval.amendment_id !== 'RUSHD-20260811-PHASE-COMMIT-SANDBOX-CONTINUATION') return 'commit sandbox enabling approval identity changed';
+  return null;
+};
+
+export const canonicalCommitSandboxPrompt = (authorization) => {
+  const binding = {
+    run_id: authorization.run_id,
+    phase_id: authorization.phase_id,
+    attempt: authorization.attempt,
+    role: authorization.role,
+    thread_id: authorization.thread_id,
+    session_id: authorization.session_id,
+    source_sha: authorization.source_sha,
+    authority_parent_sha: authorization.authority_parent_sha,
+    patch_sha256: authorization.patch_sha256,
+    patch_manifest_path: authorization.patch_manifest_path,
+    checkpoint_path: authorization.checkpoint_path,
+    review_path: authorization.review_path,
+    commit_subject: authorization.commit_subject,
+    changed_files: authorization.changed_files,
+    allowed_actions: COMMIT_SANDBOX_ALLOWED_ACTIONS,
+    forbidden_actions: COMMIT_SANDBOX_FORBIDDEN_ACTIONS
+  };
+  return [
+    'Rushd reviewed phase commit continuation v1.',
+    `Canonical binding: ${JSON.stringify(binding)}`,
+    'Perform the allowed_actions exactly in their listed order and no other action.',
+    'Do not edit any product or authority file. Do not stage any path absent from changed_files. Do not amend, reset, rebase, merge, rewrite history, push, publish, deploy, or access unrelated data.',
+    'Before staging, recompute and require the exact patch_sha256 and changed_files. Stage only changed_files with exact deletion handling; never use git add -A or git add .',
+    'Create one single-parent commit with commit_subject whose parent is authority_parent_sha. Then verify the normalized committed product manifest is byte-identical to the reviewed manifest and report one JSON object containing run_id, phase_id, attempt, commit_sha, parent_sha, commit_subject, reviewed_base_sha, patch_sha256, manifest_path, manifest_sha256, changed_files, index_status set to clean, working_tree_status set to clean, unexplained_changes set to [], and committed_at. Do not use Markdown.'
+  ].join('\n');
+};
+
+export const commitSandboxContinuationMismatch = (receipt, authorization, turnRequest) => {
+  if (turnRequest?.params?.sandboxPolicy?.type !== 'dangerFullAccess') return 'commit continuation must use dangerFullAccess';
+  if (!['phase_worker', 'remediation_worker'].includes(receipt?.role)) return 'commit continuation role is not phase-owned';
+  if (receipt?.capability_scope !== 'reviewed_phase_commit') return 'commit continuation scope is not reviewed_phase_commit';
+  if (typeof receipt?.capability_artifact_path !== 'string' || typeof receipt?.capability_artifact_sha256 !== 'string') return 'commit continuation capability evidence is missing';
+  if (!isObject(authorization) || authorization.schema !== 'rushd.phase-commit-sandbox-authorization.v1') return 'commit continuation authorization schema is invalid';
+  const identity = [
+    ['run_id', receipt.run_id], ['phase_id', receipt.phase_id], ['attempt', receipt.attempt],
+    ['role', receipt.role], ['thread_id', receipt.thread_id], ['session_id', receipt.session_id],
+    ['source_sha', receipt.source_sha], ['model', receipt.model], ['thinking', receipt.thinking],
+    ['prompt_sha256', receipt.prompt_sha256]
+  ];
+  for (const [key, expected] of identity) if (!sameJson(authorization[key], expected)) return `commit continuation ${key} mismatch`;
+  if (!isStrictlyAfterIso(receipt?.created_at, authorization.issued_at)) return 'commit continuation does not start strictly after its authorization';
+  if (authorization.sandbox_policy !== 'dangerFullAccess') return 'commit continuation authorization weakens sandbox binding';
+  if (!sameJson(authorization.allowed_actions, COMMIT_SANDBOX_ALLOWED_ACTIONS)) return 'commit continuation allowed actions changed';
+  if (!sameJson(authorization.forbidden_actions, COMMIT_SANDBOX_FORBIDDEN_ACTIONS)) return 'commit continuation forbidden actions changed';
+  const canonicalInput = [{ type: 'text', text: canonicalCommitSandboxPrompt(authorization) }];
+  if (!sameJson(turnRequest?.params?.input, canonicalInput)) return 'commit continuation prompt is not the canonical commit-only prompt';
+  if (sha256Bytes(Buffer.from(JSON.stringify(canonicalInput))) !== authorization.prompt_sha256) return 'commit continuation canonical prompt hash mismatch';
+  return null;
+};
+
+export const commitSandboxCompletionMismatch = (phaseCommit, authorization, receipt, report) => {
+  if (!isObject(phaseCommit) || !isObject(authorization) || !isObject(receipt) || !isObject(report)) return 'commit continuation completion evidence is incomplete';
+  const identity = ['run_id', 'phase_id', 'attempt', 'role', 'thread_id', 'session_id', 'source_sha', 'model', 'thinking'];
+  for (const key of identity) if (!sameJson(receipt[key], authorization[key])) return `commit continuation completed receipt ${key} mismatch`;
+  if (receipt.status !== 'completed' || receipt.source_diff_status !== 'clean') return 'commit continuation completed receipt is not clean and completed';
+  if (receipt.capability_scope !== 'reviewed_phase_commit' || receipt.capability_artifact_path !== phaseCommit.commit_sandbox_authorization_path || receipt.capability_artifact_sha256 !== phaseCommit.commit_sandbox_authorization_sha256) return 'commit continuation completed receipt capability mismatch';
+  if (!isStrictlyAfterIso(receipt.created_at, authorization.issued_at) || !isStrictlyAfterIso(phaseCommit.committed_at, receipt.created_at) || !isStrictlyAfterIso(receipt.completed_at, phaseCommit.committed_at)) return 'commit continuation completion timestamps are not strictly ordered';
+  const expectedReport = {
+    run_id: phaseCommit.run_id,
+    phase_id: phaseCommit.phase_id,
+    attempt: phaseCommit.attempt,
+    commit_sha: phaseCommit.commit_sha,
+    parent_sha: authorization.authority_parent_sha,
+    commit_subject: phaseCommit.commit_subject,
+    reviewed_base_sha: phaseCommit.base_sha,
+    patch_sha256: phaseCommit.patch_sha256,
+    manifest_path: authorization.patch_manifest_path,
+    manifest_sha256: authorization.patch_manifest_sha256,
+    changed_files: phaseCommit.changed_files,
+    index_status: 'clean',
+    working_tree_status: 'clean',
+    unexplained_changes: [],
+    committed_at: phaseCommit.committed_at
+  };
+  for (const [key, expected] of Object.entries(expectedReport)) if (!sameJson(report[key], expected)) return `commit continuation structured report ${key} mismatch`;
+  return null;
+};
 
 export const remediationAfterRegressionFailure = (remediation, failedRecord, ownerCommitCount) => ({
   ...remediation,

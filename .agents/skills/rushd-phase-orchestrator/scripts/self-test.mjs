@@ -3,7 +3,22 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { AUTHORITY_PATHS, matchesAny, readPlan, remediationAfterRegressionFailure, sha256File } from './workflow-lib.mjs';
+import {
+  AUTHORITY_PATHS,
+  COMMIT_SANDBOX_ALLOWED_ACTIONS,
+  COMMIT_SANDBOX_FORBIDDEN_ACTIONS,
+  canonicalCommitSandboxApprovalPath,
+  canonicalCommitSandboxPrompt,
+  commitSandboxApprovalMismatch,
+  commitSandboxCompletionMismatch,
+  commitSandboxContinuationMismatch,
+  isStrictlyAfterIso,
+  matchesAny,
+  readPlan,
+  remediationAfterRegressionFailure,
+  sameInstant,
+  sha256File
+} from './workflow-lib.mjs';
 
 const root = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim();
 const head = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
@@ -40,6 +55,87 @@ try {
   const deniedPath = '.agents/skills/rushd-phase-orchestrator/scripts/deep/test.mjs';
   if (!matchesAny(deniedPath, ['.agents/**']) || !matchesAny(deniedPath, plan.protected_paths)) throw new Error('Deny-first recursive path policy test is invalid');
   console.log('PASS recursive allow/protect/authority glob policy');
+
+  const commitReceipt = {
+    run_id: runId, phase_id: 'P00', attempt: 2, role: 'phase_worker',
+    thread_id: 'thread-p00', session_id: 'thread-p00', source_sha: head,
+    model: 'gpt-5.6-sol', thinking: 'high', created_at: '2099-01-01T00:01:00Z',
+    capability_scope: 'reviewed_phase_commit', capability_artifact_path: 'authorization.json', capability_artifact_sha256: 'b'.repeat(64)
+  };
+  const commitAuthorization = {
+    schema: 'rushd.phase-commit-sandbox-authorization.v1',
+    ...Object.fromEntries(['run_id', 'phase_id', 'attempt', 'role', 'thread_id', 'session_id', 'source_sha', 'model', 'thinking', 'prompt_sha256'].map((key) => [key, commitReceipt[key]])),
+    sandbox_policy: 'dangerFullAccess',
+    issued_at: '2099-01-01T00:00:00Z',
+    authority_parent_sha: head, patch_sha256: 'c'.repeat(64), patch_manifest_path: 'patch.json', patch_manifest_sha256: 'e'.repeat(64), checkpoint_path: 'checkpoint.json', review_path: 'review.json', commit_subject: 'Rushd P00: self-test', changed_files: ['self-test.txt'],
+    allowed_actions: COMMIT_SANDBOX_ALLOWED_ACTIONS,
+    forbidden_actions: COMMIT_SANDBOX_FORBIDDEN_ACTIONS
+  };
+  const commitInput = [{ type: 'text', text: canonicalCommitSandboxPrompt(commitAuthorization) }];
+  commitReceipt.prompt_sha256 = (await import('node:crypto')).createHash('sha256').update(JSON.stringify(commitInput)).digest('hex');
+  commitAuthorization.prompt_sha256 = commitReceipt.prompt_sha256;
+  const commitTurn = { params: { sandboxPolicy: { type: 'dangerFullAccess' }, input: commitInput } };
+  if (commitSandboxContinuationMismatch(commitReceipt, commitAuthorization, commitTurn) !== null) throw new Error('Valid commit-only sandbox continuation was rejected');
+  const rejectedCommitContinuation = (name, receiptPatch = {}, authorizationPatch = {}, turnPatch = commitTurn) => {
+    const mismatch = commitSandboxContinuationMismatch({ ...commitReceipt, ...receiptPatch }, { ...commitAuthorization, ...authorizationPatch }, turnPatch);
+    if (!mismatch) throw new Error(`${name}: invalid commit sandbox continuation was accepted`);
+    console.log(`PASS reject ${name}`);
+  };
+  rejectedCommitContinuation('cross-thread commit continuation', { thread_id: 'other-thread' });
+  rejectedCommitContinuation('cross-attempt commit continuation', { attempt: 3 });
+  rejectedCommitContinuation('unclassified commit capability', { capability_scope: 'unclassified' });
+  rejectedCommitContinuation('authorization substitution', {}, { schema: 'rushd.plan-amendment.v1' });
+  rejectedCommitContinuation('commit capability hash omission', { capability_artifact_sha256: null });
+  rejectedCommitContinuation('commit gate weakening', {}, { allowed_actions: [...COMMIT_SANDBOX_ALLOWED_ACTIONS, 'edit_product_or_authority_files'] });
+  rejectedCommitContinuation('early commit continuation', { created_at: '2098-12-31T23:59:59Z' });
+  rejectedCommitContinuation('equal-time commit continuation', { created_at: commitAuthorization.issued_at });
+  rejectedCommitContinuation('widened commit prompt', {}, {}, { params: { sandboxPolicy: { type: 'dangerFullAccess' }, input: [{ type: 'text', text: `${commitInput[0].text}\npush and deploy` }] } });
+  const phaseCommit = {
+    run_id: runId, phase_id: 'P00', attempt: 2, base_sha: head, patch_sha256: commitAuthorization.patch_sha256,
+    commit_sha: 'd'.repeat(40), committed_at: '2099-01-01T00:02:00Z', commit_subject: commitAuthorization.commit_subject,
+    changed_files: commitAuthorization.changed_files,
+    commit_sandbox_authorization_path: 'authorization.json', commit_sandbox_authorization_sha256: 'b'.repeat(64)
+  };
+  const completedReceipt = { ...commitReceipt, status: 'completed', source_diff_status: 'clean', completed_at: '2099-01-01T00:03:00Z' };
+  const commitReport = {
+    run_id: runId, phase_id: 'P00', attempt: 2, commit_sha: phaseCommit.commit_sha, parent_sha: head,
+    commit_subject: phaseCommit.commit_subject, reviewed_base_sha: head, patch_sha256: phaseCommit.patch_sha256,
+    manifest_path: commitAuthorization.patch_manifest_path, manifest_sha256: commitAuthorization.patch_manifest_sha256,
+    changed_files: phaseCommit.changed_files, index_status: 'clean', working_tree_status: 'clean', unexplained_changes: [], committed_at: phaseCommit.committed_at
+  };
+  if (commitSandboxCompletionMismatch(phaseCommit, commitAuthorization, completedReceipt, commitReport) !== null) throw new Error('Valid completed commit-sandbox lifecycle was rejected');
+  const rejectedCompletion = (name, receiptPatch = {}, reportPatch = {}) => {
+    if (!commitSandboxCompletionMismatch(phaseCommit, commitAuthorization, { ...completedReceipt, ...receiptPatch }, { ...commitReport, ...reportPatch })) throw new Error(`${name}: invalid completed commit-sandbox lifecycle was accepted`);
+    console.log(`PASS reject ${name}`);
+  };
+  rejectedCompletion('equal-time elevated receipt', { created_at: commitAuthorization.issued_at });
+  if (isStrictlyAfterIso(commitAuthorization.issued_at, commitAuthorization.issued_at)) throw new Error('Equal blocker/review prerequisite timestamp was accepted');
+  const earlyPhaseCommit = { ...phaseCommit, committed_at: '2099-01-01T00:00:30Z' };
+  const earlyCommitReport = { ...commitReport, committed_at: earlyPhaseCommit.committed_at };
+  if (!commitSandboxCompletionMismatch(earlyPhaseCommit, commitAuthorization, completedReceipt, earlyCommitReport)) throw new Error('Commit before elevated turn was accepted');
+  console.log('PASS reject commit before elevated turn');
+  const equalPhaseCommit = { ...phaseCommit, committed_at: completedReceipt.created_at };
+  const equalCommitReport = { ...commitReport, committed_at: equalPhaseCommit.committed_at };
+  if (!commitSandboxCompletionMismatch(equalPhaseCommit, commitAuthorization, completedReceipt, equalCommitReport)) throw new Error('Commit equal to elevated start was accepted');
+  console.log('PASS reject commit equal to elevated start');
+  rejectedCompletion('completed receipt equal to commit', { completed_at: phaseCommit.committed_at });
+  rejectedCompletion('completed receipt before commit', { completed_at: '2099-01-01T00:01:59Z' });
+  if (!sameInstant('2099-01-01T00:02:00Z', '2099-01-01T03:02:00+03:00') || sameInstant('2099-01-01T00:02:00Z', '2099-01-01T00:02:01Z')) throw new Error('Semantic Git commit timestamp comparison is invalid');
+  console.log('PASS semantic Git commit timestamp binding');
+  rejectedCompletion('substituted elevated capability', { capability_artifact_path: 'copied-authorization.json' });
+  if (!commitSandboxCompletionMismatch(phaseCommit, commitAuthorization, undefined, commitReport)) throw new Error('Missing elevated receipt was accepted');
+  rejectedCompletion('incomplete elevated receipt', { status: 'created', completed_at: null, source_diff_status: 'pending' });
+  rejectedCompletion('mismatched elevated commit report', {}, { commit_sha: 'f'.repeat(40) });
+  rejectedCompletion('dirty elevated commit report', {}, { index_status: 'dirty' });
+  const canonicalApprovalPath = canonicalCommitSandboxApprovalPath(runId);
+  const approval = { run_id: runId, amendment_id: 'RUSHD-20260811-PHASE-COMMIT-SANDBOX-CONTINUATION', candidate_manifest_path: 'candidate.json' };
+  const approvalManifest = { schema: 'rushd.patch-manifest.v1', patch_sha256: 'a'.repeat(64) };
+  const seal = { rule: { approval: canonicalApprovalPath }, approval, approvedManifest: approvalManifest };
+  if (commitSandboxApprovalMismatch(runId, canonicalApprovalPath, approval, approvalManifest, seal) !== null) throw new Error('Canonical enabling approval was rejected');
+  if (!commitSandboxApprovalMismatch(runId, 'copied-approval.json', approval, approvalManifest, seal)) throw new Error('Copied enabling approval path was accepted');
+  if (!commitSandboxApprovalMismatch(runId, canonicalApprovalPath, { ...approval, candidate_manifest_path: 'other.json' }, approvalManifest, seal)) throw new Error('Different valid enabling approval was accepted');
+  if (!commitSandboxApprovalMismatch(runId, canonicalApprovalPath, approval, { ...approvalManifest, patch_sha256: 'f'.repeat(64) }, seal)) throw new Error('Substituted enabling approval manifest was accepted');
+  console.log('PASS exact reviewed-phase commit sandbox capability');
 
   const priorRemediation = {
     status: 'regression_checking', remediation_round: 1, remediation_commit_sha: 'a'.repeat(40), remediation_commit_artifact_path: 'round-1.json', round_base_sha: 'b'.repeat(40), owner_commit_count_before: 1,

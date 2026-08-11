@@ -273,6 +273,59 @@ drift, authority-chain substitution, or any other state/gate weakening is reject
 ordinary full P00 gate, checkpoint, fresh independent review, and commit rules remain
 unchanged.
 
+### Same-task commit-sandbox continuation
+
+`workspaceWrite` remains mandatory for every ordinary task turn. A narrowly scoped
+exception exists only after a phase is already `passed_pending_commit` and the same phase
+task returns a completed, validated receipt whose structured final report proves `.git`
+was read-only before staging, no commit was created, the index remained clean, and the
+reviewed patch had no unexplained change. The manager must preserve that failed commit
+turn and seal `rushd.phase-commit-sandbox-authorization.v1` before dispatching another
+turn.
+
+The authorization binds the same run, role, phase, attempt, thread, session, reviewed
+base, model, effort, worker receipt, failed commit receipt, exact PASS checkpoint and
+review, patch manifest/hash, current sealed authority parent, exact commit subject, exact
+changed paths, and the SHA-256 of the bounded continuation prompt. Its only allowed
+actions, in order, are:
+
+1. `recompute_reviewed_patch`;
+2. `stage_exact_reviewed_paths`;
+3. `create_single_parent_phase_commit`; and
+4. `report_commit_status`.
+
+Only that authorized follow-up `turn/start` may use
+`sandboxPolicy: {"type":"dangerFullAccess"}`. The original `thread/start` identity and
+all prior receipts remain immutable. Editing product or authority files, staging an
+unreviewed path, amending or rewriting history, pushing, publishing, or deploying are
+forbidden. The manager still may not stage or commit the product patch. After completion,
+the ordinary `rushd.phase-commit.v1` validator independently proves the single-parent
+commit, byte-exact reviewed product manifest after subtracting the sealed authority chain,
+subject, checkpoint/review/worker hashes, and absence of unexplained changes. A mismatch
+in task, attempt, prompt, capability artifact/hash, failure classification, manifest,
+authority parent, or any acceptance gate invalidates the continuation without consuming a
+new phase attempt.
+
+The prompt is not free-form: the validator derives one canonical prompt byte-for-byte from
+the authorization fields, ordered actions, exact changed paths, and prohibitions, and the
+turn input must equal it. Both the checkpoint worker receipt and failed commit receipt must
+be canonical files inside the run task directory; the former must equal the checkpoint's
+exact worker receipt, and the latter's structured no-commit report must match every
+authorization identity field. The authorization must be issued strictly after both the
+blocker and PASS-review lifecycles complete, and the elevated turn must start strictly after
+authorization.
+The sealed parent chain must contain this exact independently approved enabling amendment.
+Before the phase commit it must equal live HEAD; afterward it must be the actual parent of
+the exact authorized subject/product commit. `rushd.phase-commit.v1` cross-links the
+authorization path/hash, parent, subject, patch, and changed files. It also requires the
+canonical completed receipt for that elevated turn and an exact structured commit report
+matching the actual commit SHA, parent, subject, reviewed manifest, clean index and working
+tree, changed files, and commit time. The strict order is authorization issuance, elevated
+turn creation, actual Git committer time, then elevated turn completion; equality fails at
+every boundary, and the declared/report time must denote the same instant as Git metadata.
+Removing, substituting, starting early, or mismatching that elevated lifecycle invalidates
+the phase commit.
+
 ## 5. Checkpoint contract
 
 Before requesting review, the implementer writes a checkpoint matching

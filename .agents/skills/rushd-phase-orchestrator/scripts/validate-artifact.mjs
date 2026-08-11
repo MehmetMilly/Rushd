@@ -6,12 +6,18 @@ import { isAbsolute, resolve } from 'node:path';
 import {
   AUTHORITY_PATHS,
   CANONICAL_AUDITS,
+  COMMIT_SANDBOX_ALLOWED_ACTIONS,
+  COMMIT_SANDBOX_FORBIDDEN_ACTIONS,
   FINAL_AUDIT_COMMANDS,
   POST_DEPLOYMENT_CHECKS,
   P13_BETA_REQUIREMENT,
   REQUIRED_AUTHORITY_FILES,
   RUN_STATUSES,
   assertJournalChain,
+  canonicalCommitSandboxPrompt,
+  commitSandboxApprovalMismatch,
+  commitSandboxCompletionMismatch,
+  commitSandboxContinuationMismatch,
   git,
   gitCommitExists,
   gitHead,
@@ -22,6 +28,7 @@ import {
   isPathInside,
   isSha1,
   isSha256,
+  isStrictlyAfterIso,
   isTemplateRun,
   loadJson,
   manifestForCommitRange,
@@ -30,6 +37,7 @@ import {
   phaseFor,
   readPlan,
   sameJson,
+  sameInstant,
   sha256Bytes,
   sha256File,
   unique,
@@ -211,6 +219,20 @@ const sealedAuthorityRule = (amendmentId, runId) => ({
       'docs/implementation/PLAN_AMENDMENT_2026-08-11_SEALED_AUTHORITY_PHASE_COMMIT.json'
     ],
     planChange: 'none'
+  },
+  'RUSHD-20260811-PHASE-COMMIT-SANDBOX-CONTINUATION': {
+    path: 'docs/implementation/PLAN_AMENDMENT_2026-08-11_PHASE_COMMIT_SANDBOX_CONTINUATION.json',
+    approval: `.codex/runs/${runId}/controller/authority-amendment-phase-commit-sandbox-approval.json`,
+    paths: [
+      '.agents/skills/rushd-phase-orchestrator/SKILL.md',
+      '.agents/skills/rushd-phase-orchestrator/scripts/self-test.mjs',
+      '.agents/skills/rushd-phase-orchestrator/scripts/transition-self-test.mjs',
+      '.agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs',
+      '.agents/skills/rushd-phase-orchestrator/scripts/workflow-lib.mjs',
+      'docs/RUSHD_EXECUTION_PROTOCOL.md',
+      'docs/implementation/PLAN_AMENDMENT_2026-08-11_PHASE_COMMIT_SANDBOX_CONTINUATION.json'
+    ],
+    planChange: 'none'
   }
 }[amendmentId]);
 const requireSealedAuthorityCommit = (commit, runId, planVersion) => {
@@ -232,7 +254,14 @@ const requireSealedAuthorityCommit = (commit, runId, planVersion) => {
   }
   const committedManifest = manifestForCommitRange(parents[1], commit);
   const subject = git('show', '-s', '--format=%s', commit).trim();
-  if (!rule || amendmentPaths[0] !== rule.path || amendment.schema !== 'rushd.plan-amendment.v1' || amendment.founder_decision?.status !== 'approved' || amendment.founder_decision?.actor !== 'founder' || !isIsoUtc(amendment.founder_decision?.approved_at) || amendment.from_plan_version !== planVersion || amendment.to_plan_version !== planVersion || !sameJson([...changed].sort(), [...rule.paths].sort()) || !sameJson([...amendment.protected_paths_to_change].sort(), [...rule.paths].sort()) || !sameJson(amendedPlan, expectedPlan) || !subject.startsWith('Rushd authority: ') || approval?.run_id !== runId || approval?.amendment_id !== amendment.amendment_id || !sameJson(committedManifest, approvedManifest)) throw new Error(`Authority overlay commit is invalid, unreviewed, or differs from the exact approved candidate: ${commit}`);
+  if (!rule) throw new Error(`Authority overlay amendment is not allowlisted: ${commit}`);
+  if (amendmentPaths[0] !== rule.path || amendment.schema !== 'rushd.plan-amendment.v1') throw new Error(`Authority overlay amendment record is not canonical: ${commit}`);
+  if (amendment.founder_decision?.status !== 'approved' || amendment.founder_decision?.actor !== 'founder' || !isIsoUtc(amendment.founder_decision?.approved_at)) throw new Error(`Authority overlay lacks exact founder approval: ${commit}`);
+  if (amendment.from_plan_version !== planVersion || amendment.to_plan_version !== planVersion || !sameJson(amendedPlan, expectedPlan)) throw new Error(`Authority overlay changes the plan version or unapproved plan content: ${commit}`);
+  if (!sameJson([...changed].sort(), [...rule.paths].sort()) || !sameJson([...amendment.protected_paths_to_change].sort(), [...rule.paths].sort())) throw new Error(`Authority overlay changed paths differ from the allowlisted amendment scope: ${commit}; changed=${JSON.stringify([...changed].sort())}; expected=${JSON.stringify([...rule.paths].sort())}`);
+  if (!subject.startsWith('Rushd authority: ')) throw new Error(`Authority overlay subject is invalid: ${commit}`);
+  if (approval?.run_id !== runId || approval?.amendment_id !== amendment.amendment_id || !sameJson(committedManifest, approvedManifest)) throw new Error(`Authority overlay is unreviewed or differs from the exact approved candidate: ${commit}`);
+  return { rule, approval, approvedManifest };
 };
 
 switch (value.schema) {
@@ -289,6 +318,11 @@ switch (value.schema) {
     requireNullOrString(value, 'lifecycle_parent_sha256');
     requireNullOrString(value, 'turn_completed_path');
     requireNullOrString(value, 'turn_completed_sha256');
+    if (value.capability_scope !== undefined || value.capability_artifact_path !== undefined || value.capability_artifact_sha256 !== undefined) {
+      requireString(value, 'capability_scope');
+      requireString(value, 'capability_artifact_path');
+      requireString(value, 'capability_artifact_sha256');
+    }
     if (!Number.isInteger(value.attempt) || value.attempt < 0) fail('Task receipt attempt must be a non-negative integer');
     if (!['manager', 'phase_worker', 'remediation_worker', 'phase_reviewer', 'adjudicator', 'regression_reviewer', 'final_auditor', 'launch_worker'].includes(value.role)) fail('Invalid task receipt role');
     if (!['created', 'completed'].includes(value.status)) fail('Invalid task receipt status');
@@ -319,13 +353,20 @@ switch (value.schema) {
       const expectedCwd = value.environment === 'worktree' ? value.worktree_path : git('rev-parse', '--show-toplevel').trim();
       if (threadRequest.method !== 'thread/start' || threadRequest.id === undefined || threadRequest.params?.model !== value.model || threadRequest.params?.cwd !== expectedCwd || threadRequest.params?.approvalPolicy !== 'never' || threadRequest.params?.sandbox !== 'workspace-write') fail('App Server thread/start request does not match receipt policy');
       if (threadResponse.id !== threadRequest.id || threadResponse.error !== undefined || threadResponse.result?.thread?.id !== value.thread_id || threadResponse.result?.thread?.sessionId !== value.session_id) fail('App Server thread/start response does not match receipt identity');
-      if (turnRequest.method !== 'turn/start' || turnRequest.id === undefined || turnRequest.params?.threadId !== value.thread_id || turnRequest.params?.model !== value.model || turnRequest.params?.effort !== value.thinking || turnRequest.params?.cwd !== expectedCwd || turnRequest.params?.approvalPolicy !== 'never' || turnRequest.params?.sandboxPolicy?.type !== 'workspaceWrite' || !Array.isArray(turnRequest.params?.input) || turnRequest.params.input.length === 0 || sha256Bytes(Buffer.from(JSON.stringify(turnRequest.params.input))) !== value.prompt_sha256) fail('App Server turn/start request does not match receipt policy/prompt hash');
+      if (turnRequest.method !== 'turn/start' || turnRequest.id === undefined || turnRequest.params?.threadId !== value.thread_id || turnRequest.params?.model !== value.model || turnRequest.params?.effort !== value.thinking || turnRequest.params?.cwd !== expectedCwd || turnRequest.params?.approvalPolicy !== 'never' || !Array.isArray(turnRequest.params?.input) || turnRequest.params.input.length === 0 || sha256Bytes(Buffer.from(JSON.stringify(turnRequest.params.input))) !== value.prompt_sha256) fail('App Server turn/start request does not match receipt policy/prompt hash');
+      const sandboxType = turnRequest.params?.sandboxPolicy?.type;
+      if (sandboxType === 'dangerFullAccess') {
+        requireArtifactHash(value.capability_artifact_path, value.capability_artifact_sha256, 'Commit sandbox authorization');
+        const authorization = validateNested(value.capability_artifact_path, 'rushd.phase-commit-sandbox-authorization.v1');
+        const mismatch = commitSandboxContinuationMismatch(value, authorization, turnRequest);
+        if (mismatch) fail(`App Server commit continuation is invalid: ${mismatch}`);
+      } else if (sandboxType !== 'workspaceWrite') fail('App Server turn/start sandbox policy is not permitted');
       if (turnResponse.id !== turnRequest.id || turnResponse.error !== undefined || turnResponse.result?.turn?.id !== value.turn_id || turnResponse.result?.turn?.status !== 'inProgress') fail('App Server turn/start response does not match receipt identity');
     } catch (error) { fail(`Task App Server transcript is invalid: ${error.message}`); }
     if (value.status === 'completed') {
       requireArtifactHash(value.lifecycle_parent_path, value.lifecycle_parent_sha256, 'Task lifecycle parent');
       const parent = validateNested(value.lifecycle_parent_path, 'rushd.task-receipt.v1');
-      const stableKeys = ['run_id', 'role', 'phase_id', 'audit_id', 'attempt', 'thread_id', 'session_id', 'turn_id', 'model', 'thinking', 'environment', 'adapter', 'thread_create_method', 'source_sha', 'snapshot_patch_sha256', 'snapshot_manifest_path', 'worktree_path', 'created_at', 'prompt_sha256', 'thread_request_path', 'thread_request_sha256', 'thread_response_path', 'thread_response_sha256', 'turn_request_path', 'turn_request_sha256', 'turn_response_path', 'turn_response_sha256'];
+      const stableKeys = ['run_id', 'role', 'phase_id', 'audit_id', 'attempt', 'thread_id', 'session_id', 'turn_id', 'model', 'thinking', 'environment', 'adapter', 'thread_create_method', 'source_sha', 'snapshot_patch_sha256', 'snapshot_manifest_path', 'worktree_path', 'created_at', 'prompt_sha256', 'thread_request_path', 'thread_request_sha256', 'thread_response_path', 'thread_response_sha256', 'turn_request_path', 'turn_request_sha256', 'turn_response_path', 'turn_response_sha256', 'capability_scope', 'capability_artifact_path', 'capability_artifact_sha256'];
       if (parent && (parent.status !== 'created' || stableKeys.some((key) => !sameJson(parent[key], value[key])))) fail('Completed task receipt does not extend its immutable created receipt');
       requireArtifactHash(value.turn_completed_path, value.turn_completed_sha256, 'Task completion event');
       if (isNonEmptyRegularFile(value.turn_completed_path) && !isPathInside(value.turn_completed_path, taskRoot)) fail('Task completion event must be under the run task root');
@@ -726,6 +767,10 @@ switch (value.schema) {
     for (const key of ['run_id', 'phase_id', 'commit_kind', 'base_sha', 'patch_sha256', 'checkpoint_path', 'checkpoint_sha256', 'review_path', 'review_sha256', 'worker_receipt_path', 'worker_receipt_sha256', 'commit_sha', 'committed_at', 'commit_subject', 'working_tree_status']) requireString(value, key);
     requireArray(value, 'changed_files');
     requireArray(value, 'unexplained_changes');
+    if (value.commit_sandbox_authorization_path !== undefined || value.commit_sandbox_authorization_sha256 !== undefined) {
+      requireString(value, 'commit_sandbox_authorization_path');
+      requireString(value, 'commit_sandbox_authorization_sha256');
+    }
     if (!Number.isInteger(value.attempt) || value.attempt < 1) fail('Phase commit attempt is invalid');
     if (template) break;
     if (!validRunId(value.run_id) || !isIsoUtc(value.committed_at) || !gitCommitExists(value.base_sha) || !gitCommitExists(value.commit_sha)) fail('Phase commit run/time/Git identity is invalid');
@@ -748,8 +793,35 @@ switch (value.schema) {
     if (!isAncestor(value.base_sha, value.commit_sha)) fail('Phase commit is not descended from base SHA');
     const expectedSubject = `Rushd ${value.phase_id}: `;
     let actualSubject = '';
+    let actualCommittedAt = '';
     try { actualSubject = git('show', '-s', '--format=%s', value.commit_sha).trim(); } catch { /* already failed */ }
+    try { actualCommittedAt = git('show', '-s', '--format=%cI', value.commit_sha).trim(); } catch { /* already failed */ }
     if (!value.commit_subject.startsWith(expectedSubject) || actualSubject !== value.commit_subject) fail('Phase commit subject is invalid');
+    if (!sameInstant(value.committed_at, actualCommittedAt)) fail('Phase commit committed_at does not match the actual Git committer timestamp');
+    const usesCommitSandboxAmendment = (commitRange?.authority_commits ?? []).some((authorityCommit) => {
+      const changed = git('diff-tree', '--no-commit-id', '--name-only', '-r', authorityCommit).split('\n').filter(Boolean);
+      const amendmentPath = changed.find((path) => /^docs\/implementation\/PLAN_AMENDMENT_[A-Z0-9_-]+\.json$/.test(path));
+      if (!amendmentPath) return false;
+      try { return JSON.parse(git('show', `${authorityCommit}:${amendmentPath}`)).amendment_id === 'RUSHD-20260811-PHASE-COMMIT-SANDBOX-CONTINUATION'; } catch { return false; }
+    });
+    if (usesCommitSandboxAmendment) {
+      requireString(value, 'commit_sandbox_completed_receipt_path');
+      requireString(value, 'commit_sandbox_completed_receipt_sha256');
+      requireArtifactHash(value.commit_sandbox_authorization_path, value.commit_sandbox_authorization_sha256, 'Phase commit sandbox authorization');
+      requireArtifactHash(value.commit_sandbox_completed_receipt_path, value.commit_sandbox_completed_receipt_sha256, 'Phase commit sandbox completed receipt');
+      const authorization = validateNested(value.commit_sandbox_authorization_path, 'rushd.phase-commit-sandbox-authorization.v1');
+      const completedReceipt = validateNested(value.commit_sandbox_completed_receipt_path, 'rushd.task-receipt.v1');
+      if (authorization && (authorization.run_id !== value.run_id || authorization.phase_id !== value.phase_id || authorization.attempt !== value.attempt || authorization.source_sha !== value.base_sha || authorization.authority_parent_sha !== commitRange?.parent_sha || authorization.patch_sha256 !== value.patch_sha256 || authorization.commit_subject !== value.commit_subject || !sameJson(authorization.changed_files, value.changed_files))) fail('Phase commit does not match its exact commit-sandbox authorization');
+      const taskRoot = `.codex/runs/${value.run_id}/tasks`;
+      if (!isPathInside(value.commit_sandbox_completed_receipt_path, taskRoot)) fail('Phase commit sandbox completed receipt must be a canonical run task artifact');
+      if (authorization && completedReceipt) {
+        try {
+          const completed = loadJson(completedReceipt.turn_completed_path);
+          const reports = (completed.params?.turn?.items ?? []).filter((item) => item?.type === 'agentMessage').flatMap((item) => { try { return [JSON.parse(item.text)]; } catch { return []; } });
+          if (!reports.some((report) => commitSandboxCompletionMismatch(value, authorization, completedReceipt, report) === null)) fail('Phase commit lacks the exact authorized completed-turn commit report');
+        } catch (error) { fail(`Phase commit sandbox completed lifecycle is invalid: ${error.message}`); }
+      }
+    } else if ([value.commit_sandbox_authorization_path, value.commit_sandbox_authorization_sha256, value.commit_sandbox_completed_receipt_path, value.commit_sandbox_completed_receipt_sha256].some((item) => item !== undefined)) fail('Phase commit carries an unauthorized commit-sandbox capability');
     try {
       const manifest = commitRange?.product_manifest ?? manifestForCommitRange(value.base_sha, value.commit_sha);
       if (manifest.patch_sha256 !== value.patch_sha256) fail('Committed manifest hash does not match reviewed patch');
@@ -852,6 +924,84 @@ switch (value.schema) {
     break;
   }
 
+  case 'rushd.phase-commit-sandbox-authorization.v1': {
+    for (const key of ['run_id', 'phase_id', 'role', 'thread_id', 'session_id', 'source_sha', 'authority_parent_sha', 'enabling_authority_commit_sha', 'enabling_authority_approval_path', 'enabling_authority_approval_sha256', 'patch_sha256', 'patch_manifest_path', 'patch_manifest_sha256', 'checkpoint_path', 'checkpoint_sha256', 'review_path', 'review_sha256', 'worker_receipt_path', 'worker_receipt_sha256', 'blocked_commit_receipt_path', 'blocked_commit_receipt_sha256', 'commit_subject', 'model', 'thinking', 'prompt_sha256', 'sandbox_policy', 'issued_at']) requireString(value, key);
+    requireArray(value, 'changed_files');
+    requireArray(value, 'allowed_actions');
+    requireArray(value, 'forbidden_actions');
+    if (!Number.isInteger(value.attempt) || value.attempt < 1) fail('Commit sandbox authorization attempt is invalid');
+    if (template) break;
+    if (!validRunId(value.run_id) || !phaseFor(plan, value.phase_id) || !gitCommitExists(value.source_sha) || !gitCommitExists(value.authority_parent_sha) || !isIsoUtc(value.issued_at)) fail('Commit sandbox authorization run/phase/Git/time identity is invalid');
+    if (!['phase_worker', 'remediation_worker'].includes(value.role) || value.sandbox_policy !== 'dangerFullAccess' || !sameJson(value.allowed_actions, COMMIT_SANDBOX_ALLOWED_ACTIONS) || !sameJson(value.forbidden_actions, COMMIT_SANDBOX_FORBIDDEN_ACTIONS)) fail('Commit sandbox authorization broadens the commit-only capability');
+    if (!value.commit_subject.startsWith(`Rushd ${value.phase_id}: `) || !isSha256(value.prompt_sha256)) fail('Commit sandbox subject or prompt hash is invalid');
+    requireArtifactHash(value.patch_manifest_path, value.patch_manifest_sha256, 'Commit sandbox patch manifest');
+    requireArtifactHash(value.checkpoint_path, value.checkpoint_sha256, 'Commit sandbox checkpoint');
+    requireArtifactHash(value.review_path, value.review_sha256, 'Commit sandbox review');
+    requireArtifactHash(value.worker_receipt_path, value.worker_receipt_sha256, 'Commit sandbox worker receipt');
+    requireArtifactHash(value.blocked_commit_receipt_path, value.blocked_commit_receipt_sha256, 'Commit sandbox blocked receipt');
+    requireArtifactHash(value.enabling_authority_approval_path, value.enabling_authority_approval_sha256, 'Commit sandbox enabling authority approval');
+    const manifest = validateNested(value.patch_manifest_path, 'rushd.patch-manifest.v1');
+    const checkpoint = validateNested(value.checkpoint_path, 'rushd.phase-checkpoint.v1', null, true);
+    const review = validateNested(value.review_path, 'rushd.phase-review.v1', value.checkpoint_path, true);
+    const worker = validateNested(value.worker_receipt_path, 'rushd.task-receipt.v1');
+    const blocked = validateNested(value.blocked_commit_receipt_path, 'rushd.task-receipt.v1');
+    const enablingApproval = validateNested(value.enabling_authority_approval_path, 'rushd.authority-amendment-approval.v1');
+    const taskRoot = `.codex/runs/${value.run_id}/tasks`;
+    if (manifest && (manifest.base_sha !== value.source_sha || manifest.patch_sha256 !== value.patch_sha256 || !sameJson(manifest.files.map((file) => file.path), value.changed_files))) fail('Commit sandbox manifest identity changed');
+    if (checkpoint && (checkpoint.run_id !== value.run_id || checkpoint.phase_id !== value.phase_id || checkpoint.attempt !== value.attempt || checkpoint.base_sha !== value.source_sha || checkpoint.patch_sha256 !== value.patch_sha256 || checkpoint.patch_manifest_path !== value.patch_manifest_path || checkpoint.worker_receipt_path !== value.worker_receipt_path)) fail('Commit sandbox checkpoint identity changed');
+    if (review && (review.run_id !== value.run_id || review.phase_id !== value.phase_id || review.attempt !== value.attempt || review.verdict !== 'pass' || review.checkpoint_patch_sha256 !== value.patch_sha256)) fail('Commit sandbox review is not the exact PASS review');
+    const expectedIdentity = (receipt) => receipt && receipt.run_id === value.run_id && receipt.phase_id === value.phase_id && receipt.attempt === value.attempt && receipt.role === value.role && receipt.thread_id === value.thread_id && receipt.session_id === value.session_id && receipt.source_sha === value.source_sha && receipt.model === value.model && receipt.thinking === value.thinking;
+    if (!isPathInside(value.worker_receipt_path, taskRoot) || !isPathInside(value.blocked_commit_receipt_path, taskRoot)) fail('Commit sandbox receipts must be canonical run task artifacts');
+    if (worker && (!expectedIdentity(worker) || worker.status !== 'completed')) fail('Commit sandbox worker receipt identity changed');
+    if (blocked && (!expectedIdentity(blocked) || blocked.status !== 'completed' || blocked.source_diff_status !== 'explained')) fail('Commit sandbox blocker receipt identity changed');
+    let reviewReceipt = null;
+    if (review?.reviewer_receipt_path) reviewReceipt = validateNested(review.reviewer_receipt_path, 'rushd.task-receipt.v1');
+    if (blocked && !isStrictlyAfterIso(value.issued_at, blocked.completed_at)) fail('Commit sandbox authorization must be issued strictly after the Git-metadata blocker');
+    if (reviewReceipt && !isStrictlyAfterIso(value.issued_at, reviewReceipt.completed_at)) fail('Commit sandbox authorization must be issued strictly after the PASS review lifecycle');
+    const canonicalInput = [{ type: 'text', text: canonicalCommitSandboxPrompt(value) }];
+    if (sha256Bytes(Buffer.from(JSON.stringify(canonicalInput))) !== value.prompt_sha256) fail('Commit sandbox authorization prompt is not the canonical commit-only prompt');
+    if (blocked) {
+      try {
+        const blockedRequest = loadJson(blocked.turn_request_path);
+        const completed = loadJson(blocked.turn_completed_path);
+        const messages = (completed.params?.turn?.items ?? []).filter((item) => item?.type === 'agentMessage').map((item) => item.text).filter((text) => typeof text === 'string');
+        const reports = messages.flatMap((text) => { try { return [JSON.parse(text)]; } catch { return []; } });
+        const exactBlocker = reports.some((report) => report.run_id === value.run_id && report.phase_id === value.phase_id && report.attempt === value.attempt && report.commit_sha === null && report.parent_sha === value.authority_parent_sha && report.commit_subject === value.commit_subject && report.reviewed_base_sha === value.source_sha && report.patch_sha256 === value.patch_sha256 && report.manifest_path === value.patch_manifest_path && report.checkpoint_path === value.checkpoint_path && report.review_path === value.review_path && sameJson(report.changed_files, value.changed_files) && /\.git/i.test(String(report.working_tree_status)) && /read-only|read only/i.test(String(report.working_tree_status)) && /index remains clean/i.test(String(report.working_tree_status)) && Array.isArray(report.unexplained_changes) && report.unexplained_changes.length === 0 && report.committed_at === null);
+        if (blockedRequest.params?.sandboxPolicy?.type !== 'workspaceWrite' || !exactBlocker) fail('Commit sandbox authorization lacks the exact preserved workspace-write Git-metadata blocker');
+      } catch (error) { fail(`Commit sandbox blocker evidence is invalid: ${error.message}`); }
+    }
+    try {
+      if (!isAncestor(value.source_sha, value.authority_parent_sha)) throw new Error('authority parent is not descended from reviewed base');
+      let cursor = value.authority_parent_sha;
+      let foundEnablingCommit = false;
+      let enablingSeal = null;
+      while (cursor !== value.source_sha) {
+        const seal = requireSealedAuthorityCommit(cursor, value.run_id, plan.plan_version);
+        const changed = git('diff-tree', '--no-commit-id', '--name-only', '-r', cursor).split('\n').filter(Boolean);
+        const amendmentPath = changed.find((path) => /^docs\/implementation\/PLAN_AMENDMENT_[A-Z0-9_-]+\.json$/.test(path));
+        const amendment = amendmentPath ? JSON.parse(git('show', `${cursor}:${amendmentPath}`)) : null;
+        if (amendment?.amendment_id === 'RUSHD-20260811-PHASE-COMMIT-SANDBOX-CONTINUATION') {
+          if (cursor !== value.enabling_authority_commit_sha) throw new Error('enabling authority commit identity changed');
+          foundEnablingCommit = true;
+          enablingSeal = seal;
+        }
+        const parents = git('rev-list', '--parents', '-n', '1', cursor).trim().split(/\s+/);
+        if (parents.length !== 2) throw new Error('authority chain is not single-parented');
+        cursor = parents[1];
+      }
+      const enablingManifest = enablingApproval ? validateNested(enablingApproval.candidate_manifest_path, 'rushd.patch-manifest.v1') : null;
+      if (!foundEnablingCommit || commitSandboxApprovalMismatch(value.run_id, value.enabling_authority_approval_path, enablingApproval, enablingManifest, enablingSeal)) throw new Error('enabling authority commit/approval is absent or substituted');
+      const children = git('rev-list', '--all', '--children').split('\n').map((line) => line.trim().split(/\s+/)).find((parts) => parts[0] === value.authority_parent_sha)?.slice(1) ?? [];
+      const committedChild = children.find((child) => {
+        const parents = git('rev-list', '--parents', '-n', '1', child).trim().split(/\s+/);
+        if (parents.length !== 2 || parents[1] !== value.authority_parent_sha || git('show', '-s', '--format=%s', child).trim() !== value.commit_subject) return false;
+        try { return phaseCommitOverlayRange(value.source_sha, child).product_manifest.patch_sha256 === value.patch_sha256; } catch { return false; }
+      });
+      if (gitHead() !== value.authority_parent_sha && !committedChild) throw new Error('authority parent is stale and not the exact parent of the reviewed phase commit');
+    } catch (error) { fail(`Commit sandbox authority parent is not the exact sealed chain: ${error.message}`); }
+    break;
+  }
+
   case 'rushd.plan-amendment.v1': {
     for (const key of ['amendment_id', 'from_plan_version', 'to_plan_version', 'requested_at', 'requested_by_task_id', 'rationale', 'safe_work_while_waiting']) requireString(value, key);
     requireArray(value, 'affected_phases');
@@ -904,70 +1054,8 @@ switch (value.schema) {
           fail(`Later workflow authority commit must be single-parented and authority-only: ${commit}`);
           continue;
         }
-        const amendmentPaths = changed.filter((path) => /^docs\/implementation\/PLAN_AMENDMENT_[A-Z0-9_-]+\.json$/.test(path));
-        if (amendmentPaths.length !== 1) {
-          fail(`Later workflow authority commit requires exactly one explicit plan amendment record: ${commit}`);
-          continue;
-        }
         try {
-          const amendment = JSON.parse(git('show', `${commit}:${amendmentPaths[0]}`));
-          const subject = git('show', '-s', '--format=%s', commit).trim();
-          const amendmentRules = {
-            'RUSHD-20260811-WORKER-TURN-RECOVERY': {
-              path: 'docs/implementation/PLAN_AMENDMENT_2026-08-11_WORKER_TURN_RECOVERY.json',
-              approval: `.codex/runs/${value.run_id}/controller/authority-amendment-approval.json`,
-              paths: [
-                '.agents/skills/rushd-phase-orchestrator/SKILL.md',
-                '.agents/skills/rushd-phase-orchestrator/scripts/transition-self-test.mjs',
-                '.agents/skills/rushd-phase-orchestrator/scripts/transition-state.mjs',
-                '.agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs',
-                '.agents/skills/rushd-phase-orchestrator/scripts/workflow-lib.mjs',
-                'docs/RUSHD_EXECUTION_PROTOCOL.md',
-                'docs/implementation/PLAN_AMENDMENT_2026-08-11_WORKER_TURN_RECOVERY.json',
-                'docs/implementation/phase-plan.json'
-              ],
-              planChange: 'protect-amendments'
-            },
-            'RUSHD-20260811-EXTERNAL-WORKER-CONTINUATION': {
-              path: 'docs/implementation/PLAN_AMENDMENT_2026-08-11_EXTERNAL_WORKER_CONTINUATION.json',
-              approval: `.codex/runs/${value.run_id}/controller/authority-amendment-external-continuation-approval.json`,
-              paths: [
-                '.agents/skills/rushd-phase-orchestrator/SKILL.md',
-                '.agents/skills/rushd-phase-orchestrator/scripts/transition-self-test.mjs',
-                '.agents/skills/rushd-phase-orchestrator/scripts/transition-state.mjs',
-                '.agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs',
-                'docs/RUSHD_EXECUTION_PROTOCOL.md',
-                'docs/implementation/PLAN_AMENDMENT_2026-08-11_EXTERNAL_WORKER_CONTINUATION.json'
-              ],
-              planChange: 'none'
-            },
-            'RUSHD-20260811-SEALED-AUTHORITY-PHASE-COMMIT': {
-              path: 'docs/implementation/PLAN_AMENDMENT_2026-08-11_SEALED_AUTHORITY_PHASE_COMMIT.json',
-              approval: `.codex/runs/${value.run_id}/controller/authority-amendment-sealed-phase-commit-approval.json`,
-              paths: [
-                '.agents/skills/rushd-phase-orchestrator/SKILL.md',
-                '.agents/skills/rushd-phase-orchestrator/scripts/transition-self-test.mjs',
-                '.agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs',
-                '.agents/skills/rushd-phase-orchestrator/scripts/workflow-lib.mjs',
-                'docs/RUSHD_EXECUTION_PROTOCOL.md',
-                'docs/implementation/PLAN_AMENDMENT_2026-08-11_SEALED_AUTHORITY_PHASE_COMMIT.json'
-              ],
-              planChange: 'none'
-            }
-          };
-          const bootstrapPlan = JSON.parse(git('show', `${value.authority_commit_sha}:docs/implementation/phase-plan.json`));
-          const parentPlan = JSON.parse(git('show', `${parents[1]}:docs/implementation/phase-plan.json`));
-          const amendedPlan = JSON.parse(git('show', `${commit}:docs/implementation/phase-plan.json`));
-          const phasePlanIndex = bootstrapPlan.protected_paths.indexOf('docs/implementation/phase-plan.json');
-          const expectedProtected = [...bootstrapPlan.protected_paths];
-          expectedProtected.splice(phasePlanIndex + 1, 0, 'docs/implementation/PLAN_AMENDMENT_*.json');
-          const rule = amendmentRules[amendment.amendment_id];
-          const expectedPlan = rule?.planChange === 'protect-amendments' ? { ...bootstrapPlan, protected_paths: expectedProtected } : parentPlan;
-          const approvalPath = rule?.approval;
-          const approval = validateNested(approvalPath, 'rushd.authority-amendment-approval.v1');
-          const approvedManifest = approval ? validateNested(approval.candidate_manifest_path, 'rushd.patch-manifest.v1') : null;
-          const committedManifest = manifestForCommitRange(parents[1], commit);
-          if (!rule || amendment.schema !== 'rushd.plan-amendment.v1' || amendmentPaths[0] !== rule.path || amendment.founder_decision?.status !== 'approved' || amendment.founder_decision?.actor !== 'founder' || !isIsoUtc(amendment.founder_decision?.approved_at) || amendment.from_plan_version !== value.plan_version || amendment.to_plan_version !== value.plan_version || !sameJson([...changed].sort(), [...rule.paths].sort()) || !sameJson([...amendment.protected_paths_to_change].sort(), [...rule.paths].sort()) || !sameJson(amendedPlan, expectedPlan) || !subject.startsWith('Rushd authority: ') || approval?.run_id !== value.run_id || approval?.amendment_id !== amendment.amendment_id || !sameJson(committedManifest, approvedManifest)) fail(`Later workflow authority amendment is invalid, unreviewed, or differs from the exact approved candidate: ${commit}`);
+          requireSealedAuthorityCommit(commit, value.run_id, value.plan_version);
         } catch (error) {
           fail(`Could not validate later workflow authority amendment ${commit}: ${error.message}`);
         }

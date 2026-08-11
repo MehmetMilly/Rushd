@@ -1,0 +1,41 @@
+{
+  "schema": "rushd.plan-amendment.v1",
+  "amendment_id": "RUSHD-20260811-PHASE-COMMIT-SANDBOX-CONTINUATION",
+  "from_plan_version": "2026-08-10-final",
+  "to_plan_version": "2026-08-10-final",
+  "requested_at": "2026-08-11T17:05:00.000Z",
+  "requested_by_task_id": "019fe804-05b8-75a0-bc27-c75ff184967d",
+  "rationale": "Repair the proven phase-commit deadlock in which the same PASS-reviewed P00 task could not stage its exact reviewed paths because the mandatory App Server workspace-write sandbox protects Git metadata. Permit only a receipt-bound same-task commit continuation with the installed runtime's dangerFullAccess policy, while preserving the reviewed patch, task identity, attempt, gates, authority chain, and manager non-implementation boundary.",
+  "affected_phases": [
+    "P00",
+    "P01",
+    "P02",
+    "P03",
+    "P04",
+    "P05",
+    "P06",
+    "P07",
+    "P08",
+    "P09",
+    "P10",
+    "P11",
+    "P12",
+    "P13"
+  ],
+  "protected_paths_to_change": [
+    ".agents/skills/rushd-phase-orchestrator/SKILL.md",
+    ".agents/skills/rushd-phase-orchestrator/scripts/self-test.mjs",
+    ".agents/skills/rushd-phase-orchestrator/scripts/transition-self-test.mjs",
+    ".agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs",
+    ".agents/skills/rushd-phase-orchestrator/scripts/workflow-lib.mjs",
+    "docs/RUSHD_EXECUTION_PROTOCOL.md",
+    "docs/implementation/PLAN_AMENDMENT_2026-08-11_PHASE_COMMIT_SANDBOX_CONTINUATION.json"
+  ],
+  "safe_work_while_waiting": "Preserve P00 attempt 2 at passed_pending_commit with its unchanged patch, checkpoint, PASS review, sealed authority parent, and failed commit-turn receipt. Do not stage, commit, create another product writer, or launch P01 until this exact workflow-only amendment is independently reviewed and committed.",
+  "founder_decision": {
+    "status": "approved",
+    "actor": "founder",
+    "approved_at": "2026-08-11T17:05:00.000Z",
+    "exact_scope": "Under the founder's standing instruction to make the approved workflow continue without routine permission requests, authorize only a same-thread, same-session, same-phase, same-attempt commit continuation strictly after a preserved workspace-write Git-metadata blocker and completed PASS-review lifecycle. Bind dangerFullAccess to the exact PASS checkpoint, review, manifest, canonical sealed authority approval and parent, failed receipt, bounded prompt, canonical completed elevated-turn receipt, exact clean commit report, actual Git committer timestamp strictly inside the elevated lifecycle, and four commit-only actions. Preserve every acceptance gate and reject source editing, extra staging, history rewriting, publication, receipt substitution, missing lifecycle evidence, retroactive commit wrapping, or identity/hash/time drift."
+  }
+}

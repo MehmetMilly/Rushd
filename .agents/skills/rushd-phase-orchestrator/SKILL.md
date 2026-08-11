@@ -61,7 +61,19 @@ correction, commit, escalation, or final-audit prompt.
   the reviewed base or the exact tip of a sealed authority-only amendment chain descended
   from that base. In the latter case subtract that disjoint authority overlay and require
   the parent-to-commit product manifest to match the reviewed checkpoint byte-for-byte.
-  Verify exact checkpoint/review/receipt hashes, then append exactly one state record.
+  Verify exact checkpoint/review/receipt hashes, then append exactly one state record. If
+  and only if the same phase task first returns a preserved completed receipt proving that
+  `workspaceWrite` made `.git` read-only before staging, seal a
+  `rushd.phase-commit-sandbox-authorization.v1` and resume that same task with
+  `dangerFullAccess` for the four enumerated commit-only actions. Bind the authorization to
+  the exact prompt, PASS checkpoint/review, manifest, authority parent, failed receipt,
+  worker identity, and commit subject; reject every source edit, extra staged path, history
+  rewrite, task/attempt substitution, or publication action. Derive the prompt canonically,
+  require canonical task-root receipts and post-prerequisite timestamps, require the exact
+    enabling authority commit/approval, and cross-link the authorization plus its canonical
+    completed elevated-turn receipt and exact clean commit report to the actual phase commit
+    parent, subject, manifest, changed files, and actual Git committer time, strictly between
+    the elevated turn's creation and completion.
 - **Advance:** record the commit and immediately start the next fresh phase task.
 - **Escalate:** after two failed correction cycles, use one Sol-xhigh adjudicator.
 - **Remediate committed work:** seal the interrupted patch, use a clean remediation

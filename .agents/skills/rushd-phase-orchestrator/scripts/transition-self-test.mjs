@@ -432,7 +432,12 @@ try {
 
   for (const path of externalContinuationPaths) {
     mkdirSync(dirname(resolve(testRoot, path)), { recursive: true });
-    cpSync(resolve(sourceRoot, path), resolve(testRoot, path));
+    if (path === 'docs/implementation/PLAN_AMENDMENT_2026-08-11_EXTERNAL_WORKER_CONTINUATION.json') {
+      cpSync(resolve(sourceRoot, path), resolve(testRoot, path));
+    } else {
+      const historicalBytes = execFileSync('git', ['show', `HEAD^:${path}`], { cwd: sourceRoot });
+      writeFileSync(resolve(testRoot, path), Buffer.concat([historicalBytes, Buffer.from('\n// external-continuation synthetic authority fixture\n')]));
+    }
   }
   git('add', ...externalContinuationPaths);
   const secondCombined = JSON.parse(execFileSync(process.execPath, [resolve(sourceRoot, '.agents/skills/rushd-phase-orchestrator/scripts/compute-patch-hash.mjs'), authorityAmendmentSha], { cwd: testRoot, encoding: 'utf8' }));
@@ -588,7 +593,7 @@ try {
   writeFileSync(protocolPath, `${readFileSync(protocolPath, 'utf8')}\nunsealed synthetic authority overlay\n`);
   git('add', 'docs/RUSHD_EXECUTION_PROTOCOL.md');
   git('commit', '--quiet', '-m', 'Rushd authority: unsealed synthetic overlay');
-  expectRejected('unsealed authority overlay before phase commit', node([validator, statePath]), /Later workflow authority/);
+  expectRejected('unsealed authority overlay before phase commit', node([validator, statePath]), /later workflow authority/i);
 
   git('checkout', '--quiet', '--detach', externalAuthoritySha);
   git('add', phasePatchPath);
