@@ -1,0 +1,27 @@
+{
+  "schema": "rushd.plan-amendment.v1",
+  "amendment_id": "RUSHD-20260811-EXTERNAL-WORKER-CONTINUATION",
+  "from_plan_version": "2026-08-10-final",
+  "to_plan_version": "2026-08-10-final",
+  "requested_at": "2026-08-11T04:30:00.000Z",
+  "requested_by_task_id": "019fe804-05b8-75a0-bc27-c75ff184967d",
+  "rationale": "Repair the proven P00 orchestration deadlock after a preserved successful worker turn could not produce its checkpoint solely because the exact pinned Chromium runtime was killed inside the worker sandbox. Permit one founder-attested, journaled continuation in the same worker thread, phase, attempt, base, routing, and product patch while the manager supplies the authorized localhost-only pinned runtime outside that sandbox.",
+  "affected_phases": [
+    "P00"
+  ],
+  "protected_paths_to_change": [
+    ".agents/skills/rushd-phase-orchestrator/SKILL.md",
+    ".agents/skills/rushd-phase-orchestrator/scripts/transition-self-test.mjs",
+    ".agents/skills/rushd-phase-orchestrator/scripts/transition-state.mjs",
+    ".agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs",
+    "docs/RUSHD_EXECUTION_PROTOCOL.md",
+    "docs/implementation/PLAN_AMENDMENT_2026-08-11_EXTERNAL_WORKER_CONTINUATION.json"
+  ],
+  "safe_work_while_waiting": "Preserve the P00 attempt-2 patch, every prior task receipt and event, the human gate, and revision-7 state; do not create a second writer, change the phase attempt, or accept a checkpoint until the exact amendment is independently reviewed and committed.",
+  "founder_decision": {
+    "status": "approved",
+    "actor": "founder",
+    "approved_at": "2026-08-11T04:30:00.000Z",
+    "exact_scope": "For gate EXTERNAL-P00-PINNED-CHROMIUM, select Option 1 and permit only the workflow authority needed to resume the same P00 task and attempt with the manager-verified lockfile-pinned Playwright Chromium 151.0.7922.34 exposed through a localhost-only debugging endpoint using synthetic P00 data. Preserve all prior and follow-up lifecycle artifacts and hashes, the base, product patch, acceptance criteria, review requirements, and every other human gate."
+  }
+}

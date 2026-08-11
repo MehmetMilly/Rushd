@@ -215,7 +215,7 @@ if (state.status === 'worker_running' && request.to === 'ready_for_review') {
   const worker = receipt(changes.active_worker_receipt_path, state.remediation ? ['remediation_worker'] : ['phase_worker'], 'completed');
   requireCompletedChild(worker, state.active_worker_receipt_path, 'Worker');
   if (worker.thread_id !== state.active_worker) throw new Error('Checkpoint worker identity changed');
-  for (const gate of checkpoint.mandatory_human_gates ?? []) if (!journalHasEvidence(gate.attestation_path, gate.attestation_sha256, 'resume_human')) throw new Error(`Checkpoint mandatory gate lacks a matching journaled human resume: ${gate.gate_id}`);
+  for (const gate of checkpoint.mandatory_human_gates ?? []) if (!journalHasEvidence(gate.attestation_path, gate.attestation_sha256, 'resume_human') && !journalHasEvidence(gate.attestation_path, gate.attestation_sha256, 'resume_external_worker')) throw new Error(`Checkpoint mandatory gate lacks a matching journaled human resume: ${gate.gate_id}`);
   requireEvidence(request, [changes.checkpoint_path, checkpoint.patch_manifest_path, checkpoint.worker_receipt_path, ...receiptProtocolEvidence(worker)]);
 }
 
@@ -397,16 +397,30 @@ if (request.to === 'human_required') {
 }
 
 if (state.status === 'human_required' && request.to !== 'failed') {
-  expectedKind = state.human_required.gate_id === 'PUBLICATION' ? 'resume_publication' : 'resume_human';
+  const externalWorkerContinuation = request.transition_kind === 'resume_external_worker';
+  expectedKind = state.human_required.gate_id === 'PUBLICATION' ? 'resume_publication' : externalWorkerContinuation ? 'resume_external_worker' : 'resume_human';
   const keys = ['human_attestation_path', 'human_attestation_sha256', 'human_required', 'resume_state', 'active_worker', 'active_worker_receipt_path', 'active_reviewer', 'active_reviewer_receipt_path', 'active_final_audit_id', 'remediation'];
   if (expectedKind === 'resume_publication') keys.push('publication_authority');
+  if (externalWorkerContinuation) keys.push('external_worker_continuation_path', 'external_worker_continuation_sha256');
   requireKeys(changes, keys);
   if (request.to !== state.resume_state || changes.human_required !== null || changes.resume_state !== null) throw new Error('Human gate must resume its recorded state');
   const attestation = artifact(changes.human_attestation_path, 'rushd.human-attestation.v1');
   if (!isSha256(changes.human_attestation_sha256) || changes.human_attestation_sha256 !== sha256File(changes.human_attestation_path)) throw new Error('Human attestation hash mismatch');
   if (attestation.run_id !== state.run_id || attestation.phase_id !== state.human_required.phase_id || attestation.gate_id !== state.human_required.gate_id || attestation.gate_kind !== state.human_required.gate_kind || attestation.gate_request_sha256 !== state.human_required.request_sha256 || attestation.requirement !== state.human_required.exact_request || attestation.result !== 'pass') throw new Error('Human attestation does not satisfy the recorded gate');
   const paused = state.paused_tasks;
-  for (const key of ['active_worker', 'active_worker_receipt_path', 'active_reviewer', 'active_reviewer_receipt_path', 'active_final_audit_id']) if (changes[key] !== paused[key]) throw new Error(`Human resume changed paused task field ${key}`);
+  if (externalWorkerContinuation) {
+    if (state.human_required.gate_id !== 'EXTERNAL-P00-PINNED-CHROMIUM' || state.current_phase !== 'P00' || state.resume_state !== 'worker_running') throw new Error('External worker continuation is limited to the exact authorized P00 runtime gate');
+    const continuation = artifact(changes.external_worker_continuation_path, 'rushd.external-worker-continuation.v1');
+    if (!isSha256(changes.external_worker_continuation_sha256) || changes.external_worker_continuation_sha256 !== sha256File(changes.external_worker_continuation_path)) throw new Error('External worker continuation record hash mismatch');
+    const followupCreated = receipt(changes.active_worker_receipt_path, ['phase_worker'], 'created');
+    const followupCompleted = receipt(continuation.followup_completed_receipt_path, ['phase_worker'], 'completed');
+    if (continuation.run_id !== state.run_id || continuation.phase_id !== state.current_phase || continuation.attempt !== state.current_attempt || continuation.thread_id !== paused.active_worker || continuation.base_sha !== state.base_sha || continuation.gate_id !== state.human_required.gate_id || continuation.gate_request_sha256 !== state.human_required.request_sha256 || continuation.human_attestation_path !== changes.human_attestation_path || continuation.prior_created_receipt_path !== paused.active_worker_receipt_path || continuation.followup_created_receipt_path !== changes.active_worker_receipt_path) throw new Error('External worker continuation changed gate, worker, phase, attempt, base, or receipt identity');
+    if (changes.active_worker !== paused.active_worker || followupCreated.thread_id !== paused.active_worker || followupCompleted.thread_id !== paused.active_worker || changes.active_reviewer !== paused.active_reviewer || changes.active_reviewer_receipt_path !== paused.active_reviewer_receipt_path || changes.active_final_audit_id !== paused.active_final_audit_id) throw new Error('External worker continuation changed a paused task identity');
+    requireCompletedChild(followupCompleted, changes.active_worker_receipt_path, 'External continuation worker');
+    requireEvidence(request, [changes.external_worker_continuation_path, ...continuation.preserved_evidence_paths, ...receiptProtocolEvidence(followupCompleted)]);
+  } else {
+    for (const key of ['active_worker', 'active_worker_receipt_path', 'active_reviewer', 'active_reviewer_receipt_path', 'active_final_audit_id']) if (changes[key] !== paused[key]) throw new Error(`Human resume changed paused task field ${key}`);
+  }
   if (state.remediation) {
     const restored = { ...state.remediation };
     restored.status = state.remediation.paused_status;
@@ -625,7 +639,7 @@ if (request.to === 'failed') {
 
 if (!expectedKind || request.transition_kind !== expectedKind) throw new Error(`Expected transition_kind ${expectedKind ?? 'none'} for ${state.status} -> ${request.to}`);
 
-const transientKeys = ['human_attestation_path', 'human_attestation_sha256', 'phase_commit_record', 'recovery_record_path', 'recovery_record_sha256'];
+const transientKeys = ['human_attestation_path', 'human_attestation_sha256', 'phase_commit_record', 'recovery_record_path', 'recovery_record_sha256', 'external_worker_continuation_path', 'external_worker_continuation_sha256'];
 const persistedChanges = { ...changes };
 for (const key of transientKeys) delete persistedChanges[key];
 const previousHash = sha256Bytes(stateBytes);

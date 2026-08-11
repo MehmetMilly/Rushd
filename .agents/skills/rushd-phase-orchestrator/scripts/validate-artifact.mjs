@@ -351,6 +351,88 @@ switch (value.schema) {
     break;
   }
 
+  case 'rushd.external-runtime-evidence.v1': {
+    for (const key of ['run_id', 'phase_id', 'gate_id', 'browser_name', 'browser_version', 'binary_path', 'endpoint_host', 'transport', 'version_proof_path', 'version_proof_sha256', 'recorded_at']) requireString(value, key);
+    if (!Number.isInteger(value.endpoint_port) || value.endpoint_port < 1024 || value.endpoint_port > 65535) fail('External runtime endpoint_port is invalid');
+    if (value.browser_name !== 'Playwright Chromium' || value.browser_version !== '151.0.7922.34' || value.endpoint_host !== '127.0.0.1' || value.transport !== 'cdp' || value.synthetic_data_only !== true || value.launched_outside_worker_sandbox !== true) fail('External runtime evidence weakens the authorized pinned-browser boundary');
+    if (!isAbsolute(value.binary_path) || !isIsoUtc(value.recorded_at)) fail('External runtime binary path/time is invalid');
+    if (template) break;
+    if (!validRunId(value.run_id) || value.phase_id !== 'P00' || value.gate_id !== 'EXTERNAL-P00-PINNED-CHROMIUM') fail('External runtime evidence is not bound to the authorized P00 gate');
+    requireArtifactHash(value.version_proof_path, value.version_proof_sha256, 'External runtime version proof');
+    try {
+      const proof = loadJson(value.version_proof_path);
+      if (proof.Browser !== 'HeadlessChrome/151.0.7922.34' || typeof proof.webSocketDebuggerUrl !== 'string' || !proof.webSocketDebuggerUrl.startsWith(`ws://127.0.0.1:${value.endpoint_port}/`)) fail('External runtime version proof does not show the exact localhost-only pinned browser');
+    } catch (error) { fail(`External runtime version proof is invalid: ${error.message}`); }
+    break;
+  }
+
+  case 'rushd.external-worker-continuation.v1': {
+    for (const key of ['run_id', 'phase_id', 'classification', 'gate_id', 'gate_request_sha256', 'thread_id', 'base_sha', 'patch_sha256', 'human_attestation_path', 'human_attestation_sha256', 'prior_authority_amendment_approval_path', 'prior_authority_amendment_approval_sha256', 'prior_authority_amendment_commit_sha', 'authority_amendment_approval_path', 'authority_amendment_approval_sha256', 'authority_amendment_commit_sha', 'prior_created_receipt_path', 'prior_created_receipt_sha256', 'prior_completed_receipt_path', 'prior_completed_receipt_sha256', 'prior_turn_completed_path', 'prior_turn_completed_sha256', 'followup_created_receipt_path', 'followup_created_receipt_sha256', 'followup_completed_receipt_path', 'followup_completed_receipt_sha256', 'runtime_evidence_path', 'runtime_evidence_sha256', 'patch_manifest_path', 'patch_manifest_sha256', 'continued_at']) requireString(value, key);
+    requireArray(value, 'preserved_evidence_paths');
+    requireObject(value, 'evidence_hashes');
+    if (!Number.isInteger(value.attempt) || value.attempt < 1) fail('External continuation attempt must be positive');
+    if (value.classification !== 'founder_attested_external_runtime') fail('External continuation classification is not authorized');
+    if (template) break;
+    if (!validRunId(value.run_id) || value.phase_id !== 'P00' || value.gate_id !== 'EXTERNAL-P00-PINNED-CHROMIUM' || !isSha256(value.gate_request_sha256) || !gitCommitExists(value.base_sha) || !isSha256(value.patch_sha256) || !isIsoUtc(value.continued_at)) fail('External continuation run/gate/base/hash/time is invalid');
+    const attestation = validateNested(value.human_attestation_path, 'rushd.human-attestation.v1');
+    const priorApproval = validateNested(value.prior_authority_amendment_approval_path, 'rushd.authority-amendment-approval.v1');
+    const approval = validateNested(value.authority_amendment_approval_path, 'rushd.authority-amendment-approval.v1');
+    const priorCreated = validateNested(value.prior_created_receipt_path, 'rushd.task-receipt.v1');
+    const priorCompleted = validateNested(value.prior_completed_receipt_path, 'rushd.task-receipt.v1');
+    const followupCreated = validateNested(value.followup_created_receipt_path, 'rushd.task-receipt.v1');
+    const followupCompleted = validateNested(value.followup_completed_receipt_path, 'rushd.task-receipt.v1');
+    const runtime = validateNested(value.runtime_evidence_path, 'rushd.external-runtime-evidence.v1');
+    const manifest = validateNested(value.patch_manifest_path, 'rushd.patch-manifest.v1');
+    for (const [path, hash, label] of [
+      [value.human_attestation_path, value.human_attestation_sha256, 'External continuation human attestation'],
+      [value.prior_authority_amendment_approval_path, value.prior_authority_amendment_approval_sha256, 'Prior authority approval'],
+      [value.authority_amendment_approval_path, value.authority_amendment_approval_sha256, 'External continuation authority approval'],
+      [value.prior_created_receipt_path, value.prior_created_receipt_sha256, 'Prior worker created receipt'],
+      [value.prior_completed_receipt_path, value.prior_completed_receipt_sha256, 'Prior worker completed receipt'],
+      [value.prior_turn_completed_path, value.prior_turn_completed_sha256, 'Prior worker turn completion'],
+      [value.followup_created_receipt_path, value.followup_created_receipt_sha256, 'Follow-up worker created receipt'],
+      [value.followup_completed_receipt_path, value.followup_completed_receipt_sha256, 'Follow-up worker completed receipt'],
+      [value.runtime_evidence_path, value.runtime_evidence_sha256, 'External runtime evidence'],
+      [value.patch_manifest_path, value.patch_manifest_sha256, 'External continuation patch manifest']
+    ]) requireArtifactHash(path, hash, label);
+    const workerRoles = ['phase_worker', 'remediation_worker'];
+    if (priorCreated && (!workerRoles.includes(priorCreated.role) || priorCreated.status !== 'created')) fail('Prior continuation receipt must be an immutable worker created receipt');
+    if (priorCompleted && (!workerRoles.includes(priorCompleted.role) || priorCompleted.status !== 'completed' || priorCompleted.source_diff_status !== 'explained' || priorCompleted.lifecycle_parent_path !== value.prior_created_receipt_path || priorCompleted.lifecycle_parent_sha256 !== value.prior_created_receipt_sha256 || priorCompleted.turn_completed_path !== value.prior_turn_completed_path)) fail('Prior completed receipt is substituted or does not extend the paused created receipt');
+    if (followupCreated && (!workerRoles.includes(followupCreated.role) || followupCreated.status !== 'created')) fail('Follow-up continuation receipt must be an immutable worker created receipt');
+    if (followupCompleted && (!workerRoles.includes(followupCompleted.role) || followupCompleted.status !== 'completed' || followupCompleted.source_diff_status !== 'explained' || followupCompleted.lifecycle_parent_path !== value.followup_created_receipt_path || followupCompleted.lifecycle_parent_sha256 !== value.followup_created_receipt_sha256)) fail('Follow-up completion is substituted or does not extend its created receipt');
+    const identityKeys = ['run_id', 'role', 'phase_id', 'attempt', 'thread_id', 'session_id', 'model', 'thinking', 'environment', 'adapter', 'thread_create_method', 'source_sha'];
+    if (priorCreated && followupCreated && identityKeys.some((key) => !sameJson(priorCreated[key], followupCreated[key]))) fail('External continuation changed worker thread, phase, attempt, role, source, or routing identity');
+    if (priorCreated && (priorCreated.run_id !== value.run_id || priorCreated.phase_id !== value.phase_id || priorCreated.attempt !== value.attempt || priorCreated.thread_id !== value.thread_id || priorCreated.source_sha !== value.base_sha)) fail('External continuation does not match its paused worker identity');
+    if (followupCreated && followupCreated.turn_id === priorCreated?.turn_id) fail('External continuation must use a distinct turn in the same task');
+    if (manifest && (manifest.base_sha !== value.base_sha || manifest.patch_sha256 !== value.patch_sha256)) fail('External continuation changed the worker base or product patch');
+    if (attestation && (attestation.run_id !== value.run_id || attestation.phase_id !== value.phase_id || attestation.gate_id !== value.gate_id || attestation.gate_request_sha256 !== value.gate_request_sha256 || attestation.actor !== 'founder' || attestation.result !== 'pass')) fail('External continuation lacks the exact founder-attested gate');
+    if (runtime && (runtime.run_id !== value.run_id || runtime.phase_id !== value.phase_id || runtime.gate_id !== value.gate_id)) fail('External runtime evidence is not bound to the continuation');
+    try {
+      const priorTurn = loadJson(value.prior_turn_completed_path);
+      const finalMessages = priorTurn.params?.turn?.items?.filter((item) => item?.type === 'agentMessage' && item?.phase === 'final_answer').map((item) => item.text) ?? [];
+      if (priorTurn.method !== 'turn/completed' || priorTurn.params?.threadId !== value.thread_id || priorTurn.params?.turn?.id !== priorCreated?.turn_id || priorTurn.params?.turn?.status !== 'completed' || priorTurn.params?.turn?.error !== null || !finalMessages.some((text) => /pinned Chromium/i.test(text) && /sandbox/i.test(text) && /(?:no\b[^.]*\bcheckpoint was written|checkpoint was not written|not ready for review)/i.test(text))) fail('External continuation requires the preserved completed no-checkpoint sandbox-runtime blocker');
+    } catch (error) { fail(`Prior worker completion evidence is invalid: ${error.message}`); }
+    try {
+      const priorParents = git('rev-list', '--parents', '-n', '1', value.prior_authority_amendment_commit_sha).trim().split(/\s+/);
+      const parents = git('rev-list', '--parents', '-n', '1', value.authority_amendment_commit_sha).trim().split(/\s+/);
+      const priorManifest = priorApproval ? validateNested(priorApproval.candidate_manifest_path, 'rushd.patch-manifest.v1') : null;
+      const amendmentManifest = approval ? validateNested(approval.candidate_manifest_path, 'rushd.patch-manifest.v1') : null;
+      if (priorParents.length !== 2 || priorParents[1] !== value.base_sha || priorApproval?.run_id !== value.run_id || priorApproval?.amendment_id !== 'RUSHD-20260811-WORKER-TURN-RECOVERY' || !sameJson(manifestForCommitRange(value.base_sha, value.prior_authority_amendment_commit_sha), priorManifest)) fail('Prior worker-recovery authority commit is not the exact sealed direct child of the worker base');
+      if (parents.length !== 2 || parents[1] !== value.prior_authority_amendment_commit_sha || approval?.run_id !== value.run_id || approval?.amendment_id !== 'RUSHD-20260811-EXTERNAL-WORKER-CONTINUATION' || !sameJson(manifestForCommitRange(value.prior_authority_amendment_commit_sha, value.authority_amendment_commit_sha), amendmentManifest)) fail('External-continuation authority commit is not the exact sealed child of the prior amendment');
+      const prerequisites = [attestation?.performed_at, priorApproval?.approved_at, approval?.approved_at, runtime?.recorded_at, git('show', '-s', '--format=%cI', value.prior_authority_amendment_commit_sha).trim(), git('show', '-s', '--format=%cI', value.authority_amendment_commit_sha).trim()];
+      if (!isIsoUtc(followupCreated?.created_at) || !isIsoUtc(followupCompleted?.completed_at) || prerequisites.some((time) => typeof time !== 'string' || Number.isNaN(Date.parse(time))) || prerequisites.some((time) => Date.parse(time) > Date.parse(followupCreated.created_at)) || Date.parse(followupCompleted.completed_at) < Date.parse(followupCreated.created_at) || Date.parse(value.continued_at) < Date.parse(followupCompleted.completed_at)) fail('External continuation follow-up predates its founder, authority, runtime, or lifecycle prerequisite');
+      const committedAuthority = manifestForCommitRange(value.base_sha, value.authority_amendment_commit_sha);
+      const authorityPaths = new Set(committedAuthority.files.map((file) => file.path));
+      const current = JSON.parse(execFileSync(process.execPath, [resolve(import.meta.dirname, 'compute-patch-hash.mjs'), value.base_sha], { encoding: 'utf8' }));
+      const expectedFiles = [...committedAuthority.files, ...(manifest?.files ?? [])].sort((a, b) => Buffer.from(a.path).compare(Buffer.from(b.path)));
+      if (gitHead() !== value.authority_amendment_commit_sha || manifest?.files?.some((file) => authorityPaths.has(file.path)) || !sameJson(current.files, expectedFiles)) fail('External continuation product patch plus sealed authority chain does not match the current checkout');
+    } catch (error) { fail(`External continuation authority chain is invalid: ${error.message}`); }
+    const requiredEvidence = [value.human_attestation_path, value.prior_authority_amendment_approval_path, value.authority_amendment_approval_path, value.prior_created_receipt_path, value.prior_completed_receipt_path, value.prior_turn_completed_path, value.followup_created_receipt_path, value.followup_completed_receipt_path, value.runtime_evidence_path, value.patch_manifest_path];
+    if (!unique(value.preserved_evidence_paths) || requiredEvidence.some((path) => !value.preserved_evidence_paths.includes(path))) fail('External continuation omits required immutable evidence');
+    requireEvidence(value.preserved_evidence_paths, null, value.evidence_hashes, 'External continuation evidence');
+    break;
+  }
+
   case 'rushd.authority-amendment-review.v1': {
     for (const key of ['run_id', 'amendment_id', 'candidate_patch_sha256', 'verdict', 'confidence', 'reviewer_source_diff', 'reviewed_at', 'reviewer_receipt_path']) requireString(value, key);
     for (const key of ['checks', 'commands', 'findings', 'risks']) requireArray(value, key);
@@ -506,16 +588,13 @@ switch (value.schema) {
           const output = execFileSync(process.execPath, [resolve(import.meta.dirname, 'compute-patch-hash.mjs'), value.base_sha], { encoding: 'utf8' });
           const current = JSON.parse(output);
           if (current.patch_sha256 !== value.patch_sha256 || !sameJson(current.files, manifest.files)) {
-            const approvalPath = `.codex/runs/${value.run_id}/controller/authority-amendment-approval.json`;
-            const approval = validateNested(approvalPath, 'rushd.authority-amendment-approval.v1');
-            const authorityManifest = approval ? validateNested(approval.candidate_manifest_path, 'rushd.patch-manifest.v1') : null;
             const head = gitHead();
-            const parents = git('rev-list', '--parents', '-n', '1', head).trim().split(/\s+/);
-            const committedAuthority = parents.length === 2 ? manifestForCommitRange(value.base_sha, head) : null;
-            const authorityPaths = new Set(authorityManifest?.files?.map((file) => file.path) ?? []);
+            const committedAuthority = manifestForCommitRange(value.base_sha, head);
+            const authorityPaths = new Set(committedAuthority.files.map((file) => file.path));
             const disjoint = manifest.files.every((file) => !authorityPaths.has(file.path));
-            const expectedFiles = [...(authorityManifest?.files ?? []), ...manifest.files].sort((a, b) => Buffer.from(a.path).compare(Buffer.from(b.path)));
-            if (parents[1] !== value.base_sha || !sameJson(committedAuthority, authorityManifest) || !disjoint || !sameJson(current.files, expectedFiles)) fail('Current working patch no longer matches checkpoint plus sealed authority amendment');
+            const authorityOnly = committedAuthority.files.length > 0 && committedAuthority.files.every((file) => matchesAny(file.path, AUTHORITY_PATHS));
+            const expectedFiles = [...committedAuthority.files, ...manifest.files].sort((a, b) => Buffer.from(a.path).compare(Buffer.from(b.path)));
+            if (!authorityOnly || !disjoint || !sameJson(current.files, expectedFiles)) fail('Current working patch no longer matches checkpoint plus sealed authority amendment chain');
           }
         } catch (error) { fail(`Could not recompute working patch: ${error.message}`); }
       }
@@ -770,27 +849,49 @@ switch (value.schema) {
         try {
           const amendment = JSON.parse(git('show', `${commit}:${amendmentPaths[0]}`));
           const subject = git('show', '-s', '--format=%s', commit).trim();
-          const workerRecoveryPaths = [
-            '.agents/skills/rushd-phase-orchestrator/SKILL.md',
-            '.agents/skills/rushd-phase-orchestrator/scripts/transition-self-test.mjs',
-            '.agents/skills/rushd-phase-orchestrator/scripts/transition-state.mjs',
-            '.agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs',
-            '.agents/skills/rushd-phase-orchestrator/scripts/workflow-lib.mjs',
-            'docs/RUSHD_EXECUTION_PROTOCOL.md',
-            'docs/implementation/PLAN_AMENDMENT_2026-08-11_WORKER_TURN_RECOVERY.json',
-            'docs/implementation/phase-plan.json'
-          ];
+          const amendmentRules = {
+            'RUSHD-20260811-WORKER-TURN-RECOVERY': {
+              path: 'docs/implementation/PLAN_AMENDMENT_2026-08-11_WORKER_TURN_RECOVERY.json',
+              approval: `.codex/runs/${value.run_id}/controller/authority-amendment-approval.json`,
+              paths: [
+                '.agents/skills/rushd-phase-orchestrator/SKILL.md',
+                '.agents/skills/rushd-phase-orchestrator/scripts/transition-self-test.mjs',
+                '.agents/skills/rushd-phase-orchestrator/scripts/transition-state.mjs',
+                '.agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs',
+                '.agents/skills/rushd-phase-orchestrator/scripts/workflow-lib.mjs',
+                'docs/RUSHD_EXECUTION_PROTOCOL.md',
+                'docs/implementation/PLAN_AMENDMENT_2026-08-11_WORKER_TURN_RECOVERY.json',
+                'docs/implementation/phase-plan.json'
+              ],
+              planChange: 'protect-amendments'
+            },
+            'RUSHD-20260811-EXTERNAL-WORKER-CONTINUATION': {
+              path: 'docs/implementation/PLAN_AMENDMENT_2026-08-11_EXTERNAL_WORKER_CONTINUATION.json',
+              approval: `.codex/runs/${value.run_id}/controller/authority-amendment-external-continuation-approval.json`,
+              paths: [
+                '.agents/skills/rushd-phase-orchestrator/SKILL.md',
+                '.agents/skills/rushd-phase-orchestrator/scripts/transition-self-test.mjs',
+                '.agents/skills/rushd-phase-orchestrator/scripts/transition-state.mjs',
+                '.agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs',
+                'docs/RUSHD_EXECUTION_PROTOCOL.md',
+                'docs/implementation/PLAN_AMENDMENT_2026-08-11_EXTERNAL_WORKER_CONTINUATION.json'
+              ],
+              planChange: 'none'
+            }
+          };
           const bootstrapPlan = JSON.parse(git('show', `${value.authority_commit_sha}:docs/implementation/phase-plan.json`));
+          const parentPlan = JSON.parse(git('show', `${parents[1]}:docs/implementation/phase-plan.json`));
           const amendedPlan = JSON.parse(git('show', `${commit}:docs/implementation/phase-plan.json`));
           const phasePlanIndex = bootstrapPlan.protected_paths.indexOf('docs/implementation/phase-plan.json');
           const expectedProtected = [...bootstrapPlan.protected_paths];
           expectedProtected.splice(phasePlanIndex + 1, 0, 'docs/implementation/PLAN_AMENDMENT_*.json');
-          const expectedPlan = { ...bootstrapPlan, protected_paths: expectedProtected };
-          const approvalPath = `.codex/runs/${value.run_id}/controller/authority-amendment-approval.json`;
+          const rule = amendmentRules[amendment.amendment_id];
+          const expectedPlan = rule?.planChange === 'protect-amendments' ? { ...bootstrapPlan, protected_paths: expectedProtected } : parentPlan;
+          const approvalPath = rule?.approval;
           const approval = validateNested(approvalPath, 'rushd.authority-amendment-approval.v1');
           const approvedManifest = approval ? validateNested(approval.candidate_manifest_path, 'rushd.patch-manifest.v1') : null;
           const committedManifest = manifestForCommitRange(parents[1], commit);
-          if (amendment.schema !== 'rushd.plan-amendment.v1' || amendment.amendment_id !== 'RUSHD-20260811-WORKER-TURN-RECOVERY' || amendmentPaths[0] !== 'docs/implementation/PLAN_AMENDMENT_2026-08-11_WORKER_TURN_RECOVERY.json' || amendment.founder_decision?.status !== 'approved' || amendment.founder_decision?.actor !== 'founder' || !isIsoUtc(amendment.founder_decision?.approved_at) || amendment.from_plan_version !== value.plan_version || amendment.to_plan_version !== value.plan_version || !sameJson([...changed].sort(), [...workerRecoveryPaths].sort()) || !sameJson([...amendment.protected_paths_to_change].sort(), [...workerRecoveryPaths].sort()) || !sameJson(amendedPlan, expectedPlan) || !subject.startsWith('Rushd authority: ') || approval?.run_id !== value.run_id || approval?.amendment_id !== amendment.amendment_id || !sameJson(committedManifest, approvedManifest)) fail(`Later workflow authority amendment is invalid, unreviewed, or differs from the exact approved candidate: ${commit}`);
+          if (!rule || amendment.schema !== 'rushd.plan-amendment.v1' || amendmentPaths[0] !== rule.path || amendment.founder_decision?.status !== 'approved' || amendment.founder_decision?.actor !== 'founder' || !isIsoUtc(amendment.founder_decision?.approved_at) || amendment.from_plan_version !== value.plan_version || amendment.to_plan_version !== value.plan_version || !sameJson([...changed].sort(), [...rule.paths].sort()) || !sameJson([...amendment.protected_paths_to_change].sort(), [...rule.paths].sort()) || !sameJson(amendedPlan, expectedPlan) || !subject.startsWith('Rushd authority: ') || approval?.run_id !== value.run_id || approval?.amendment_id !== amendment.amendment_id || !sameJson(committedManifest, approvedManifest)) fail(`Later workflow authority amendment is invalid, unreviewed, or differs from the exact approved candidate: ${commit}`);
         } catch (error) {
           fail(`Could not validate later workflow authority amendment ${commit}: ${error.message}`);
         }

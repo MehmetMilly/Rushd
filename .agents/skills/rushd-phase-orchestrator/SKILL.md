@@ -44,6 +44,15 @@ correction, commit, escalation, or final-audit prompt.
   Pin the reviewed recovery-amendment commit and prove the live checkout is exactly its
   disjoint authority delta plus the worker's unchanged preserved patch. Validate the
   checkpoint through the same overlay separation before review.
+- **Resume an authorized external-runtime gate:** only for
+  `EXTERNAL-P00-PINNED-CHROMIUM`, require the exact founder attestation, preserve the
+  completed no-checkpoint sandbox blocker, and resume the same P00 thread/attempt after the
+  manager exposes Playwright Chromium 151.0.7922.34 at a localhost-only CDP endpoint with
+  synthetic data. Seal the follow-up created/completed lifecycle, pinned-runtime proof,
+  unchanged base, phase manifest, and both independently approved authority commits in a
+  `rushd.external-worker-continuation.v1` record, then use only the journaled
+  `resume_external_worker` transition. It may rotate the paused worker receipt but may not
+  change the thread, phase, attempt, routing, acceptance criteria, or any other gate.
 - **Commit a workflow amendment:** require a fresh isolated unqualified review PASS, seal
   its unique candidate manifest and completed reviewer receipt in the canonical
   `rushd.authority-amendment-approval.v1` record, and prove the committed manifest is
@@ -112,7 +121,8 @@ node .agents/skills/rushd-phase-orchestrator/scripts/transition-self-test.mjs
 ```
 
 The first covers artifact/path/gate/correction policies and invokes the second; the second
-is also runnable directly for the complete human pause/resume and journal-chain cases.
+is also runnable directly for the complete human pause/resume, authorized external-runtime
+continuation, adversarial rejection, and journal-chain cases.
 
 Every transition request uses a canonical `transition_kind`, a strict edge-specific change
 set, non-empty evidence, and evidence hashes. Do not hand-edit state or journal. The

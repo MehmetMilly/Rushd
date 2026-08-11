@@ -250,6 +250,29 @@ before. Checkpoint validation applies the same sealed-authority overlay separati
 comparing the unchanged phase manifest; review, acceptance, correction, and commit gates
 are unchanged.
 
+### Founder-attested external-runtime continuation
+
+The one gate `EXTERNAL-P00-PINNED-CHROMIUM` may use `transition_kind:
+resume_external_worker` only after the founder selects the recorded safe option and a
+separate authority-only amendment is independently reviewed, sealed, and committed. This
+does not generalize external execution. It permits the manager to expose the exact
+lockfile-pinned Playwright Chromium 151.0.7922.34 outside the worker sandbox at a
+localhost-only CDP endpoint using synthetic P00 data, then start one new turn in the same
+P00 task, phase, attempt, base, model, effort, sandbox identity, and role.
+
+The manager preserves the prior created/completed receipt and its successful
+`turn/completed` final message proving that no checkpoint was produced solely because the
+pinned browser was killed in the sandbox. After the follow-up completes, the manager seals
+the exact founder attestation, both worker lifecycles, pinned browser/version and endpoint
+proof, unchanged-base phase manifest, prior authority approval/commit, new authority
+approval/commit, and every protocol artifact in a validated
+`rushd.external-worker-continuation.v1` record. The journal transition may rotate only the
+paused worker receipt to that follow-up created receipt. Cross-thread, cross-attempt,
+unattested or mismatched gates, non-canonical runtime, receipt substitution, hash or patch
+drift, authority-chain substitution, or any other state/gate weakening is rejected. The
+ordinary full P00 gate, checkpoint, fresh independent review, and commit rules remain
+unchanged.
+
 ## 5. Checkpoint contract
 
 Before requesting review, the implementer writes a checkpoint matching

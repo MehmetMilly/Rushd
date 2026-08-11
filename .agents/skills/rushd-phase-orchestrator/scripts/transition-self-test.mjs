@@ -63,12 +63,22 @@ try {
     'docs/implementation/PLAN_AMENDMENT_2026-08-11_WORKER_TURN_RECOVERY.json',
     'docs/implementation/phase-plan.json'
   ];
+  const externalContinuationPaths = [
+    '.agents/skills/rushd-phase-orchestrator/SKILL.md',
+    '.agents/skills/rushd-phase-orchestrator/scripts/transition-self-test.mjs',
+    '.agents/skills/rushd-phase-orchestrator/scripts/transition-state.mjs',
+    '.agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs',
+    'docs/RUSHD_EXECUTION_PROTOCOL.md',
+    'docs/implementation/PLAN_AMENDMENT_2026-08-11_EXTERNAL_WORKER_CONTINUATION.json'
+  ];
+  rmSync(resolve(testRoot, 'docs/implementation/PLAN_AMENDMENT_2026-08-11_EXTERNAL_WORKER_CONTINUATION.json'), { force: true });
   candidateRoot = mkdtempSync(join(tmpdir(), 'rushd-authority-candidate-'));
   for (const path of amendmentPaths) {
     const source = resolve(sourceRoot, path);
     if (existsSync(source)) {
       mkdirSync(dirname(resolve(candidateRoot, path)), { recursive: true });
-      cpSync(source, resolve(candidateRoot, path));
+      if (externalContinuationPaths.includes(path)) writeFileSync(resolve(candidateRoot, path), execFileSync('git', ['show', `HEAD^:${path}`], { cwd: sourceRoot }));
+      else cpSync(source, resolve(candidateRoot, path));
     }
     if (path === 'docs/implementation/PLAN_AMENDMENT_2026-08-11_WORKER_TURN_RECOVERY.json') {
       rmSync(resolve(testRoot, path), { force: true });
@@ -200,7 +210,7 @@ try {
   });
   writeInterruption(interruptionPath);
 
-  const makeFollowup = (prefix, { threadId = 'thread-p00', attempt = 1 } = {}) => {
+  const makeFollowup = (prefix, { threadId = 'thread-p00', attempt = 1, createdAt = '2099-01-01T00:10:00Z', completedAt = '2099-01-01T00:11:00Z' } = {}) => {
     const sessionId = threadId === 'thread-p00' ? 'session-p00' : `session-${prefix}`;
     const turnId = `turn-${prefix}`;
     const threadRequestPath = `${taskRoot}/${prefix}-thread-request.json`;
@@ -218,7 +228,7 @@ try {
     const created = {
       schema: 'rushd.task-receipt.v1', run_id: runId, role: 'phase_worker', status: 'created', phase_id: 'P00', audit_id: null, attempt,
       thread_id: threadId, session_id: sessionId, turn_id: turnId, model: 'gpt-5.6-sol', thinking: 'high', environment: 'local', adapter: 'app_server', thread_create_method: 'thread/start', source_sha: currentBase,
-      snapshot_patch_sha256: null, snapshot_manifest_path: null, worktree_path: null, created_at: '2099-01-01T00:10:00Z', completed_at: null, source_diff_status: 'pending',
+      snapshot_patch_sha256: null, snapshot_manifest_path: null, worktree_path: null, created_at: createdAt, completed_at: null, source_diff_status: 'pending',
       prompt_sha256: sha256Bytes(Buffer.from(JSON.stringify(promptInput))),
       thread_request_path: threadRequestPath, thread_request_sha256: sha256File(resolve(testRoot, threadRequestPath)),
       thread_response_path: threadResponsePath, thread_response_sha256: sha256File(resolve(testRoot, threadResponsePath)),
@@ -227,9 +237,9 @@ try {
       lifecycle_parent_path: null, lifecycle_parent_sha256: null, turn_completed_path: null, turn_completed_sha256: null
     };
     writeJson(resolve(testRoot, createdPath), created);
-    writeJson(resolve(testRoot, completedEventPath), { method: 'turn/completed', params: { threadId, turn: { id: turnId, status: 'completed', error: null } } });
+    writeJson(resolve(testRoot, completedEventPath), { method: 'turn/completed', params: { threadId, turn: { id: turnId, status: 'completed', error: null, items: [{ type: 'agentMessage', phase: 'final_answer', text: 'Pinned Chromium was killed inside the worker sandbox; no checkpoint was written.' }] } } });
     writeJson(resolve(testRoot, completedPath), {
-      ...created, status: 'completed', completed_at: '2099-01-01T00:11:00Z', source_diff_status: 'explained',
+      ...created, status: 'completed', completed_at: completedAt, source_diff_status: 'explained',
       lifecycle_parent_path: createdPath, lifecycle_parent_sha256: sha256File(resolve(testRoot, createdPath)),
       turn_completed_path: completedEventPath, turn_completed_sha256: sha256File(resolve(testRoot, completedEventPath))
     });
@@ -379,7 +389,183 @@ try {
   if (resumed.status !== 'worker_running' || resumed.state_revision !== 3 || !/^[0-9a-f]{64}$/.test(resumed.genesis_state_sha256)) throw new Error('Pause/resume did not preserve canonical state/journal metadata');
   console.log('PASS full human pause/resume and journal chain');
 
-  const journalPath = resolve(testRoot, resumed.transition_journal_path);
+  const externalRequirement = 'Authorize the exact pinned Chromium runtime outside the worker sandbox without changing the P00 task, attempt, base, patch ownership, acceptance criteria, review requirements, or other gates.';
+  const externalGate = {
+    gate_id: 'EXTERNAL-P00-PINNED-CHROMIUM', gate_kind: 'external', phase_id: 'P00', exact_request: externalRequirement,
+    safe_options: ['use localhost-only pinned Chromium with synthetic data', 'use a disposable external pinned Chromium runner with synthetic data'],
+    evidence_required: ['founder attestation', 'reviewed authority amendment', 'pinned browser proof', 'same-thread completed lifecycle'],
+    requested_at: '2099-01-04T00:00:00Z', requesting_task_id: 'thread-p00'
+  };
+  externalGate.request_sha256 = sha256Bytes(Buffer.from(JSON.stringify({
+    gate_id: externalGate.gate_id, phase_id: externalGate.phase_id, exact_request: externalGate.exact_request,
+    safe_options: externalGate.safe_options, evidence_required: externalGate.evidence_required,
+    requested_at: externalGate.requested_at, requesting_task_id: externalGate.requesting_task_id
+  })));
+  const externalPausePath = `${runRelative}/external-pause.json`;
+  writeJson(resolve(testRoot, externalPausePath), {
+    schema: 'rushd.state-transition.v1', event_id: 'SELFTEST-EXTERNAL-PAUSE', from: 'worker_running', to: 'human_required', transition_kind: 'request_human', note: 'exercise exact external runtime pause',
+    evidence: [followup.createdPath], evidence_hashes: { [followup.createdPath]: sha256File(resolve(testRoot, followup.createdPath)) },
+    changes: {
+      human_required: externalGate, resume_state: 'worker_running', active_worker: null, active_worker_receipt_path: null, active_reviewer: null, active_reviewer_receipt_path: null, active_final_audit_id: null,
+      paused_tasks: { active_worker: 'thread-p00', active_worker_receipt_path: followup.createdPath, active_reviewer: null, active_reviewer_receipt_path: null, active_final_audit_id: null }, remediation: null
+    }
+  });
+  requireSuccess('external runtime pause transition', node([transition, statePath, externalPausePath]));
+
+  for (const path of externalContinuationPaths) {
+    mkdirSync(dirname(resolve(testRoot, path)), { recursive: true });
+    cpSync(resolve(sourceRoot, path), resolve(testRoot, path));
+  }
+  git('add', ...externalContinuationPaths);
+  const secondCombined = JSON.parse(execFileSync(process.execPath, [resolve(sourceRoot, '.agents/skills/rushd-phase-orchestrator/scripts/compute-patch-hash.mjs'), authorityAmendmentSha], { cwd: testRoot, encoding: 'utf8' }));
+  const secondCore = { schema: 'rushd.patch-manifest.v1', base_sha: authorityAmendmentSha, files: secondCombined.files.filter((file) => file.path !== phasePatchPath) };
+  const secondManifest = { ...secondCore, patch_sha256: sha256Bytes(Buffer.from(JSON.stringify(secondCore))) };
+  git('commit', '--quiet', '-m', 'Rushd authority: authorize pinned Chromium continuation');
+  const externalAuthoritySha = git('rev-parse', 'HEAD');
+  const secondManifestPath = `${runRelative}/controller/authority-amendment-external-continuation-candidate.json`;
+  writeJson(resolve(testRoot, secondManifestPath), secondManifest);
+  const secondReviewerPrefix = `${taskRoot}/authority-external-review`;
+  const secondReviewerPrompt = [{ type: 'text', text: 'Independently review the external worker continuation amendment.' }];
+  const secondReviewerProtocol = {
+    threadRequest: { method: 'thread/start', id: 30, params: { model: 'gpt-5.6-sol', cwd: testRoot, approvalPolicy: 'never', sandbox: 'workspace-write' } },
+    threadResponse: { id: 30, result: { thread: { id: 'authority-external-review-thread', sessionId: 'authority-external-review-session' } } },
+    turnRequest: { method: 'turn/start', id: 31, params: { threadId: 'authority-external-review-thread', input: secondReviewerPrompt, model: 'gpt-5.6-sol', effort: 'high', cwd: testRoot, approvalPolicy: 'never', sandboxPolicy: { type: 'workspaceWrite' } } },
+    turnResponse: { id: 31, result: { turn: { id: 'authority-external-review-turn', status: 'inProgress', items: [], error: null } } }
+  };
+  for (const [name, body] of Object.entries(secondReviewerProtocol)) writeJson(resolve(testRoot, `${secondReviewerPrefix}-${name}.json`), body);
+  const secondReviewerCreatedPath = `${secondReviewerPrefix}-created.json`;
+  const secondReviewerCompletedPath = `${secondReviewerPrefix}-completed.json`;
+  const secondReviewerTurnCompletedPath = `${secondReviewerPrefix}-turn-completed.json`;
+  const secondReviewPath = `${runRelative}/controller/authority-amendment-external-continuation-review.json`;
+  const secondReviewerCreated = {
+    schema: 'rushd.task-receipt.v1', run_id: runId, role: 'phase_reviewer', status: 'created', phase_id: 'P00', audit_id: null, attempt: 1,
+    thread_id: 'authority-external-review-thread', session_id: 'authority-external-review-session', turn_id: 'authority-external-review-turn', model: 'gpt-5.6-sol', thinking: 'high', environment: 'worktree', adapter: 'app_server', thread_create_method: 'thread/start', source_sha: authorityAmendmentSha,
+    snapshot_patch_sha256: secondManifest.patch_sha256, snapshot_manifest_path: secondManifestPath, worktree_path: testRoot, created_at: '2099-01-04T00:01:00Z', completed_at: null, source_diff_status: 'pending',
+    prompt_sha256: sha256Bytes(Buffer.from(JSON.stringify(secondReviewerPrompt))),
+    thread_request_path: `${secondReviewerPrefix}-threadRequest.json`, thread_request_sha256: sha256File(resolve(testRoot, `${secondReviewerPrefix}-threadRequest.json`)),
+    thread_response_path: `${secondReviewerPrefix}-threadResponse.json`, thread_response_sha256: sha256File(resolve(testRoot, `${secondReviewerPrefix}-threadResponse.json`)),
+    turn_request_path: `${secondReviewerPrefix}-turnRequest.json`, turn_request_sha256: sha256File(resolve(testRoot, `${secondReviewerPrefix}-turnRequest.json`)),
+    turn_response_path: `${secondReviewerPrefix}-turnResponse.json`, turn_response_sha256: sha256File(resolve(testRoot, `${secondReviewerPrefix}-turnResponse.json`)),
+    lifecycle_parent_path: null, lifecycle_parent_sha256: null, turn_completed_path: null, turn_completed_sha256: null
+  };
+  writeJson(resolve(testRoot, secondReviewerCreatedPath), secondReviewerCreated);
+  const secondReview = {
+    schema: 'rushd.authority-amendment-review.v1', run_id: runId, amendment_id: 'RUSHD-20260811-EXTERNAL-WORKER-CONTINUATION', candidate_patch_sha256: secondManifest.patch_sha256,
+    verdict: 'pass', confidence: 'high', reviewer_source_diff: 'clean_against_snapshot', checks: [{ id: 'exact-candidate', status: 'pass', evidence: 'synthetic adversarial self-test' }], commands: [], findings: [], risks: [], reviewed_at: '2099-01-04T00:02:00Z', reviewer_receipt_path: secondReviewerCompletedPath
+  };
+  writeJson(resolve(testRoot, secondReviewerTurnCompletedPath), { method: 'turn/completed', params: { threadId: secondReviewerCreated.thread_id, turn: { id: secondReviewerCreated.turn_id, status: 'completed', error: null, items: [{ type: 'agentMessage', text: JSON.stringify(secondReview) }] } } });
+  writeJson(resolve(testRoot, secondReviewerCompletedPath), { ...secondReviewerCreated, status: 'completed', completed_at: '2099-01-04T00:02:00Z', source_diff_status: 'clean', lifecycle_parent_path: secondReviewerCreatedPath, lifecycle_parent_sha256: sha256File(resolve(testRoot, secondReviewerCreatedPath)), turn_completed_path: secondReviewerTurnCompletedPath, turn_completed_sha256: sha256File(resolve(testRoot, secondReviewerTurnCompletedPath)) });
+  writeJson(resolve(testRoot, secondReviewPath), secondReview);
+  const secondApprovalPath = `${runRelative}/controller/authority-amendment-external-continuation-approval.json`;
+  writeJson(resolve(testRoot, secondApprovalPath), {
+    schema: 'rushd.authority-amendment-approval.v1', run_id: runId, amendment_id: secondReview.amendment_id,
+    candidate_manifest_path: secondManifestPath, candidate_manifest_sha256: sha256File(resolve(testRoot, secondManifestPath)), candidate_patch_sha256: secondManifest.patch_sha256,
+    review_path: secondReviewPath, review_sha256: sha256File(resolve(testRoot, secondReviewPath)), reviewer_receipt_path: secondReviewerCompletedPath,
+    reviewer_receipt_sha256: sha256File(resolve(testRoot, secondReviewerCompletedPath)), approved_at: '2099-01-04T00:03:00Z'
+  });
+  requireSuccess('second exact reviewed authority amendment approval', node([validator, secondApprovalPath]));
+  requireSuccess('paused state validates across two sealed authority commits', node([validator, statePath]));
+
+  const externalHumanRoot = `${runRelative}/evidence/human/EXTERNAL-P00-PINNED-CHROMIUM`;
+  const founderProof = `${externalHumanRoot}/founder-proof.txt`;
+  mkdirSync(resolve(testRoot, externalHumanRoot), { recursive: true });
+  writeFileSync(resolve(testRoot, founderProof), 'founder selected localhost-only pinned Chromium option\n');
+  const externalAttestationPath = `${externalHumanRoot}/attestation.json`;
+  writeJson(resolve(testRoot, externalAttestationPath), {
+    schema: 'rushd.human-attestation.v1', run_id: runId, phase_id: 'P00', gate_id: externalGate.gate_id, gate_kind: 'external', gate_request_sha256: externalGate.request_sha256,
+    actor: 'founder', actor_task_id: 'founder-selftest', performed_at: '2099-01-04T00:04:00Z', subject_sha: externalAuthoritySha, period_started_at: null, period_ended_at: null,
+    evidence_root: externalHumanRoot, evidence_hashes: { [founderProof]: sha256File(resolve(testRoot, founderProof)) }, environment: { device: 'self-test', os: 'macOS', browser: 'Playwright Chromium', browser_version: '151.0.7922.34', locale: 'en' },
+    requirement: externalRequirement, result: 'pass', evidence_paths: [founderProof], limitations: ['synthetic P00 data only', 'localhost-only CDP']
+  });
+  const versionProofPath = `${runRelative}/controller/external-runtime-version.json`;
+  writeJson(resolve(testRoot, versionProofPath), { Browser: 'HeadlessChrome/151.0.7922.34', webSocketDebuggerUrl: 'ws://127.0.0.1:9232/devtools/browser/selftest' });
+  const runtimePath = `${runRelative}/controller/external-runtime.json`;
+  writeJson(resolve(testRoot, runtimePath), {
+    schema: 'rushd.external-runtime-evidence.v1', run_id: runId, phase_id: 'P00', gate_id: externalGate.gate_id,
+    browser_name: 'Playwright Chromium', browser_version: '151.0.7922.34', binary_path: '/synthetic/pinned/chromium', endpoint_host: '127.0.0.1', endpoint_port: 9232, transport: 'cdp', synthetic_data_only: true, launched_outside_worker_sandbox: true,
+    version_proof_path: versionProofPath, version_proof_sha256: sha256File(resolve(testRoot, versionProofPath)), recorded_at: '2099-01-04T00:05:00Z'
+  });
+  const externalFollowup = makeFollowup('external-followup', { createdAt: '2099-01-04T00:10:00Z', completedAt: '2099-01-04T00:11:00Z' });
+  const continuationEvidence = [...new Set([
+    externalAttestationPath, approvalPath, secondApprovalPath, followup.createdPath, followup.completedPath, followup.completedEventPath,
+    externalFollowup.createdPath, externalFollowup.completedPath, externalFollowup.completedEventPath, runtimePath, versionProofPath, manifestPath,
+    externalFollowup.threadRequestPath, externalFollowup.threadResponsePath, externalFollowup.turnRequestPath, externalFollowup.turnResponsePath
+  ])];
+  const continuationFor = (overrides = {}) => ({
+    schema: 'rushd.external-worker-continuation.v1', run_id: runId, phase_id: 'P00', attempt: 1, classification: 'founder_attested_external_runtime', gate_id: externalGate.gate_id, gate_request_sha256: externalGate.request_sha256,
+    thread_id: 'thread-p00', base_sha: currentBase, patch_sha256: manifest.patch_sha256,
+    human_attestation_path: externalAttestationPath, human_attestation_sha256: sha256File(resolve(testRoot, externalAttestationPath)),
+    prior_authority_amendment_approval_path: approvalPath, prior_authority_amendment_approval_sha256: sha256File(resolve(testRoot, approvalPath)), prior_authority_amendment_commit_sha: authorityAmendmentSha,
+    authority_amendment_approval_path: secondApprovalPath, authority_amendment_approval_sha256: sha256File(resolve(testRoot, secondApprovalPath)), authority_amendment_commit_sha: externalAuthoritySha,
+    prior_created_receipt_path: followup.createdPath, prior_created_receipt_sha256: sha256File(resolve(testRoot, followup.createdPath)), prior_completed_receipt_path: followup.completedPath, prior_completed_receipt_sha256: sha256File(resolve(testRoot, followup.completedPath)),
+    prior_turn_completed_path: followup.completedEventPath, prior_turn_completed_sha256: sha256File(resolve(testRoot, followup.completedEventPath)),
+    followup_created_receipt_path: externalFollowup.createdPath, followup_created_receipt_sha256: sha256File(resolve(testRoot, externalFollowup.createdPath)), followup_completed_receipt_path: externalFollowup.completedPath, followup_completed_receipt_sha256: sha256File(resolve(testRoot, externalFollowup.completedPath)),
+    runtime_evidence_path: runtimePath, runtime_evidence_sha256: sha256File(resolve(testRoot, runtimePath)), patch_manifest_path: manifestPath, patch_manifest_sha256: sha256File(resolve(testRoot, manifestPath)), continued_at: '2099-01-04T00:12:00Z',
+    preserved_evidence_paths: continuationEvidence, evidence_hashes: Object.fromEntries(continuationEvidence.map((path) => [path, sha256File(resolve(testRoot, path))])), ...overrides
+  });
+  const writeContinuation = (name, artifact) => {
+    const path = `${runRelative}/${name}.json`;
+    writeJson(resolve(testRoot, path), artifact);
+    return path;
+  };
+  const validContinuation = continuationFor();
+  const continuationPath = writeContinuation('external-continuation-valid', validContinuation);
+  requireSuccess('valid founder-attested external worker continuation', node([validator, continuationPath]));
+  expectRejected('external continuation cross-thread', node([validator, writeContinuation('external-continuation-cross-thread', continuationFor({ thread_id: 'thread-other' }))]), /paused worker identity|changed worker thread/);
+  expectRejected('external continuation cross-attempt', node([validator, writeContinuation('external-continuation-cross-attempt', continuationFor({ attempt: 2 }))]), /paused worker identity/);
+  expectRejected('external continuation unclassified blocker', node([validator, writeContinuation('external-continuation-unclassified', continuationFor({ classification: 'other' }))]), /classification/);
+  expectRejected('external continuation hash mismatch', node([validator, writeContinuation('external-continuation-bad-hash', continuationFor({ human_attestation_sha256: '0'.repeat(64) }))]), /hash mismatch/);
+  const substitutedFollowup = makeFollowup('external-substitute', { createdAt: '2099-01-04T00:10:00Z', completedAt: '2099-01-04T00:11:00Z' });
+  const substitutedContinuation = continuationFor({
+    followup_completed_receipt_path: substitutedFollowup.completedPath,
+    followup_completed_receipt_sha256: sha256File(resolve(testRoot, substitutedFollowup.completedPath))
+  });
+  expectRejected('external continuation receipt substitution', node([validator, writeContinuation('external-continuation-substitution', substitutedContinuation)]), /substituted|does not extend/);
+  const earlyFollowup = makeFollowup('external-early', { createdAt: '2099-01-03T23:59:00Z', completedAt: '2099-01-04T00:00:30Z' });
+  expectRejected('external continuation before prerequisites', node([validator, writeContinuation('external-continuation-early', continuationFor({
+    followup_created_receipt_path: earlyFollowup.createdPath, followup_created_receipt_sha256: sha256File(resolve(testRoot, earlyFollowup.createdPath)),
+    followup_completed_receipt_path: earlyFollowup.completedPath, followup_completed_receipt_sha256: sha256File(resolve(testRoot, earlyFollowup.completedPath))
+  }))]), /predates/);
+  const positiveTurnPath = `${taskRoot}/external-positive-checkpoint-turn.json`;
+  writeJson(resolve(testRoot, positiveTurnPath), { method: 'turn/completed', params: { threadId: 'thread-p00', turn: { id: JSON.parse(readFileSync(resolve(testRoot, followup.createdPath), 'utf8')).turn_id, status: 'completed', error: null, items: [{ type: 'agentMessage', phase: 'final_answer', text: 'Pinned Chromium worked in the sandbox and checkpoint was written.' }] } } });
+  const positiveReceiptPath = `${taskRoot}/external-positive-checkpoint-completed.json`;
+  writeJson(resolve(testRoot, positiveReceiptPath), { ...JSON.parse(readFileSync(resolve(testRoot, followup.completedPath), 'utf8')), turn_completed_path: positiveTurnPath, turn_completed_sha256: sha256File(resolve(testRoot, positiveTurnPath)) });
+  expectRejected('external continuation positive checkpoint misclassification', node([validator, writeContinuation('external-continuation-positive-checkpoint', continuationFor({
+    prior_completed_receipt_path: positiveReceiptPath, prior_completed_receipt_sha256: sha256File(resolve(testRoot, positiveReceiptPath)), prior_turn_completed_path: positiveTurnPath, prior_turn_completed_sha256: sha256File(resolve(testRoot, positiveTurnPath))
+  }))]), /no-checkpoint sandbox-runtime blocker/);
+  expectRejected('external continuation product patch substitution', node([validator, writeContinuation('external-continuation-product-substitution', continuationFor({ patch_manifest_path: secondManifestPath, patch_manifest_sha256: sha256File(resolve(testRoot, secondManifestPath)), patch_sha256: secondManifest.patch_sha256 }))]), /changed the worker base or product patch|product patch/);
+  expectRejected('external continuation prior authority approval substitution', node([validator, writeContinuation('external-continuation-prior-approval-substitution', continuationFor({ prior_authority_amendment_approval_path: secondApprovalPath, prior_authority_amendment_approval_sha256: sha256File(resolve(testRoot, secondApprovalPath)) }))]), /Prior worker-recovery authority|authority chain/);
+  expectRejected('external continuation current authority approval substitution', node([validator, writeContinuation('external-continuation-current-approval-substitution', continuationFor({ authority_amendment_approval_path: approvalPath, authority_amendment_approval_sha256: sha256File(resolve(testRoot, approvalPath)) }))]), /External-continuation authority|authority chain/);
+  const forgedPriorApprovalPath = `${runRelative}/controller/forged-prior-manifest-approval.json`;
+  writeJson(resolve(testRoot, forgedPriorApprovalPath), { ...JSON.parse(readFileSync(resolve(testRoot, approvalPath), 'utf8')), candidate_manifest_path: secondManifestPath, candidate_manifest_sha256: sha256File(resolve(testRoot, secondManifestPath)), candidate_patch_sha256: secondManifest.patch_sha256 });
+  expectRejected('external continuation prior authority manifest substitution', node([validator, writeContinuation('external-continuation-prior-manifest-substitution', continuationFor({ prior_authority_amendment_approval_path: forgedPriorApprovalPath, prior_authority_amendment_approval_sha256: sha256File(resolve(testRoot, forgedPriorApprovalPath)) }))]), /approval|manifest|authority/);
+  const forgedCurrentApprovalPath = `${runRelative}/controller/forged-current-manifest-approval.json`;
+  writeJson(resolve(testRoot, forgedCurrentApprovalPath), { ...JSON.parse(readFileSync(resolve(testRoot, secondApprovalPath), 'utf8')), candidate_manifest_path: manifestPath, candidate_manifest_sha256: sha256File(resolve(testRoot, manifestPath)), candidate_patch_sha256: manifest.patch_sha256 });
+  expectRejected('external continuation current authority manifest substitution', node([validator, writeContinuation('external-continuation-current-manifest-substitution', continuationFor({ authority_amendment_approval_path: forgedCurrentApprovalPath, authority_amendment_approval_sha256: sha256File(resolve(testRoot, forgedCurrentApprovalPath)) }))]), /approval|manifest|authority/);
+  expectRejected('external continuation prior authority commit substitution', node([validator, writeContinuation('external-continuation-prior-commit-substitution', continuationFor({ prior_authority_amendment_commit_sha: sourceBaseline }))]), /Prior worker-recovery authority|authority chain/);
+  expectRejected('external continuation current authority commit substitution', node([validator, writeContinuation('external-continuation-current-commit-substitution', continuationFor({ authority_amendment_commit_sha: authorityAmendmentSha }))]), /External-continuation authority|authority chain/);
+
+  const externalResumeEvidence = [...new Set([continuationPath, ...validContinuation.preserved_evidence_paths])];
+  const externalResume = {
+    schema: 'rushd.state-transition.v1', event_id: 'SELFTEST-EXTERNAL-RESUME', from: 'human_required', to: 'worker_running', transition_kind: 'resume_external_worker', note: 'exercise founder-attested same-task external runtime continuation',
+    evidence: externalResumeEvidence, evidence_hashes: Object.fromEntries(externalResumeEvidence.map((path) => [path, sha256File(resolve(testRoot, path))])),
+    changes: {
+      human_attestation_path: externalAttestationPath, human_attestation_sha256: sha256File(resolve(testRoot, externalAttestationPath)), external_worker_continuation_path: continuationPath, external_worker_continuation_sha256: sha256File(resolve(testRoot, continuationPath)),
+      human_required: null, resume_state: null, active_worker: 'thread-p00', active_worker_receipt_path: externalFollowup.createdPath, active_reviewer: null, active_reviewer_receipt_path: null, active_final_audit_id: null, remediation: null
+    }
+  };
+  const weakenedExternalPath = `${runRelative}/external-resume-weakened.json`;
+  writeJson(resolve(testRoot, weakenedExternalPath), { ...externalResume, event_id: 'SELFTEST-EXTERNAL-WEAKENED', changes: { ...externalResume.changes, current_attempt: 2 } });
+  expectRejected('external continuation gate weakening', node([transition, statePath, weakenedExternalPath]), /Unexpected transition changes/);
+  const externalResumePath = `${runRelative}/external-resume.json`;
+  writeJson(resolve(testRoot, externalResumePath), externalResume);
+  requireSuccess('journaled founder-attested external worker continuation', node([transition, statePath, externalResumePath]));
+  requireSuccess('externally resumed state/full journal validation', node([validator, statePath]));
+  const externallyResumed = JSON.parse(readFileSync(resolve(testRoot, statePath), 'utf8'));
+  if (externallyResumed.status !== 'worker_running' || externallyResumed.state_revision !== 5 || externallyResumed.current_attempt !== 1 || externallyResumed.active_worker !== 'thread-p00' || externallyResumed.active_worker_receipt_path !== externalFollowup.createdPath || externallyResumed.base_sha !== currentBase) throw new Error('External continuation weakened phase identity or state');
+  console.log('PASS journaled founder-attested external worker continuation with sealed authority chain');
+
+  const journalPath = resolve(testRoot, externallyResumed.transition_journal_path);
   const events = readFileSync(journalPath, 'utf8').trim().split('\n').map((line) => JSON.parse(line));
   events[1].from = 'needs_changes';
   writeFileSync(journalPath, `${events.map((event) => JSON.stringify(event)).join('\n')}\n`);
