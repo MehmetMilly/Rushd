@@ -16,6 +16,7 @@
     "docs/RUSHD_EXECUTION_PROTOCOL.md",
     "docs/RUSHD_PHASE_PROMPTS.md",
     "docs/implementation/phase-plan.json",
+    "docs/implementation/PLAN_AMENDMENT_*.json",
     "docs/implementation/P0-P1-INVENTORY.md",
     "docs/implementation/*-template.json",
     ".agents/skills/rushd-phase-orchestrator/**",

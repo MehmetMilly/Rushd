@@ -11,7 +11,7 @@ export const RUN_STATUSES = [
 
 export const RUN_TRANSITIONS = {
   not_started: ['worker_running'],
-  worker_running: ['ready_for_review', 'human_required', 'failed'],
+  worker_running: ['worker_running', 'ready_for_review', 'human_required', 'failed'],
   ready_for_review: ['reviewer_running'],
   reviewer_running: ['needs_changes', 'escalated', 'passed_pending_commit', 'human_required', 'failed'],
   needs_changes: ['worker_running', 'escalated', 'human_required', 'failed'],
@@ -52,6 +52,7 @@ export const AUTHORITY_PATHS = [
   'docs/RUSHD_EXECUTION_PROTOCOL.md',
   'docs/RUSHD_PHASE_PROMPTS.md',
   'docs/implementation/phase-plan.json',
+  'docs/implementation/PLAN_AMENDMENT_*.json',
   '.agents/skills/rushd-phase-orchestrator/**',
   '.codex/agents/*.toml'
 ];

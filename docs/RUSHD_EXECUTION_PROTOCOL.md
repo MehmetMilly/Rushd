@@ -127,12 +127,22 @@ protected authority file requires a separate explicit founder-authorized plan re
 no implementation phase may infer permission from a broader glob. The manager records that
 authority with `docs/implementation/plan-amendment-template.json`, validates it, and makes
 the amendment in a separate plan-only commit before any affected implementation resumes.
+Later workflow-only authority commits are valid only when they are single-parented,
+authority-only, carry exactly one approved `PLAN_AMENDMENT_*.json` record, and leave the
+phase acceptance/product contract unchanged. Before commit, a fresh isolated reviewer must
+return an unqualified `rushd.authority-amendment-review.v1` PASS for a unique immutable
+candidate manifest. The manager seals that review, its completed receipt, and the candidate
+manifest in `.codex/runs/<run-id>/controller/authority-amendment-approval.json`. Run-state
+validation recomputes the committed parent-to-child manifest and requires byte-exact equality
+with that reviewed manifest; matching path names without matching file hashes is insufficient.
+The validator rejects every other authority change after bootstrap.
 
 ## 3. Phase state machine
 
 ```text
 not_started
   -> worker_running
+  -> worker_running (same-task usage-limit turn recovery only)
   -> ready_for_review
   -> reviewer_running
   -> needs_changes -> worker_running
@@ -205,6 +215,40 @@ The manager must:
 
 The phase task must call `/goal`/create a Goal itself. The goal is phase-sized: one
 objective, explicit acceptance criteria, and a verifiable stop. It is not “finish Rushd.”
+
+### Same-task usage-limit recovery
+
+A preserved external/account `usageLimitExceeded` failure does not consume a phase
+attempt and does not authorize a second writer. The manager resumes the same App Server
+thread and starts one follow-up turn with the same phase, attempt, base, model, sandbox,
+and role. Every original failure event and both receipt lifecycles remain immutable.
+
+Before accepting the follow-up checkpoint, the manager persists and validates a
+`rushd.worker-turn-recovery.v1` record. The only allowed self-transition is
+`worker_running -> worker_running` with `transition_kind: recover_worker_turn`; it rotates
+only `active_worker_receipt_path` from the original failed turn's created receipt to the
+successful follow-up turn's created receipt. The record must prove:
+
+- the original `turn/completed` status is `failed` with
+  `codexErrorInfo: usageLimitExceeded`;
+- original and follow-up receipts have identical run, role, phase, attempt, thread,
+  session, source/base, model, effort, and environment identity;
+- the follow-up completed receipt extends its own created receipt and reports the source
+  diff as explained;
+- the canonical patch manifest retains the exact base and patch hash;
+- the canonical amendment approval and exact direct-child authority commit are pinned;
+- the live checkout from the preserved base is exactly the disjoint union of that sealed
+  authority manifest and the unchanged phase patch manifest, with no overlap or extra byte;
+  and
+- all original/follow-up protocol messages, receipts, completion events, manifest, and
+  hashes are transition evidence.
+
+Cross-thread, cross-attempt, unclassified failure, receipt substitution, hash mismatch,
+base/patch drift, or any additional state change is rejected. The ordinary
+`checkpoint_ready` transition then consumes the successful completed receipt exactly as
+before. Checkpoint validation applies the same sealed-authority overlay separation before
+comparing the unchanged phase manifest; review, acceptance, correction, and commit gates
+are unchanged.
 
 ## 5. Checkpoint contract
 

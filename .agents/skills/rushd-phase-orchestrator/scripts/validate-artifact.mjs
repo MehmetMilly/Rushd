@@ -266,7 +266,7 @@ switch (value.schema) {
       if (isNonEmptyRegularFile(value.turn_completed_path) && !isPathInside(value.turn_completed_path, taskRoot)) fail('Task completion event must be under the run task root');
       try {
         const completed = loadJson(value.turn_completed_path);
-        if (completed.method !== 'turn/completed' || completed.params?.turn?.id !== value.turn_id || completed.params?.turn?.status !== 'completed') fail('Task completion event does not prove a completed turn');
+        if (completed.method !== 'turn/completed' || completed.params?.threadId !== value.thread_id || completed.params?.turn?.id !== value.turn_id || completed.params?.turn?.status !== 'completed') fail('Task completion event does not prove a completed turn in the receipt thread');
       } catch (error) { fail(`Task completion event is invalid: ${error.message}`); }
     }
     const phase = value.phase_id === null ? null : phaseFor(plan, value.phase_id);
@@ -290,6 +290,99 @@ switch (value.schema) {
       if (manifest && (manifest.base_sha !== value.source_sha || manifest.patch_sha256 !== value.snapshot_patch_sha256)) fail('Worktree snapshot manifest does not match receipt');
     } else if (value.snapshot_patch_sha256 !== null || value.snapshot_manifest_path !== null || value.worktree_path !== null) fail('Local receipt cannot claim worktree snapshot fields');
     if (['phase_reviewer', 'adjudicator', 'regression_reviewer', 'final_auditor'].includes(value.role) && value.status === 'completed' && value.source_diff_status !== 'clean') fail('Completed reviewer receipt must prove a clean source diff');
+    break;
+  }
+
+  case 'rushd.worker-turn-recovery.v1': {
+    for (const key of ['run_id', 'phase_id', 'classification', 'thread_id', 'base_sha', 'patch_sha256', 'authority_amendment_approval_path', 'authority_amendment_approval_sha256', 'authority_amendment_commit_sha', 'interruption_record_path', 'interruption_record_sha256', 'original_created_receipt_path', 'original_created_receipt_sha256', 'failed_turn_completed_path', 'failed_turn_completed_sha256', 'followup_created_receipt_path', 'followup_created_receipt_sha256', 'followup_completed_receipt_path', 'followup_completed_receipt_sha256', 'patch_manifest_path', 'patch_manifest_sha256', 'recovered_at']) requireString(value, key);
+    requireArray(value, 'preserved_evidence_paths');
+    requireObject(value, 'evidence_hashes');
+    if (!Number.isInteger(value.attempt) || value.attempt < 1) fail('Worker-turn recovery attempt must be positive');
+    if (value.classification !== 'external_usage_limit') fail('Worker-turn recovery is limited to external_usage_limit');
+    if (template) break;
+    if (!validRunId(value.run_id) || !phaseFor(plan, value.phase_id) || !gitCommitExists(value.base_sha) || !isSha256(value.patch_sha256) || !isIsoUtc(value.recovered_at)) fail('Worker-turn recovery run/phase/base/hash/time is invalid');
+    const original = validateNested(value.original_created_receipt_path, 'rushd.task-receipt.v1');
+    const followupCreated = validateNested(value.followup_created_receipt_path, 'rushd.task-receipt.v1');
+    const followupCompleted = validateNested(value.followup_completed_receipt_path, 'rushd.task-receipt.v1');
+    requireArtifactHash(value.original_created_receipt_path, value.original_created_receipt_sha256, 'Original worker receipt');
+    requireArtifactHash(value.authority_amendment_approval_path, value.authority_amendment_approval_sha256, 'Worker recovery authority amendment approval');
+    requireArtifactHash(value.interruption_record_path, value.interruption_record_sha256, 'Original interruption classification');
+    requireArtifactHash(value.failed_turn_completed_path, value.failed_turn_completed_sha256, 'Failed worker turn event');
+    requireArtifactHash(value.followup_created_receipt_path, value.followup_created_receipt_sha256, 'Follow-up created receipt');
+    requireArtifactHash(value.followup_completed_receipt_path, value.followup_completed_receipt_sha256, 'Follow-up completed receipt');
+    requireArtifactHash(value.patch_manifest_path, value.patch_manifest_sha256, 'Recovery patch manifest');
+    const manifest = validateNested(value.patch_manifest_path, 'rushd.patch-manifest.v1');
+    const approval = validateNested(value.authority_amendment_approval_path, 'rushd.authority-amendment-approval.v1');
+    const workerRoles = ['phase_worker', 'remediation_worker'];
+    if (original && (!workerRoles.includes(original.role) || original.status !== 'created')) fail('Original recovery receipt must be an immutable worker created receipt');
+    if (followupCreated && (!workerRoles.includes(followupCreated.role) || followupCreated.status !== 'created')) fail('Follow-up recovery receipt must be an immutable worker created receipt');
+    if (followupCompleted && (!workerRoles.includes(followupCompleted.role) || followupCompleted.status !== 'completed' || followupCompleted.source_diff_status !== 'explained')) fail('Follow-up recovery completion must be an explained worker receipt');
+    const identityKeys = ['run_id', 'role', 'phase_id', 'attempt', 'thread_id', 'session_id', 'model', 'thinking', 'environment', 'adapter', 'thread_create_method', 'source_sha'];
+    if (original && followupCreated && identityKeys.some((key) => !sameJson(original[key], followupCreated[key]))) fail('Follow-up recovery changed worker thread, phase, attempt, role, source, or routing identity');
+    if (original && (original.run_id !== value.run_id || original.phase_id !== value.phase_id || original.attempt !== value.attempt || original.thread_id !== value.thread_id || original.source_sha !== value.base_sha)) fail('Recovery record does not match its original worker identity');
+    if (followupCreated && followupCreated.turn_id === original?.turn_id) fail('Recovery follow-up must use a distinct turn in the same task');
+    if (followupCreated && followupCompleted && (followupCompleted.lifecycle_parent_path !== value.followup_created_receipt_path || followupCompleted.lifecycle_parent_sha256 !== value.followup_created_receipt_sha256)) fail('Recovery completion receipt was substituted or does not extend the follow-up created receipt');
+    if (manifest && (manifest.base_sha !== value.base_sha || manifest.patch_sha256 !== value.patch_sha256)) fail('Recovery patch manifest changed the worker base or patch');
+    try {
+      const commitParents = git('rev-list', '--parents', '-n', '1', value.authority_amendment_commit_sha).trim().split(/\s+/);
+      const authorityManifest = approval ? validateNested(approval.candidate_manifest_path, 'rushd.patch-manifest.v1') : null;
+      const committedManifest = manifestForCommitRange(value.base_sha, value.authority_amendment_commit_sha);
+      if (commitParents.length !== 2 || commitParents[1] !== value.base_sha || approval?.run_id !== value.run_id || approval?.amendment_id !== 'RUSHD-20260811-WORKER-TURN-RECOVERY' || !sameJson(committedManifest, authorityManifest)) fail('Recovery authority amendment commit is not the exact approved direct child of the preserved worker base');
+    } catch (error) { fail(`Recovery authority amendment commit is invalid: ${error.message}`); }
+    try {
+      const failed = loadJson(value.failed_turn_completed_path);
+      if (failed.method !== 'turn/completed' || failed.params?.threadId !== original?.thread_id || failed.params?.turn?.id !== original?.turn_id || failed.params?.turn?.status !== 'failed' || failed.params?.turn?.error?.codexErrorInfo !== 'usageLimitExceeded') fail('Recovery requires the preserved original usageLimitExceeded turn/completed event in the worker thread');
+    } catch (error) { fail(`Failed worker turn event is invalid: ${error.message}`); }
+    try {
+      const interruption = loadJson(value.interruption_record_path);
+      if (interruption.schema !== 'rushd.controller-recovery.v1' || interruption.classification !== 'account_usage_limit_interruption' || interruption.attempt_consumed !== false || interruption.phase_relaunch_required !== false || interruption.recovery_action !== 'resume_same_phase_task_with_fresh_turn' || interruption.run_id !== value.run_id || interruption.phase_id !== value.phase_id || interruption.attempt !== value.attempt || interruption.thread_id !== value.thread_id || interruption.base_sha !== value.base_sha || interruption.patch_sha256 !== value.patch_sha256 || interruption.created_receipt_path !== value.original_created_receipt_path || interruption.created_receipt_sha256 !== value.original_created_receipt_sha256 || interruption.failed_turn_completed_path !== value.failed_turn_completed_path || interruption.failed_turn_completed_sha256 !== value.failed_turn_completed_sha256 || interruption.failure_code !== 'usageLimitExceeded') fail('Recovery does not match the preserved original interruption classification');
+    } catch (error) { fail(`Original interruption classification is invalid: ${error.message}`); }
+    const requiredEvidence = [
+      value.interruption_record_path,
+      value.authority_amendment_approval_path,
+      value.original_created_receipt_path,
+      value.failed_turn_completed_path,
+      value.followup_created_receipt_path,
+      value.followup_completed_receipt_path,
+      value.patch_manifest_path
+    ];
+    if (!unique(value.preserved_evidence_paths) || requiredEvidence.some((path) => !value.preserved_evidence_paths.includes(path))) fail('Recovery preserved_evidence_paths omits a required lifecycle artifact');
+    requireEvidence(value.preserved_evidence_paths, null, value.evidence_hashes, 'Worker-turn recovery evidence');
+    break;
+  }
+
+  case 'rushd.authority-amendment-review.v1': {
+    for (const key of ['run_id', 'amendment_id', 'candidate_patch_sha256', 'verdict', 'confidence', 'reviewer_source_diff', 'reviewed_at', 'reviewer_receipt_path']) requireString(value, key);
+    for (const key of ['checks', 'commands', 'findings', 'risks']) requireArray(value, key);
+    if (!['pass', 'needs_changes'].includes(value.verdict) || value.confidence !== 'high' || value.reviewer_source_diff !== 'clean_against_snapshot' || !isIsoUtc(value.reviewed_at) || value.checks.length === 0) fail('Authority amendment review verdict, confidence, source diff, checks, or time is invalid');
+    if (value.verdict === 'pass' && (value.findings.length !== 0 || value.checks.some((check) => check?.status !== 'pass'))) fail('Passing authority amendment review must be unqualified');
+    if (value.verdict === 'needs_changes' && (value.findings.length === 0 || !value.findings.some((finding) => finding?.severity === 'blocking') || !value.checks.some((check) => check?.status === 'fail'))) fail('needs_changes authority amendment review must preserve a blocking finding and failed check');
+    if (template) break;
+    const receipt = validateNested(value.reviewer_receipt_path, 'rushd.task-receipt.v1');
+    if (receipt && (receipt.role !== 'phase_reviewer' || receipt.status !== 'completed' || receipt.run_id !== value.run_id || receipt.source_diff_status !== 'clean' || receipt.snapshot_patch_sha256 !== value.candidate_patch_sha256)) fail('Authority amendment review receipt does not match its clean approved snapshot');
+    try {
+      const completed = loadJson(receipt?.turn_completed_path);
+      const messages = completed.params?.turn?.items?.filter((item) => item?.type === 'agentMessage').map((item) => {
+        try { return JSON.parse(item.text); } catch { return null; }
+      }).filter(Boolean) ?? [];
+      if (!messages.some((message) => sameJson(message, value))) fail('Authority amendment review is not the reviewer turn final artifact');
+    } catch (error) { fail(`Authority amendment review completion evidence is invalid: ${error.message}`); }
+    break;
+  }
+
+  case 'rushd.authority-amendment-approval.v1': {
+    for (const key of ['run_id', 'amendment_id', 'candidate_manifest_path', 'candidate_manifest_sha256', 'candidate_patch_sha256', 'review_path', 'review_sha256', 'reviewer_receipt_path', 'reviewer_receipt_sha256', 'approved_at']) requireString(value, key);
+    if (!isIsoUtc(value.approved_at)) fail('Authority amendment approval time is invalid');
+    if (template) break;
+    requireArtifactHash(value.candidate_manifest_path, value.candidate_manifest_sha256, 'Authority amendment candidate manifest');
+    requireArtifactHash(value.review_path, value.review_sha256, 'Authority amendment review');
+    requireArtifactHash(value.reviewer_receipt_path, value.reviewer_receipt_sha256, 'Authority amendment reviewer receipt');
+    const manifest = validateNested(value.candidate_manifest_path, 'rushd.patch-manifest.v1');
+    const review = validateNested(value.review_path, 'rushd.authority-amendment-review.v1');
+    const receipt = validateNested(value.reviewer_receipt_path, 'rushd.task-receipt.v1');
+    if (manifest && manifest.patch_sha256 !== value.candidate_patch_sha256) fail('Authority amendment approval patch hash does not match its manifest');
+    if (review && (review.verdict !== 'pass' || review.findings.length !== 0 || review.checks.some((check) => check?.status !== 'pass') || review.run_id !== value.run_id || review.amendment_id !== value.amendment_id || review.candidate_patch_sha256 !== value.candidate_patch_sha256 || review.reviewer_receipt_path !== value.reviewer_receipt_path)) fail('Authority amendment approval does not match an unqualified independent PASS review');
+    if (receipt && (receipt.run_id !== value.run_id || receipt.snapshot_manifest_path !== value.candidate_manifest_path || receipt.snapshot_patch_sha256 !== value.candidate_patch_sha256)) fail('Authority amendment approval does not match its reviewer snapshot receipt');
     break;
   }
 
@@ -412,7 +505,18 @@ switch (value.schema) {
         try {
           const output = execFileSync(process.execPath, [resolve(import.meta.dirname, 'compute-patch-hash.mjs'), value.base_sha], { encoding: 'utf8' });
           const current = JSON.parse(output);
-          if (current.patch_sha256 !== value.patch_sha256 || !sameJson(current.files, manifest.files)) fail('Current working patch no longer matches checkpoint');
+          if (current.patch_sha256 !== value.patch_sha256 || !sameJson(current.files, manifest.files)) {
+            const approvalPath = `.codex/runs/${value.run_id}/controller/authority-amendment-approval.json`;
+            const approval = validateNested(approvalPath, 'rushd.authority-amendment-approval.v1');
+            const authorityManifest = approval ? validateNested(approval.candidate_manifest_path, 'rushd.patch-manifest.v1') : null;
+            const head = gitHead();
+            const parents = git('rev-list', '--parents', '-n', '1', head).trim().split(/\s+/);
+            const committedAuthority = parents.length === 2 ? manifestForCommitRange(value.base_sha, head) : null;
+            const authorityPaths = new Set(authorityManifest?.files?.map((file) => file.path) ?? []);
+            const disjoint = manifest.files.every((file) => !authorityPaths.has(file.path));
+            const expectedFiles = [...(authorityManifest?.files ?? []), ...manifest.files].sort((a, b) => Buffer.from(a.path).compare(Buffer.from(b.path)));
+            if (parents[1] !== value.base_sha || !sameJson(committedAuthority, authorityManifest) || !disjoint || !sameJson(current.files, expectedFiles)) fail('Current working patch no longer matches checkpoint plus sealed authority amendment');
+          }
         } catch (error) { fail(`Could not recompute working patch: ${error.message}`); }
       }
     }
@@ -648,8 +752,49 @@ switch (value.schema) {
       if (!authorityTree.some((path) => path.startsWith('.codex/agents/'))) fail('Authority commit tree omits Codex agent definitions');
       const authorityChanges = git('diff-tree', '--no-commit-id', '--name-only', '-r', value.authority_commit_sha).split('\n').filter(Boolean);
       if (authorityChanges.length === 0 || authorityChanges.some((path) => !matchesAny(path, AUTHORITY_PATHS))) fail('Authority commit must be non-empty and authority-only');
-      const laterAuthorityChanges = git('diff', '--name-only', value.authority_commit_sha, gitHead(), '--', '.').split('\n').filter(Boolean).filter((path) => matchesAny(path, AUTHORITY_PATHS));
-      if (laterAuthorityChanges.length) fail(`Workflow authority changed after authority commit: ${laterAuthorityChanges.join(', ')}`);
+      const laterCommits = git('rev-list', '--reverse', `${value.authority_commit_sha}..${gitHead()}`).split('\n').filter(Boolean);
+      for (const commit of laterCommits) {
+        const parents = git('rev-list', '--parents', '-n', '1', commit).trim().split(/\s+/);
+        const changed = git('diff-tree', '--no-commit-id', '--name-only', '-r', commit).split('\n').filter(Boolean);
+        const authorityTouched = changed.filter((path) => matchesAny(path, AUTHORITY_PATHS));
+        if (authorityTouched.length === 0) continue;
+        if (parents.length !== 2 || changed.some((path) => !matchesAny(path, AUTHORITY_PATHS))) {
+          fail(`Later workflow authority commit must be single-parented and authority-only: ${commit}`);
+          continue;
+        }
+        const amendmentPaths = changed.filter((path) => /^docs\/implementation\/PLAN_AMENDMENT_[A-Z0-9_-]+\.json$/.test(path));
+        if (amendmentPaths.length !== 1) {
+          fail(`Later workflow authority commit requires exactly one explicit plan amendment record: ${commit}`);
+          continue;
+        }
+        try {
+          const amendment = JSON.parse(git('show', `${commit}:${amendmentPaths[0]}`));
+          const subject = git('show', '-s', '--format=%s', commit).trim();
+          const workerRecoveryPaths = [
+            '.agents/skills/rushd-phase-orchestrator/SKILL.md',
+            '.agents/skills/rushd-phase-orchestrator/scripts/transition-self-test.mjs',
+            '.agents/skills/rushd-phase-orchestrator/scripts/transition-state.mjs',
+            '.agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs',
+            '.agents/skills/rushd-phase-orchestrator/scripts/workflow-lib.mjs',
+            'docs/RUSHD_EXECUTION_PROTOCOL.md',
+            'docs/implementation/PLAN_AMENDMENT_2026-08-11_WORKER_TURN_RECOVERY.json',
+            'docs/implementation/phase-plan.json'
+          ];
+          const bootstrapPlan = JSON.parse(git('show', `${value.authority_commit_sha}:docs/implementation/phase-plan.json`));
+          const amendedPlan = JSON.parse(git('show', `${commit}:docs/implementation/phase-plan.json`));
+          const phasePlanIndex = bootstrapPlan.protected_paths.indexOf('docs/implementation/phase-plan.json');
+          const expectedProtected = [...bootstrapPlan.protected_paths];
+          expectedProtected.splice(phasePlanIndex + 1, 0, 'docs/implementation/PLAN_AMENDMENT_*.json');
+          const expectedPlan = { ...bootstrapPlan, protected_paths: expectedProtected };
+          const approvalPath = `.codex/runs/${value.run_id}/controller/authority-amendment-approval.json`;
+          const approval = validateNested(approvalPath, 'rushd.authority-amendment-approval.v1');
+          const approvedManifest = approval ? validateNested(approval.candidate_manifest_path, 'rushd.patch-manifest.v1') : null;
+          const committedManifest = manifestForCommitRange(parents[1], commit);
+          if (amendment.schema !== 'rushd.plan-amendment.v1' || amendment.amendment_id !== 'RUSHD-20260811-WORKER-TURN-RECOVERY' || amendmentPaths[0] !== 'docs/implementation/PLAN_AMENDMENT_2026-08-11_WORKER_TURN_RECOVERY.json' || amendment.founder_decision?.status !== 'approved' || amendment.founder_decision?.actor !== 'founder' || !isIsoUtc(amendment.founder_decision?.approved_at) || amendment.from_plan_version !== value.plan_version || amendment.to_plan_version !== value.plan_version || !sameJson([...changed].sort(), [...workerRecoveryPaths].sort()) || !sameJson([...amendment.protected_paths_to_change].sort(), [...workerRecoveryPaths].sort()) || !sameJson(amendedPlan, expectedPlan) || !subject.startsWith('Rushd authority: ') || approval?.run_id !== value.run_id || approval?.amendment_id !== amendment.amendment_id || !sameJson(committedManifest, approvedManifest)) fail(`Later workflow authority amendment is invalid, unreviewed, or differs from the exact approved candidate: ${commit}`);
+        } catch (error) {
+          fail(`Could not validate later workflow authority amendment ${commit}: ${error.message}`);
+        }
+      }
     } catch (error) { fail(`Could not verify authority bootstrap: ${error.message}`); }
     if (value.transition_journal_path !== `.codex/runs/${value.run_id}/state.journal.jsonl`) fail('Run journal path is not canonical');
     const phaseIds = plan.phases.map((phase) => phase.id);

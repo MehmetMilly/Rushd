@@ -37,6 +37,17 @@ correction, commit, escalation, or final-audit prompt.
   and hashed `turn/completed` event before accepting review.
 - **Correct an attempt:** send only numbered blocking findings to the same phase task and
   require a new checkpoint attempt.
+- **Recover an interrupted worker turn:** only for a preserved App Server
+  `usageLimitExceeded` event, resume the same thread/phase/attempt, validate a
+  `rushd.worker-turn-recovery.v1` record, and use the journaled `recover_worker_turn`
+  self-transition to rotate only the active created receipt before checkpoint acceptance.
+  Pin the reviewed recovery-amendment commit and prove the live checkout is exactly its
+  disjoint authority delta plus the worker's unchanged preserved patch. Validate the
+  checkpoint through the same overlay separation before review.
+- **Commit a workflow amendment:** require a fresh isolated unqualified review PASS, seal
+  its unique candidate manifest and completed reviewer receipt in the canonical
+  `rushd.authority-amendment-approval.v1` record, and prove the committed manifest is
+  byte-exactly the approved manifest. Path-set equality alone is never approval.
 - **Commit a phase:** only after PASS; persist `rushd.phase-commit.v1`, verify its real Git
   parent/manifest and exact checkpoint/review/receipt hashes, then append exactly one state
   record.

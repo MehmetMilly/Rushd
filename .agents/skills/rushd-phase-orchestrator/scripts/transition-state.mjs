@@ -177,6 +177,36 @@ if (state.status === 'not_started' && request.to === 'worker_running') {
   validateWorkerStart(['phase_worker'], 'P00', 1, changes.base_sha);
 }
 
+if (state.status === 'worker_running' && request.to === 'worker_running') {
+  expectedKind = 'recover_worker_turn';
+  requireKeys(changes, ['active_worker_receipt_path', 'recovery_record_path', 'recovery_record_sha256']);
+  const recovery = artifact(changes.recovery_record_path, 'rushd.worker-turn-recovery.v1');
+  if (changes.recovery_record_sha256 !== sha256File(changes.recovery_record_path)) throw new Error('Worker-turn recovery record hash mismatch');
+  const expectedRoles = state.remediation ? ['remediation_worker'] : ['phase_worker'];
+  const original = receipt(recovery.original_created_receipt_path, expectedRoles, 'created');
+  const followupCreated = receipt(changes.active_worker_receipt_path, expectedRoles, 'created');
+  const followupCompleted = receipt(recovery.followup_completed_receipt_path, expectedRoles, 'completed');
+  const recoveryManifest = artifact(recovery.patch_manifest_path, 'rushd.patch-manifest.v1');
+  const authorityApproval = artifact(recovery.authority_amendment_approval_path, 'rushd.authority-amendment-approval.v1');
+  const authorityManifest = artifact(authorityApproval.candidate_manifest_path, 'rushd.patch-manifest.v1');
+  const currentManifest = JSON.parse(execFileSync(process.execPath, [resolve(import.meta.dirname, 'compute-patch-hash.mjs'), state.base_sha], { encoding: 'utf8' }));
+  if (recovery.original_created_receipt_path !== state.active_worker_receipt_path || recovery.followup_created_receipt_path !== changes.active_worker_receipt_path) throw new Error('Worker-turn recovery attempted receipt substitution');
+  if (recovery.run_id !== state.run_id || recovery.phase_id !== state.current_phase || recovery.attempt !== state.current_attempt || recovery.thread_id !== state.active_worker || recovery.base_sha !== state.base_sha) throw new Error('Worker-turn recovery changed run, phase, attempt, thread, or base identity');
+  if (original.thread_id !== state.active_worker || followupCreated.thread_id !== state.active_worker || followupCompleted.thread_id !== state.active_worker) throw new Error('Worker-turn recovery changed the active writer thread');
+  const authorityPaths = new Set(authorityManifest.files.map((file) => file.path));
+  if (recoveryManifest.files.some((file) => authorityPaths.has(file.path))) throw new Error('Worker-turn recovery phase patch overlaps the approved authority amendment');
+  const expectedCombinedFiles = [...authorityManifest.files, ...recoveryManifest.files].sort((a, b) => Buffer.from(a.path).compare(Buffer.from(b.path)));
+  const committedAuthority = manifestForCommitRange(state.base_sha, recovery.authority_amendment_commit_sha);
+  if (gitHead() !== recovery.authority_amendment_commit_sha || !sameJson(committedAuthority, authorityManifest) || currentManifest.base_sha !== state.base_sha || !sameJson(currentManifest.files, expectedCombinedFiles) || recoveryManifest.patch_sha256 !== recovery.patch_sha256) throw new Error('Worker-turn recovery phase patch plus sealed authority commit does not match the current checkout');
+  requireCompletedChild(followupCompleted, changes.active_worker_receipt_path, 'Recovered worker');
+  requireEvidence(request, [
+    changes.recovery_record_path,
+    ...recovery.preserved_evidence_paths,
+    ...receiptProtocolEvidence(original),
+    ...receiptProtocolEvidence(followupCompleted)
+  ]);
+}
+
 if (state.status === 'worker_running' && request.to === 'ready_for_review') {
   expectedKind = 'checkpoint_ready';
   requireKeys(changes, ['checkpoint_path', 'active_worker_receipt_path']);
@@ -595,7 +625,7 @@ if (request.to === 'failed') {
 
 if (!expectedKind || request.transition_kind !== expectedKind) throw new Error(`Expected transition_kind ${expectedKind ?? 'none'} for ${state.status} -> ${request.to}`);
 
-const transientKeys = ['human_attestation_path', 'human_attestation_sha256', 'phase_commit_record'];
+const transientKeys = ['human_attestation_path', 'human_attestation_sha256', 'phase_commit_record', 'recovery_record_path', 'recovery_record_sha256'];
 const persistedChanges = { ...changes };
 for (const key of transientKeys) delete persistedChanges[key];
 const previousHash = sha256Bytes(stateBytes);
