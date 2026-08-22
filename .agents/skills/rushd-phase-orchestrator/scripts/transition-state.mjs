@@ -22,6 +22,7 @@ import {
   git,
   gitHead,
   isObject,
+  matchesAny,
   isSha256,
   loadJson,
   manifestForCommitRange,
@@ -210,8 +211,23 @@ if (state.status === 'worker_running' && request.to === 'worker_running') {
 if (state.status === 'worker_running' && request.to === 'ready_for_review') {
   expectedKind = 'checkpoint_ready';
   requireKeys(changes, ['checkpoint_path', 'active_worker_receipt_path']);
+  if (state.precommit_reconciliation) {
+    const pendingCheckpoint = loadJson(changes.checkpoint_path);
+    if (pendingCheckpoint.schema === 'rushd.phase-checkpoint.v1' && pendingCheckpoint.phase_id === state.current_phase && pendingCheckpoint.attempt === state.current_attempt) {
+      for (const change of pendingCheckpoint.changed_files ?? []) {
+        if (!state.precommit_reconciliation.affected_paths.some((path) => matchesAny(change.path, [path]))) throw new Error(`Reconciliation checkpoint changes an unapproved path: ${change.path}`);
+      }
+    }
+  }
   const checkpoint = artifact(changes.checkpoint_path, 'rushd.phase-checkpoint.v1');
   if (checkpoint.run_id !== state.run_id || checkpoint.phase_id !== state.current_phase || checkpoint.attempt !== state.current_attempt || checkpoint.base_sha !== state.base_sha || checkpoint.worker_receipt_path !== changes.active_worker_receipt_path) throw new Error('Checkpoint does not match active worker state');
+  if (state.precommit_reconciliation && checkpoint.attempt === state.current_attempt) {
+    const reconciliation = artifact(state.precommit_reconciliation.record_path, 'rushd.precommit-reconciliation.v1');
+    for (const change of checkpoint.changed_files ?? []) {
+      if (!state.precommit_reconciliation.affected_paths.some((path) => matchesAny(change.path, [path]))) throw new Error(`Reconciliation checkpoint changes an unapproved path: ${change.path}`);
+    }
+    if (!sameJson(state.precommit_reconciliation.affected_paths, reconciliation.affected_paths)) throw new Error('Reconciliation state/record affected paths drifted');
+  }
   const worker = receipt(changes.active_worker_receipt_path, state.remediation ? ['remediation_worker'] : ['phase_worker'], 'completed');
   requireCompletedChild(worker, state.active_worker_receipt_path, 'Worker');
   if (worker.thread_id !== state.active_worker) throw new Error('Checkpoint worker identity changed');
@@ -265,6 +281,26 @@ if (state.status === 'needs_changes' && request.to === 'worker_running' && reque
   const worker = receipt(changes.active_worker_receipt_path, ['phase_worker'], 'created');
   if (worker.thread_id !== state.active_worker || worker.phase_id !== state.current_phase || worker.attempt !== changes.current_attempt || worker.source_sha !== state.base_sha) throw new Error('Correction must reuse the phase thread with a new attempt receipt');
   requireEvidence(request, [changes.active_worker_receipt_path, ...receiptProtocolEvidence(worker), state.review_path]);
+}
+
+if (state.status === 'passed_pending_commit' && request.to === 'worker_running' && request.transition_kind === 'precommit_reconciliation') {
+  expectedKind = 'precommit_reconciliation';
+  requireKeys(changes, ['current_attempt', 'active_worker_receipt_path', 'checkpoint_path', 'review_path', 'adjudication_path', 'precommit_reconciliation']);
+  if (changes.current_attempt !== state.current_attempt + 1 || changes.checkpoint_path !== null || changes.review_path !== null || changes.adjudication_path !== null) throw new Error('Pre-commit reconciliation must increment the attempt and clear prior active artifacts');
+  const reconciliation = artifact(request.reconciliation_record_path, 'rushd.precommit-reconciliation.v1');
+  if (reconciliation.phase_id !== state.current_phase || reconciliation.prior_attempt !== state.current_attempt || reconciliation.current_head_sha !== gitHead()) throw new Error('Pre-commit reconciliation does not match the paused phase/head');
+  if (reconciliation.prior_checkpoint_path !== state.checkpoint_path || reconciliation.prior_checkpoint_sha256 !== sha256File(state.checkpoint_path) || reconciliation.prior_review_path !== state.review_path || reconciliation.prior_review_sha256 !== sha256File(state.review_path)) throw new Error('Pre-commit reconciliation does not preserve the exact PASS artifacts');
+  const reconciliationLink = { record_path: request.reconciliation_record_path, record_sha256: sha256File(request.reconciliation_record_path), affected_paths: reconciliation.affected_paths };
+  requireSame(changes.precommit_reconciliation, reconciliationLink, 'Pre-commit reconciliation state link is not exact');
+  const worker = receipt(changes.active_worker_receipt_path, ['phase_worker'], 'created');
+  if (worker.thread_id !== state.active_worker || worker.phase_id !== state.current_phase || worker.attempt !== changes.current_attempt || worker.source_sha !== state.base_sha) throw new Error('Pre-commit reconciliation must reuse the phase worker with a new attempt receipt');
+  requireEvidence(request, [
+    request.reconciliation_record_path,
+    changes.active_worker_receipt_path,
+    state.checkpoint_path,
+    state.review_path,
+    ...receiptProtocolEvidence(worker)
+  ]);
 }
 
 const startRemediation = () => {
@@ -438,7 +474,9 @@ if (state.status === 'human_required' && request.to !== 'failed') {
 
 if (state.status === 'passed_pending_commit' && request.to === 'committed') {
   expectedKind = 'commit_phase';
-  requireKeys(changes, ['phase_commit_record', 'completed_phases', 'phase_commits', 'active_worker', 'active_worker_receipt_path', 'checkpoint_path', 'review_path', 'adjudication_path', 'base_sha', 'remediation']);
+  const commitKeys = ['phase_commit_record', 'completed_phases', 'phase_commits', 'active_worker', 'active_worker_receipt_path', 'checkpoint_path', 'review_path', 'adjudication_path', 'base_sha', 'remediation'];
+  const reconciliationKeys = state.precommit_reconciliation ? ['precommit_reconciliation'] : [];
+  requireKeys(changes, [...commitKeys, ...reconciliationKeys], [...commitKeys, ...reconciliationKeys]);
   const commitArtifact = artifact(changes.phase_commit_record.artifact_path, 'rushd.phase-commit.v1');
   requireRecord(changes.phase_commit_record, changes.phase_commit_record.artifact_path, {
     commit_sha: commitArtifact.commit_sha,
@@ -450,6 +488,7 @@ if (state.status === 'passed_pending_commit' && request.to === 'committed') {
   if (commitArtifact.run_id !== state.run_id || commitArtifact.phase_id !== state.current_phase || commitArtifact.attempt !== state.current_attempt || commitArtifact.base_sha !== state.base_sha || commitArtifact.checkpoint_path !== state.checkpoint_path || commitArtifact.review_path !== state.review_path || commitArtifact.commit_sha !== gitHead()) throw new Error('Phase commit artifact does not match reviewed active phase or HEAD');
   if (commitArtifact.commit_kind !== (state.remediation ? 'remediation' : 'phase')) throw new Error('Phase commit kind does not match run state');
   if (changes.active_worker !== null || changes.active_worker_receipt_path !== null || changes.checkpoint_path !== null || changes.review_path !== null || changes.adjudication_path !== null || changes.base_sha !== commitArtifact.commit_sha) throw new Error('Commit transition did not clear active attempt or advance base SHA');
+  if (state.precommit_reconciliation && changes.precommit_reconciliation !== null) throw new Error('Phase commit must clear its reconciliation link');
   const expectedCommits = structuredClone(state.phase_commits);
   expectedCommits[state.current_phase] = [...(expectedCommits[state.current_phase] ?? []), changes.phase_commit_record];
   requireSame(changes.phase_commits, expectedCommits, 'Commit transition must append exactly one phase commit record');

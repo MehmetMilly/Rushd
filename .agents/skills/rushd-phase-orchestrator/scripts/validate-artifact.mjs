@@ -39,6 +39,7 @@ import {
   readPlan,
   sameJson,
   sameInstant,
+  sealedAuthorityRule,
   sha256Bytes,
   sha256File,
   unique,
@@ -179,64 +180,6 @@ const validateArtifactRecord = (record, schema, label, related = null) => {
   requireArtifactHash(record.artifact_path, record.artifact_sha256, label);
   return validateNested(record.artifact_path, schema, related, true);
 };
-const sealedAuthorityRule = (amendmentId, runId) => ({
-  'RUSHD-20260811-WORKER-TURN-RECOVERY': {
-    path: 'docs/implementation/PLAN_AMENDMENT_2026-08-11_WORKER_TURN_RECOVERY.json',
-    approval: `.codex/runs/${runId}/controller/authority-amendment-approval.json`,
-    paths: [
-      '.agents/skills/rushd-phase-orchestrator/SKILL.md',
-      '.agents/skills/rushd-phase-orchestrator/scripts/transition-self-test.mjs',
-      '.agents/skills/rushd-phase-orchestrator/scripts/transition-state.mjs',
-      '.agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs',
-      '.agents/skills/rushd-phase-orchestrator/scripts/workflow-lib.mjs',
-      'docs/RUSHD_EXECUTION_PROTOCOL.md',
-      'docs/implementation/PLAN_AMENDMENT_2026-08-11_WORKER_TURN_RECOVERY.json',
-      'docs/implementation/phase-plan.json'
-    ],
-    planChange: 'protect-amendments'
-  },
-  'RUSHD-20260811-EXTERNAL-WORKER-CONTINUATION': {
-    path: 'docs/implementation/PLAN_AMENDMENT_2026-08-11_EXTERNAL_WORKER_CONTINUATION.json',
-    approval: `.codex/runs/${runId}/controller/authority-amendment-external-continuation-approval.json`,
-    paths: [
-      '.agents/skills/rushd-phase-orchestrator/SKILL.md',
-      '.agents/skills/rushd-phase-orchestrator/scripts/transition-self-test.mjs',
-      '.agents/skills/rushd-phase-orchestrator/scripts/transition-state.mjs',
-      '.agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs',
-      'docs/RUSHD_EXECUTION_PROTOCOL.md',
-      'docs/implementation/PLAN_AMENDMENT_2026-08-11_EXTERNAL_WORKER_CONTINUATION.json'
-    ],
-    planChange: 'none'
-  },
-  'RUSHD-20260811-SEALED-AUTHORITY-PHASE-COMMIT': {
-    path: 'docs/implementation/PLAN_AMENDMENT_2026-08-11_SEALED_AUTHORITY_PHASE_COMMIT.json',
-    approval: `.codex/runs/${runId}/controller/authority-amendment-sealed-phase-commit-approval.json`,
-    paths: [
-      '.agents/skills/rushd-phase-orchestrator/SKILL.md',
-      '.agents/skills/rushd-phase-orchestrator/scripts/transition-self-test.mjs',
-      '.agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs',
-      '.agents/skills/rushd-phase-orchestrator/scripts/workflow-lib.mjs',
-      'docs/RUSHD_EXECUTION_PROTOCOL.md',
-      'docs/implementation/PLAN_AMENDMENT_2026-08-11_SEALED_AUTHORITY_PHASE_COMMIT.json'
-    ],
-    planChange: 'none'
-  },
-  'RUSHD-20260811-PHASE-COMMIT-SANDBOX-CONTINUATION': {
-    path: 'docs/implementation/PLAN_AMENDMENT_2026-08-11_PHASE_COMMIT_SANDBOX_CONTINUATION.json',
-    approval: `.codex/runs/${runId}/controller/authority-amendment-phase-commit-sandbox-approval.json`,
-    correctionApproval: `.codex/runs/${runId}/controller/authority-amendment-phase-commit-sandbox-correction-01-approval.json`,
-    paths: [
-      '.agents/skills/rushd-phase-orchestrator/SKILL.md',
-      '.agents/skills/rushd-phase-orchestrator/scripts/self-test.mjs',
-      '.agents/skills/rushd-phase-orchestrator/scripts/transition-self-test.mjs',
-      '.agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs',
-      '.agents/skills/rushd-phase-orchestrator/scripts/workflow-lib.mjs',
-      'docs/RUSHD_EXECUTION_PROTOCOL.md',
-      'docs/implementation/PLAN_AMENDMENT_2026-08-11_PHASE_COMMIT_SANDBOX_CONTINUATION.json'
-    ],
-    planChange: 'none'
-  }
-}[amendmentId]);
 const requireSealedAuthorityCommit = (commit, runId, planVersion) => {
   const parents = git('rev-list', '--parents', '-n', '1', commit).trim().split(/\s+/);
   const changed = git('diff-tree', '--no-commit-id', '--name-only', '-r', commit).split('\n').filter(Boolean);
@@ -331,7 +274,8 @@ switch (value.schema) {
     if (!['created', 'completed'].includes(value.status)) fail('Invalid task receipt status');
     if (!['local', 'worktree'].includes(value.environment)) fail('Invalid task receipt environment');
     if (!['pending', 'clean', 'explained'].includes(value.source_diff_status)) fail('Invalid source_diff_status');
-    if (value.adapter !== 'app_server' || value.thread_create_method !== 'thread/start') fail('Task receipts must use the documented App Server thread/start adapter');
+    const runtimeAdapters = { app_server: 'thread/start', zcode_glm: 'session/start' };
+    if (runtimeAdapters[value.adapter] !== value.thread_create_method) fail('Task receipts must use a documented runtime adapter');
     if (template) break;
     if (!validRunId(value.run_id) || !gitCommitExists(value.source_sha)) fail('Task receipt requires a valid run and existing source commit');
     if (!isIsoUtc(value.created_at) || (value.completed_at !== null && !isIsoUtc(value.completed_at))) fail('Task receipt timestamps are invalid');
@@ -354,18 +298,20 @@ switch (value.schema) {
       const turnRequest = loadJson(value.turn_request_path);
       const turnResponse = loadJson(value.turn_response_path);
       const expectedCwd = value.environment === 'worktree' ? value.worktree_path : git('rev-parse', '--show-toplevel').trim();
-      if (threadRequest.method !== 'thread/start' || threadRequest.id === undefined || threadRequest.params?.model !== value.model || threadRequest.params?.cwd !== expectedCwd || threadRequest.params?.approvalPolicy !== 'never' || threadRequest.params?.sandbox !== 'workspace-write') fail('App Server thread/start request does not match receipt policy');
-      if (threadResponse.id !== threadRequest.id || threadResponse.error !== undefined || threadResponse.result?.thread?.id !== value.thread_id || threadResponse.result?.thread?.sessionId !== value.session_id) fail('App Server thread/start response does not match receipt identity');
-      if (turnRequest.method !== 'turn/start' || turnRequest.id === undefined || turnRequest.params?.threadId !== value.thread_id || turnRequest.params?.model !== value.model || turnRequest.params?.effort !== value.thinking || turnRequest.params?.cwd !== expectedCwd || turnRequest.params?.approvalPolicy !== 'never' || !Array.isArray(turnRequest.params?.input) || turnRequest.params.input.length === 0 || sha256Bytes(Buffer.from(JSON.stringify(turnRequest.params.input))) !== value.prompt_sha256) fail('App Server turn/start request does not match receipt policy/prompt hash');
+      const sessionKey = value.adapter === 'app_server' ? 'threadId' : 'sessionId';
+      const resultSessionKey = value.adapter === 'app_server' ? 'thread' : 'session';
+      if (threadRequest.method !== value.thread_create_method || threadRequest.id === undefined || threadRequest.params?.model !== value.model || threadRequest.params?.cwd !== expectedCwd || threadRequest.params?.approvalPolicy !== 'never' || threadRequest.params?.sandbox !== 'workspace-write') fail(`${value.adapter} session/start request does not match receipt policy`);
+      if (threadResponse.id !== threadRequest.id || threadResponse.error !== undefined || threadResponse.result?.[resultSessionKey]?.id !== value.thread_id || threadResponse.result?.[resultSessionKey]?.sessionId !== value.session_id) fail(`${value.adapter} session/start response does not match receipt identity`);
+      if (turnRequest.method !== 'turn/start' || turnRequest.id === undefined || turnRequest.params?.[sessionKey] !== value.thread_id || turnRequest.params?.model !== value.model || turnRequest.params?.effort !== value.thinking || turnRequest.params?.cwd !== expectedCwd || turnRequest.params?.approvalPolicy !== 'never' || !Array.isArray(turnRequest.params?.input) || turnRequest.params.input.length === 0 || sha256Bytes(Buffer.from(JSON.stringify(turnRequest.params.input))) !== value.prompt_sha256) fail(`${value.adapter} turn/start request does not match receipt policy/prompt hash`);
       const sandboxType = turnRequest.params?.sandboxPolicy?.type;
       if (sandboxType === 'dangerFullAccess') {
         requireArtifactHash(value.capability_artifact_path, value.capability_artifact_sha256, 'Commit sandbox authorization');
         const authorization = validateNested(value.capability_artifact_path, 'rushd.phase-commit-sandbox-authorization.v1');
         const mismatch = commitSandboxContinuationMismatch(value, authorization, turnRequest);
-        if (mismatch) fail(`App Server commit continuation is invalid: ${mismatch}`);
+        if (mismatch) fail(`${value.adapter} commit continuation is invalid: ${mismatch}`);
       } else if (sandboxType !== 'workspaceWrite') fail('App Server turn/start sandbox policy is not permitted');
-      if (turnResponse.id !== turnRequest.id || turnResponse.error !== undefined || turnResponse.result?.turn?.id !== value.turn_id || turnResponse.result?.turn?.status !== 'inProgress') fail('App Server turn/start response does not match receipt identity');
-    } catch (error) { fail(`Task App Server transcript is invalid: ${error.message}`); }
+      if (turnResponse.id !== turnRequest.id || turnResponse.error !== undefined || turnResponse.result?.turn?.id !== value.turn_id || turnResponse.result?.turn?.status !== 'inProgress') fail(`${value.adapter} turn/start response does not match receipt identity`);
+    } catch (error) { fail(`Task ${value.adapter} transcript is invalid: ${error.message}`); }
     if (value.status === 'completed') {
       requireArtifactHash(value.lifecycle_parent_path, value.lifecycle_parent_sha256, 'Task lifecycle parent');
       const parent = validateNested(value.lifecycle_parent_path, 'rushd.task-receipt.v1');
@@ -375,22 +321,23 @@ switch (value.schema) {
       if (isNonEmptyRegularFile(value.turn_completed_path) && !isPathInside(value.turn_completed_path, taskRoot)) fail('Task completion event must be under the run task root');
       try {
         const completed = loadJson(value.turn_completed_path);
-        if (completed.method !== 'turn/completed' || completed.params?.threadId !== value.thread_id || completed.params?.turn?.id !== value.turn_id || completed.params?.turn?.status !== 'completed') fail('Task completion event does not prove a completed turn in the receipt thread');
+        const completionSessionKey = value.adapter === 'app_server' ? 'threadId' : 'sessionId';
+        if (completed.method !== 'turn/completed' || completed.params?.[completionSessionKey] !== value.thread_id || completed.params?.turn?.id !== value.turn_id || completed.params?.turn?.status !== 'completed') fail('Task completion event does not prove a completed turn in the receipt session');
       } catch (error) { fail(`Task completion event is invalid: ${error.message}`); }
     }
     const phase = value.phase_id === null ? null : phaseFor(plan, value.phase_id);
     if (value.phase_id !== null && !phase) fail('Task receipt phase_id is unknown');
     const routing = {
-      phase_worker: ['gpt-5.6-sol', 'high', 'local'],
-      remediation_worker: ['gpt-5.6-sol', 'high', 'worktree'],
-      phase_reviewer: ['gpt-5.6-sol', phase?.risk === 'medium' ? 'medium' : 'high', 'worktree'],
-      adjudicator: ['gpt-5.6-sol', 'xhigh', 'worktree'],
-      regression_reviewer: ['gpt-5.6-sol', 'high', 'worktree'],
-      final_auditor: ['gpt-5.6-sol', 'high', 'worktree'],
-      manager: ['gpt-5.6-sol', 'high', 'local'],
-      launch_worker: ['gpt-5.6-sol', 'high', 'local']
+      phase_worker: [['gpt-5.6-sol', 'high'], ['glm-5.3', 'high']],
+      remediation_worker: [['gpt-5.6-sol', 'high'], ['glm-5.3', 'high']],
+      phase_reviewer: [['gpt-5.6-sol', phase?.risk === 'medium' ? 'medium' : 'high'], ['glm-5.3', phase?.risk === 'medium' ? 'medium' : 'high']],
+      adjudicator: [['gpt-5.6-sol', 'xhigh'], ['glm-5.3', 'xhigh']],
+      regression_reviewer: [['gpt-5.6-sol', 'high'], ['glm-5.3', 'high']],
+      final_auditor: [['gpt-5.6-sol', 'high'], ['glm-5.3', 'high']],
+      manager: [['gpt-5.6-sol', 'high'], ['glm-5.3', 'high']],
+      launch_worker: [['gpt-5.6-sol', 'high'], ['glm-5.3', 'high']]
     }[value.role];
-    if (!routing || !sameJson([value.model, value.thinking, value.environment], routing)) fail(`${value.role} receipt has wrong model/effort/environment`);
+    if (!routing || !routing.some(([model, thinking]) => value.model === model && value.thinking === thinking) || value.environment !== (value.role === 'phase_worker' || value.role === 'manager' || value.role === 'launch_worker' ? 'local' : 'worktree')) fail(`${value.role} receipt has wrong model/effort/environment`);
     if (['phase_worker', 'remediation_worker', 'phase_reviewer', 'regression_reviewer'].includes(value.role) && (!phase || value.attempt < 1)) fail(`${value.role} requires a phase and positive attempt`);
     if (value.role === 'final_auditor' && !CANONICAL_AUDITS.includes(value.audit_id)) fail('Final auditor receipt requires canonical audit_id');
     if (value.environment === 'worktree') {
@@ -1020,6 +967,28 @@ switch (value.schema) {
     break;
   }
 
+  case 'rushd.precommit-reconciliation.v1': {
+    for (const key of ['run_id', 'phase_id', 'amendment_id', 'failure_signature', 'failing_summary', 'prior_checkpoint_path', 'prior_checkpoint_sha256', 'prior_review_path', 'prior_review_sha256', 'failing_log_path', 'failing_log_sha256', 'current_head_sha']) requireString(value, key);
+    if (!Number.isInteger(value.prior_attempt) || value.prior_attempt < 1) fail('Prior reconciliation attempt is invalid');
+    requireArray(value, 'affected_paths');
+    if (!isIsoUtc(value.created_at)) fail('Reconciliation created_at is invalid');
+    if (template) break;
+    const phase = phaseFor(plan, value.phase_id);
+    if (!phase || !validRunId(value.run_id) || value.amendment_id !== 'RUSHD-20260822-PORTABLE-PRECOMMIT-RECONCILIATION') fail('Reconciliation run/phase/amendment is invalid');
+    if (!gitCommitExists(value.current_head_sha) || value.current_head_sha !== gitHead()) fail('Reconciliation head is invalid');
+    if (value.prior_checkpoint_sha256 !== sha256File(value.prior_checkpoint_path) || value.prior_review_sha256 !== sha256File(value.prior_review_path)) fail('Preserved PASS artifact hash mismatch');
+    process.env.RUSHD_SEALED_ARTIFACT = '1';
+    const checkpoint = validateNested(value.prior_checkpoint_path, 'rushd.phase-checkpoint.v1', null, true);
+    const review = validateNested(value.prior_review_path, 'rushd.phase-review.v1', value.prior_checkpoint_path, true);
+    if (checkpoint?.attempt !== value.prior_attempt || review?.verdict !== 'pass' || review?.confidence !== 'high') fail('Reconciliation must name the sealed high-confidence PASS');
+    if (!isNonEmptyRegularFile(value.failing_log_path) || value.failing_log_sha256 !== sha256File(value.failing_log_path)) fail('Reconciliation failing log/hash is invalid');
+    const log = readFileSync(value.failing_log_path, 'utf8');
+    if (!log.includes(value.failure_signature)) fail('Reconciliation failure signature is absent from the preserved log');
+    if (!value.affected_paths.length) fail('Reconciliation must name at least one affected path');
+    for (const path of value.affected_paths) if (!phase.allowed_paths.some((pattern) => matchesAny(path, [pattern]))) fail(`Reconciliation path is outside the phase allowlist: ${String(path)}`);
+    break;
+  }
+
   case 'rushd.state-transition.v1': {
     for (const key of ['event_id', 'from', 'to', 'transition_kind', 'note']) requireString(value, key);
     requireArray(value, 'evidence');
@@ -1037,6 +1006,15 @@ switch (value.schema) {
     for (const key of ['active_worker_receipt_path', 'active_reviewer_receipt_path', 'checkpoint_path', 'review_path', 'adjudication_path', 'active_final_audit_id']) requireNullOrString(value, key);
     requireNullOrString(value, 'genesis_state_sha256');
     requireNullOrString(value, 'previous_state_sha256');
+    if (value.precommit_reconciliation !== undefined && value.precommit_reconciliation !== null) {
+      const link = value.precommit_reconciliation;
+      if (!isObject(link) || !sameJson(Object.keys(link).sort(), ['affected_paths', 'record_path', 'record_sha256'].sort()) || typeof link.record_path !== 'string' || !isSha256(link.record_sha256) || !Array.isArray(link.affected_paths) || !link.affected_paths.length || !unique(link.affected_paths) || link.affected_paths.some((path) => typeof path !== 'string')) fail('Pre-commit reconciliation state link is malformed');
+      else {
+        requireArtifactHash(link.record_path, link.record_sha256, 'Pre-commit reconciliation');
+        const record = loadJson(link.record_path);
+        if (!isObject(record) || record.schema !== 'rushd.precommit-reconciliation.v1' || !sameJson(record.affected_paths, link.affected_paths)) fail('Pre-commit reconciliation state link does not match its record');
+      }
+    }
     if (!Number.isInteger(value.current_attempt) || value.current_attempt < 0 || !Number.isInteger(value.state_revision) || value.state_revision < 0) fail('Run attempt/revision is invalid');
     if (!RUN_STATUSES.includes(value.status) || !phaseFor(plan, value.current_phase)) fail('Run status/current phase is invalid');
     if (template) break;
@@ -1153,6 +1131,15 @@ switch (value.schema) {
     for (const [path, roles, status, threadId] of activeReceiptExpectations) {
       const active = validateNested(path, 'rushd.task-receipt.v1');
       if (active && (!roles.includes(active.role) || active.status !== status || active.thread_id !== threadId || active.run_id !== value.run_id)) fail(`Active task receipt does not match state: ${path}`);
+    }
+    if (value.precommit_reconciliation && value.checkpoint_path) {
+      const reconciliation = loadJson(value.precommit_reconciliation.record_path);
+      const checkpoint = loadJson(value.checkpoint_path);
+      if (checkpoint.schema === 'rushd.phase-checkpoint.v1' && checkpoint.phase_id === reconciliation.phase_id && checkpoint.attempt === reconciliation.prior_attempt + 1) {
+        for (const change of checkpoint.changed_files ?? []) {
+          if (!value.precommit_reconciliation.affected_paths.some((path) => matchesAny(change.path, [path]))) fail(`Reconciliation checkpoint path is outside affected_paths: ${String(change?.path)}`);
+        }
+      }
     }
     const auditIds = value.final_audits.map((audit) => audit?.audit_id);
     if (!unique(auditIds) || !sameJson(auditIds, CANONICAL_AUDITS.slice(0, auditIds.length))) fail('Final audits must be a canonical ordered prefix');

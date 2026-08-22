@@ -148,6 +148,7 @@ not_started
   -> needs_changes -> worker_running
   -> escalated -> worker_running | reviewer_running | human_required
   -> passed_pending_commit
+  -> passed_pending_commit -> worker_running (pre-commit reconciliation only)
   -> committed -> worker_running | regression_review | final_audit
   -> regression_review -> regression_review | worker_running | final_audit
   -> final_audit -> final_audit | worker_running | human_required | complete
@@ -329,6 +330,28 @@ turn creation, actual Git committer time, then elevated turn completion; equalit
 every boundary, and the declared/report time must denote the same instant as Git metadata.
 Removing, substituting, starting early, or mismatching that elevated lifecycle invalidates
 the phase commit.
+
+### Pre-commit reconciliation
+
+A phase already at `passed_pending_commit` may reopen as a new attempt only when later sealed
+authority-only commits invalidate a phase assumption and the preserved full-gate log proves
+that exact compatibility failure. The manager must preserve the prior PASS checkpoint/review
+hashes, failing command log, affected phase-owned paths, current authority head, and founder-
+approved amendment in `rushd.precommit-reconciliation.v1`. The same phase worker then receives
+a new attempt receipt, updates only those named paths, reruns the complete required gate, and
+creates a normal new checkpoint. A fresh isolated reviewer reviews that attempt. This path can
+never broaden product scope, substitute the worker, weaken acceptance criteria, rewrite the old
+PASS artifacts, or reopen committed work.
+
+### Runtime-neutral lifecycle adapter
+
+The controller may use Codex App Server or an equivalent local coding runtime such as
+ZCode/GLM. Every task receipt must still record the adapter, immutable session/thread and turn
+identities, exact model/effort, source SHA, environment/worktree snapshot, prompt and response
+artifact hashes, sandbox-equivalent policy, created/completed timestamps, and clean reviewer
+proof. A runtime is valid only when its receipts validate through the same schemas, commands
+run in the declared directory, and reviewers cannot edit product source. Adapter identity may
+change model routing but never lowers review independence or evidence requirements.
 
 ## 5. Checkpoint contract
 

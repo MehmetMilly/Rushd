@@ -16,7 +16,7 @@ export const RUN_TRANSITIONS = {
   reviewer_running: ['needs_changes', 'escalated', 'passed_pending_commit', 'human_required', 'failed'],
   needs_changes: ['worker_running', 'escalated', 'human_required', 'failed'],
   escalated: ['worker_running', 'reviewer_running', 'human_required', 'failed'],
-  passed_pending_commit: ['committed', 'failed'],
+  passed_pending_commit: ['worker_running', 'committed', 'failed'],
   committed: ['worker_running', 'regression_review', 'final_audit', 'human_required', 'failed'],
   regression_review: ['regression_review', 'worker_running', 'final_audit', 'human_required', 'failed'],
   human_required: ['worker_running', 'needs_changes', 'regression_review', 'final_audit', 'failed'],
@@ -236,6 +236,79 @@ export const artifactRecord = (artifactPath, fields = {}) => ({
 });
 
 export const sameJson = (left, right) => JSON.stringify(left) === JSON.stringify(right);
+
+export const sealedAuthorityRule = (amendmentId, runId) => ({
+  'RUSHD-20260811-WORKER-TURN-RECOVERY': {
+    path: 'docs/implementation/PLAN_AMENDMENT_2026-08-11_WORKER_TURN_RECOVERY.json',
+    approval: `.codex/runs/${runId}/controller/authority-amendment-approval.json`,
+    paths: [
+      '.agents/skills/rushd-phase-orchestrator/SKILL.md',
+      '.agents/skills/rushd-phase-orchestrator/scripts/transition-self-test.mjs',
+      '.agents/skills/rushd-phase-orchestrator/scripts/transition-state.mjs',
+      '.agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs',
+      '.agents/skills/rushd-phase-orchestrator/scripts/workflow-lib.mjs',
+      'docs/RUSHD_EXECUTION_PROTOCOL.md',
+      'docs/implementation/PLAN_AMENDMENT_2026-08-11_WORKER_TURN_RECOVERY.json',
+      'docs/implementation/phase-plan.json'
+    ],
+    planChange: 'protect-amendments'
+  },
+  'RUSHD-20260811-EXTERNAL-WORKER-CONTINUATION': {
+    path: 'docs/implementation/PLAN_AMENDMENT_2026-08-11_EXTERNAL_WORKER_CONTINUATION.json',
+    approval: `.codex/runs/${runId}/controller/authority-amendment-external-continuation-approval.json`,
+    paths: [
+      '.agents/skills/rushd-phase-orchestrator/SKILL.md',
+      '.agents/skills/rushd-phase-orchestrator/scripts/transition-self-test.mjs',
+      '.agents/skills/rushd-phase-orchestrator/scripts/transition-state.mjs',
+      '.agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs',
+      'docs/RUSHD_EXECUTION_PROTOCOL.md',
+      'docs/implementation/PLAN_AMENDMENT_2026-08-11_EXTERNAL_WORKER_CONTINUATION.json'
+    ],
+    planChange: 'none'
+  },
+  'RUSHD-20260811-SEALED-AUTHORITY-PHASE-COMMIT': {
+    path: 'docs/implementation/PLAN_AMENDMENT_2026-08-11_SEALED_AUTHORITY_PHASE_COMMIT.json',
+    approval: `.codex/runs/${runId}/controller/authority-amendment-sealed-phase-commit-approval.json`,
+    paths: [
+      '.agents/skills/rushd-phase-orchestrator/SKILL.md',
+      '.agents/skills/rushd-phase-orchestrator/scripts/transition-self-test.mjs',
+      '.agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs',
+      '.agents/skills/rushd-phase-orchestrator/scripts/workflow-lib.mjs',
+      'docs/RUSHD_EXECUTION_PROTOCOL.md',
+      'docs/implementation/PLAN_AMENDMENT_2026-08-11_SEALED_AUTHORITY_PHASE_COMMIT.json'
+    ],
+    planChange: 'none'
+  },
+  'RUSHD-20260811-PHASE-COMMIT-SANDBOX-CONTINUATION': {
+    path: 'docs/implementation/PLAN_AMENDMENT_2026-08-11_PHASE_COMMIT_SANDBOX_CONTINUATION.json',
+    approval: `.codex/runs/${runId}/controller/authority-amendment-phase-commit-sandbox-approval.json`,
+    correctionApproval: `.codex/runs/${runId}/controller/authority-amendment-phase-commit-sandbox-correction-01-approval.json`,
+    paths: [
+      '.agents/skills/rushd-phase-orchestrator/SKILL.md',
+      '.agents/skills/rushd-phase-orchestrator/scripts/self-test.mjs',
+      '.agents/skills/rushd-phase-orchestrator/scripts/transition-self-test.mjs',
+      '.agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs',
+      '.agents/skills/rushd-phase-orchestrator/scripts/workflow-lib.mjs',
+      'docs/RUSHD_EXECUTION_PROTOCOL.md',
+      'docs/implementation/PLAN_AMENDMENT_2026-08-11_PHASE_COMMIT_SANDBOX_CONTINUATION.json'
+    ],
+    planChange: 'none'
+  },
+  'RUSHD-20260822-PORTABLE-PRECOMMIT-RECONCILIATION': {
+    path: 'docs/implementation/PLAN_AMENDMENT_2026-08-22_PORTABLE_PRECOMMIT_RECONCILIATION.json',
+    correctionApproval: `.codex/runs/${runId}/controller/authority-amendment-portable-precommit-reconciliation-correction-01-approval.json`,
+    paths: [
+      '.agents/skills/rushd-phase-orchestrator/SKILL.md',
+      '.agents/skills/rushd-phase-orchestrator/scripts/self-test.mjs',
+      '.agents/skills/rushd-phase-orchestrator/scripts/transition-state.mjs',
+      '.agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs',
+      '.agents/skills/rushd-phase-orchestrator/scripts/workflow-lib.mjs',
+      'docs/RUSHD_EXECUTION_PROTOCOL.md',
+      'docs/implementation/PLAN_AMENDMENT_2026-08-22_PORTABLE_PRECOMMIT_RECONCILIATION.json'
+    ],
+    planChange: 'none'
+  }
+}[amendmentId]);
 
 export const canonicalCommitSandboxApprovalPath = (runId) =>
   `.codex/runs/${runId}/controller/authority-amendment-phase-commit-sandbox-approval.json`;

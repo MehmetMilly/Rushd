@@ -1,0 +1,42 @@
+{
+  "schema": "rushd.plan-amendment.v1",
+  "amendment_id": "RUSHD-20260822-PORTABLE-PRECOMMIT-RECONCILIATION",
+  "from_plan_version": "2026-08-10-final",
+  "to_plan_version": "2026-08-10-final",
+  "correction_revision": 1,
+  "requested_at": "2026-08-22T00:00:00.000Z",
+  "requested_by_task_id": "codex-root-current",
+  "rationale": "Repair two proven continuation blockers without weakening any product gate. First, P00 passed review, but later sealed authority-only commits made its verifier's hard-coded authority tip stale, so the full gate cannot honestly pass at the current commit parent. Second, the workflow currently requires Codex App Server receipts even when the founder continues implementation in ZCode with GLM. Permit one evidence-bound reopen of an uncommitted passed phase and permit equivalent runtime-neutral lifecycle receipts while preserving immutable prompts/responses, independent review, exact patch manifests, protected paths, and all acceptance gates.",
+  "affected_phases": [
+    "P00",
+    "P01",
+    "P02",
+    "P03",
+    "P04",
+    "P05",
+    "P06",
+    "P07",
+    "P08",
+    "P09",
+    "P10",
+    "P11",
+    "P12",
+    "P13"
+  ],
+  "protected_paths_to_change": [
+    ".agents/skills/rushd-phase-orchestrator/SKILL.md",
+    ".agents/skills/rushd-phase-orchestrator/scripts/self-test.mjs",
+    ".agents/skills/rushd-phase-orchestrator/scripts/transition-state.mjs",
+    ".agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs",
+    ".agents/skills/rushd-phase-orchestrator/scripts/workflow-lib.mjs",
+    "docs/RUSHD_EXECUTION_PROTOCOL.md",
+    "docs/implementation/PLAN_AMENDMENT_2026-08-22_PORTABLE_PRECOMMIT_RECONCILIATION.json"
+  ],
+  "safe_work_while_waiting": "Preserve P00 attempt 2 at passed_pending_commit with its unchanged reviewed patch and PASS artifacts. Do not launch P01 or create a second product writer until this authority amendment is independently reviewed and committed.",
+  "founder_decision": {
+    "status": "approved",
+    "actor": "founder",
+    "approved_at": "2026-08-22T00:00:00.000Z",
+    "exact_scope": "For an uncommitted passed phase only, authorize a journaled reopen to worker_running when a preserved full-gate failure is caused solely by later sealed authority-only commits changing a phase assumption; require a reconciliation record naming the prior PASS checkpoint/review hashes, failing log, affected paths, and founder approval, then use a new attempt, full gate, fresh reviewer, and normal phase commit. Separately authorize runtime-neutral task receipts for local coding runtimes such as ZCode/GLM that preserve the same immutable created/completed lifecycle, prompt/response hashes, model/effort, source SHA, sandbox-equivalent policy, clean-review proof, and validator enforcement. Do not weaken finance, migration, sync, AI, bilingual, accessibility, motion, security, beta-duration, publication, or final-audit gates."
+  }
+}

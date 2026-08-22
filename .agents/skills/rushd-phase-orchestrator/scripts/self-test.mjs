@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   AUTHORITY_PATHS,
@@ -18,7 +18,11 @@ import {
   readPlan,
   remediationAfterRegressionFailure,
   sameInstant,
-  sha256File
+  sameJson,
+  sealedAuthorityRule,
+  sha256Bytes,
+  sha256File,
+  loadJson
 } from './workflow-lib.mjs';
 
 const root = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim();
@@ -139,6 +143,27 @@ try {
   if (commitSandboxBlockerParentMismatch(head, head) !== null || !commitSandboxBlockerParentMismatch('f'.repeat(40), head)) throw new Error('Blocker-era authority parent binding is invalid');
   console.log('PASS blocker binds to pre-amendment authority parent');
   console.log('PASS exact reviewed-phase commit sandbox capability');
+
+  const portablePrecommitScope = [
+    '.agents/skills/rushd-phase-orchestrator/SKILL.md',
+    '.agents/skills/rushd-phase-orchestrator/scripts/self-test.mjs',
+    '.agents/skills/rushd-phase-orchestrator/scripts/transition-state.mjs',
+    '.agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs',
+    '.agents/skills/rushd-phase-orchestrator/scripts/workflow-lib.mjs',
+    'docs/RUSHD_EXECUTION_PROTOCOL.md',
+    'docs/implementation/PLAN_AMENDMENT_2026-08-22_PORTABLE_PRECOMMIT_RECONCILIATION.json'
+  ];
+  const portablePrecommitRule = sealedAuthorityRule('RUSHD-20260822-PORTABLE-PRECOMMIT-RECONCILIATION', runId);
+  if (!portablePrecommitRule) throw new Error('RUSHD-20260822-PORTABLE-PRECOMMIT-RECONCILIATION is absent from the sealed-authority allowlist');
+  if (portablePrecommitRule.path !== 'docs/implementation/PLAN_AMENDMENT_2026-08-22_PORTABLE_PRECOMMIT_RECONCILIATION.json'
+    || portablePrecommitRule.correctionApproval !== `${runRelative}/controller/authority-amendment-portable-precommit-reconciliation-correction-01-approval.json`
+    || !sameJson([...portablePrecommitRule.paths].sort(), [...portablePrecommitScope].sort())) throw new Error('Sealed-authority allowlist entry does not bind the exact seven-file correction scope');
+  const portablePrecommitAmendment = loadJson(portablePrecommitRule.path);
+  if (portablePrecommitAmendment.amendment_id !== 'RUSHD-20260822-PORTABLE-PRECOMMIT-RECONCILIATION'
+    || portablePrecommitAmendment.correction_revision !== 1
+    || !sameJson([...portablePrecommitAmendment.protected_paths_to_change].sort(), [...portablePrecommitScope].sort())) throw new Error('Portable precommit correction amendment does not match the allowlisted seven-file scope');
+  for (const path of portablePrecommitScope) if (!matchesAny(path, plan.protected_paths)) throw new Error(`Portable precommit correction path is not protected: ${path}`);
+  console.log('PASS sealed-authority allowlist binds the portable precommit correction scope');
 
   const priorRemediation = {
     status: 'regression_checking', remediation_round: 1, remediation_commit_sha: 'a'.repeat(40), remediation_commit_artifact_path: 'round-1.json', round_base_sha: 'b'.repeat(40), owner_commit_count_before: 1,
@@ -268,7 +293,343 @@ try {
     turn_response_path: `${taskRoot}/turnResponse.json`, turn_response_sha256: sha256File(`${taskRoot}/turnResponse.json`),
     lifecycle_parent_path: null, lifecycle_parent_sha256: null, turn_completed_path: null, turn_completed_sha256: null
   });
-  expectRejected('forged App Server identity', run([validator, badReceiptPath]), /thread\/start response does not match/);
+  expectRejected('forged App Server identity', run([validator, badReceiptPath]), /session\/start response does not match/);
+
+  const portableProtocol = {
+    sessionRequest: { method: 'session/start', id: 20, params: { model: 'glm-5.3', cwd: root, approvalPolicy: 'never', sandbox: 'workspace-write' } },
+    sessionResponse: { id: 20, result: { session: { id: 'glm-thread', sessionId: 'glm-session' } } },
+    turnRequest: { method: 'turn/start', id: 21, params: { sessionId: 'glm-thread', input: [{ type: 'text', text: 'Implement P00.' }], model: 'glm-5.3', effort: 'high', cwd: root, approvalPolicy: 'never', sandboxPolicy: { type: 'workspaceWrite' } } },
+    turnResponse: { id: 21, result: { turn: { id: 'glm-turn', status: 'inProgress', items: [], error: null } } }
+  };
+  for (const [name, body] of Object.entries(portableProtocol)) writeJson(resolve(root, `${taskRoot}/portable-${name}.json`), body);
+  const portablePromptHash = sha256Bytes(Buffer.from(JSON.stringify(portableProtocol.turnRequest.params.input)));
+  const portableReceiptPath = `${taskRoot}/portable-created-receipt.json`;
+  const portableReceiptFields = {
+    schema: 'rushd.task-receipt.v1', run_id: runId, role: 'phase_worker', status: 'created', phase_id: 'P00', audit_id: null, attempt: 1,
+    thread_id: 'glm-thread', session_id: 'glm-session', turn_id: 'glm-turn', model: 'glm-5.3', thinking: 'high', environment: 'local',
+    adapter: 'zcode_glm', thread_create_method: 'session/start', source_sha: head, snapshot_patch_sha256: null, snapshot_manifest_path: null,
+    worktree_path: null, created_at: '2099-01-01T00:04:00Z', completed_at: null, source_diff_status: 'pending', prompt_sha256: portablePromptHash,
+    thread_request_path: `${taskRoot}/portable-sessionRequest.json`, thread_request_sha256: sha256File(resolve(root, `${taskRoot}/portable-sessionRequest.json`)),
+    thread_response_path: `${taskRoot}/portable-sessionResponse.json`, thread_response_sha256: sha256File(resolve(root, `${taskRoot}/portable-sessionResponse.json`)),
+    turn_request_path: `${taskRoot}/portable-turnRequest.json`, turn_request_sha256: sha256File(resolve(root, `${taskRoot}/portable-turnRequest.json`)),
+    turn_response_path: `${taskRoot}/portable-turnResponse.json`, turn_response_sha256: sha256File(resolve(root, `${taskRoot}/portable-turnResponse.json`)),
+    lifecycle_parent_path: null, lifecycle_parent_sha256: null, turn_completed_path: null, turn_completed_sha256: null
+  };
+  writeJson(resolve(root, portableReceiptPath), portableReceiptFields);
+  const portableValidation = run([validator, portableReceiptPath]);
+  if (portableValidation.status !== 0) throw new Error(`Valid ZCode/GLM receipt rejected: ${portableValidation.stderr}`);
+  console.log('PASS exact ZCode/GLM lifecycle receipt');
+  writeJson(resolve(root, portableReceiptPath), { ...portableReceiptFields, thread_id: 'other-thread' });
+  expectRejected('forged ZCode/GLM identity', run([validator, portableReceiptPath]), /session\/start response does not match/);
+
+  const reconciliationRoot = `${runRelative}/evidence/precommit-reconciliation`;
+  mkdirSync(resolve(root, reconciliationRoot), { recursive: true });
+  const failingLogPath = `${reconciliationRoot}/npm-test-failure.log`;
+  const failureSignature = 'HEAD is not the approved external-continuation authority overlay';
+  writeFileSync(resolve(root, failingLogPath), `${failureSignature}\n`);
+  let priorCheckpointPath;
+  let priorReviewPath;
+  let portableRunId;
+  let portableWorkerTaskRoot;
+  let portableWorkerCompletedPath;
+  let portableWorkerCreatedPath;
+  let portableRoot;
+  let patchedBytes;
+  {
+  portableRunId = `rushd-20990101-portable-${process.pid}`;
+  portableRoot = `.codex/runs/${portableRunId}`;
+  mkdirSync(resolve(root, portableRoot), { recursive: true });
+  mkdirSync(resolve(root, `${portableRoot}/phases/P00`), { recursive: true });
+  const patchedPath = `scripts/.verify-p00-baseline-selftest-${process.pid}.mjs`;
+  patchedBytes = Buffer.from('self-contained P00 reconciliation fixture\n');
+  const portableManifestCore = {
+    schema: 'rushd.patch-manifest.v1', base_sha: head,
+    files: [{ path: patchedPath, state: 'present', kind: 'file', executable: false, size: patchedBytes.length, sha256: sha256Bytes(patchedBytes) }]
+  };
+  const portablePatchSha = sha256Bytes(Buffer.from(JSON.stringify(portableManifestCore)));
+  const portableManifestPath = `${portableRoot}/patch.json`;
+  writeJson(resolve(root, portableManifestPath), { ...portableManifestCore, patch_sha256: portablePatchSha });
+  const workerEvidenceRoot = `${portableRoot}/evidence/P00/worker-attempt-01`;
+  mkdirSync(resolve(root, workerEvidenceRoot), { recursive: true });
+  const workerProtocolEvidence = `${workerEvidenceRoot}/gate-evidence.txt`;
+  writeFileSync(resolve(root, workerProtocolEvidence), 'synthetic immutable P00 gate evidence\n');
+  const workerCommandLog = `${workerEvidenceRoot}/npm-test.log`;
+  writeFileSync(resolve(root, workerCommandLog), 'synthetic passing P00 command log\n');
+  const workerTaskRoot = `${portableRoot}/tasks/portable-worker`;
+  portableWorkerTaskRoot = workerTaskRoot;
+  mkdirSync(resolve(root, workerTaskRoot), { recursive: true });
+  const workerPrompt = [{ type: 'text', text: 'Implement the portable P00 fixture.' }];
+  const workerProtocol = {
+    sessionRequest: { method: 'session/start', id: 30, params: { model: 'glm-5.3', cwd: root, approvalPolicy: 'never', sandbox: 'workspace-write' } },
+    sessionResponse: { id: 30, result: { session: { id: 'fixture-worker', sessionId: 'fixture-worker-session' } } },
+    turnRequest: { method: 'turn/start', id: 31, params: { sessionId: 'fixture-worker', input: workerPrompt, model: 'glm-5.3', effort: 'high', cwd: root, approvalPolicy: 'never', sandboxPolicy: { type: 'workspaceWrite' } } },
+    turnResponse: { id: 31, result: { turn: { id: 'fixture-worker-turn', status: 'inProgress', items: [], error: null } } }
+  };
+  for (const [name, body] of Object.entries(workerProtocol)) writeJson(resolve(root, `${workerTaskRoot}/${name}.json`), body);
+  const workerBase = {
+    schema: 'rushd.task-receipt.v1', run_id: portableRunId, role: 'phase_worker', phase_id: 'P00', audit_id: null, attempt: 1,
+    thread_id: 'fixture-worker', session_id: 'fixture-worker-session', turn_id: 'fixture-worker-turn', model: 'glm-5.3', thinking: 'high',
+    environment: 'local', adapter: 'zcode_glm', thread_create_method: 'session/start', source_sha: head,
+    snapshot_patch_sha256: null, snapshot_manifest_path: null, worktree_path: null, prompt_sha256: sha256Bytes(Buffer.from(JSON.stringify(workerPrompt))),
+    thread_request_path: `${workerTaskRoot}/sessionRequest.json`, thread_response_path: `${workerTaskRoot}/sessionResponse.json`,
+    turn_request_path: `${workerTaskRoot}/turnRequest.json`, turn_response_path: `${workerTaskRoot}/turnResponse.json`,
+    thread_request_sha256: sha256File(`${workerTaskRoot}/sessionRequest.json`), thread_response_sha256: sha256File(`${workerTaskRoot}/sessionResponse.json`),
+    turn_request_sha256: sha256File(`${workerTaskRoot}/turnRequest.json`), turn_response_sha256: sha256File(`${workerTaskRoot}/turnResponse.json`),
+    capability_scope: 'none', capability_artifact_path: `${workerTaskRoot}/sessionRequest.json`, capability_artifact_sha256: sha256File(`${workerTaskRoot}/sessionRequest.json`)
+  };
+  const workerCreatedPath = `${workerTaskRoot}/created.json`;
+  portableWorkerCreatedPath = workerCreatedPath;
+  writeJson(resolve(root, workerCreatedPath), { ...workerBase, status: 'created', created_at: '2099-01-01T00:00:00Z', completed_at: null, source_diff_status: 'pending', lifecycle_parent_path: null, lifecycle_parent_sha256: null, turn_completed_path: null, turn_completed_sha256: null });
+  const workerCompletionPath = `${workerTaskRoot}/completed-event.json`;
+  writeJson(resolve(root, workerCompletionPath), { method: 'turn/completed', params: { sessionId: 'fixture-worker', turn: { id: 'fixture-worker-turn', status: 'completed' } } });
+  const workerCompletedPath = `${workerTaskRoot}/completed.json`;
+  portableWorkerCompletedPath = workerCompletedPath;
+  writeJson(resolve(root, workerCompletedPath), {
+    ...workerBase, status: 'completed', created_at: '2099-01-01T00:00:00Z', completed_at: '2099-01-01T00:01:00Z', source_diff_status: 'explained',
+    lifecycle_parent_path: workerCreatedPath, lifecycle_parent_sha256: sha256File(workerCreatedPath),
+    turn_completed_path: workerCompletionPath, turn_completed_sha256: sha256File(workerCompletionPath)
+  });
+  const humanRoot = `${portableRoot}/evidence/human/P00-M1`;
+  mkdirSync(resolve(root, humanRoot), { recursive: true });
+  const humanProof = `${humanRoot}/proof.txt`;
+  writeFileSync(resolve(root, humanProof), 'synthetic fake-data manual QA proof\n');
+  const planFixture = readPlan();
+  const manualRequirement = planFixture.phases.find((phase) => phase.id === 'P00').manual_qa[0];
+  const attestationPath = `${humanRoot}/attestation.json`;
+  writeJson(resolve(root, attestationPath), {
+    schema: 'rushd.human-attestation.v1', run_id: portableRunId, phase_id: 'P00', gate_id: 'P00-M1', gate_kind: 'manual_qa', gate_request_sha256: sha256Bytes(Buffer.from(manualRequirement)),
+    actor: 'founder', actor_task_id: 'fixture-founder', performed_at: '2099-01-01T00:02:00Z', subject_sha: null, period_started_at: null, period_ended_at: null,
+    evidence_root: humanRoot, evidence_hashes: { [humanProof]: sha256File(humanProof) },
+    environment: { device: 'fixture', os: 'fixture', browser: 'fixture', browser_version: '1', locale: 'en' }, requirement: manualRequirement,
+    result: 'pass', evidence_paths: [humanProof], limitations: []
+  });
+  const acceptanceIds = planFixture.phases.find((phase) => phase.id === 'P00').acceptance.map((item) => item.id);
+  priorCheckpointPath = `${portableRoot}/phases/P00/checkpoint.json`;
+  writeJson(resolve(root, priorCheckpointPath), {
+    schema: 'rushd.phase-checkpoint.v1', run_id: portableRunId, phase_id: 'P00', attempt: 1, status: 'ready_for_review', base_sha: head,
+    patch_sha256: portablePatchSha, patch_manifest_path: portableManifestPath, worker_receipt_path: workerCompletedPath, evidence_root: workerEvidenceRoot,
+    evidence_hashes: { [workerProtocolEvidence]: sha256File(workerProtocolEvidence) },
+    changed_files: [{ path: patchedPath, change: 'modified', purpose: 'Reconcile the sealed authority chain assertion.' }],
+    acceptance: acceptanceIds.map((id) => ({ id, status: 'pass', evidence: [workerProtocolEvidence] })),
+    commands: [{ command: 'npm test', exit_code: 0, summary: 'Synthetic complete gate passed.', log_path: workerCommandLog, log_sha256: sha256File(workerCommandLog), started_at: '2099-01-01T00:00:30Z', finished_at: '2099-01-01T00:00:40Z', cwd: root, runner_task_id: 'fixture-worker' }],
+    manual_qa: [{ requirement: manualRequirement, status: 'pass', attestation_path: attestationPath, attestation_sha256: sha256File(attestationPath) }],
+    mandatory_human_gates: [], risks: [], deviations: [], blocking_questions: [], unrelated_changes_observed: []
+  });
+  const reviewEvidenceRoot = `${portableRoot}/evidence/P00/review-attempt-01`;
+  mkdirSync(resolve(root, reviewEvidenceRoot), { recursive: true });
+  const reviewCommandLog = `${reviewEvidenceRoot}/npm-test.log`;
+  writeFileSync(resolve(root, reviewCommandLog), 'independent synthetic review gate passed\n');
+  const planForReview = readPlan();
+  const reviewAcceptanceIds = planForReview.phases.find((phase) => phase.id === 'P00').acceptance.map((item) => item.id);
+  const reviewCheckEvidence = reviewAcceptanceIds.map((id) => {
+    const path = `${reviewEvidenceRoot}/${id}.txt`;
+    writeFileSync(resolve(root, path), `Independent synthetic evidence for ${id}\n`);
+    return path;
+  });
+  const reviewerTaskRoot = `${portableRoot}/tasks/portable-reviewer`;
+  mkdirSync(resolve(root, reviewerTaskRoot), { recursive: true });
+  const reviewerPrompt = [{ type: 'text', text: 'Independently review the portable P00 fixture.' }];
+  const reviewerWorktree = '/private/tmp/rushd-portable-fixture-review';
+  const reviewerProtocol = {
+    sessionRequest: { method: 'session/start', id: 32, params: { model: 'glm-5.3', cwd: reviewerWorktree, approvalPolicy: 'never', sandbox: 'workspace-write' } },
+    sessionResponse: { id: 32, result: { session: { id: 'fixture-reviewer', sessionId: 'fixture-reviewer-session' } } },
+    turnRequest: { method: 'turn/start', id: 33, params: { sessionId: 'fixture-reviewer', input: reviewerPrompt, model: 'glm-5.3', effort: 'high', cwd: reviewerWorktree, approvalPolicy: 'never', sandboxPolicy: { type: 'workspaceWrite' } } },
+    turnResponse: { id: 33, result: { turn: { id: 'fixture-reviewer-turn', status: 'inProgress', items: [], error: null } } }
+  };
+  for (const [name, body] of Object.entries(reviewerProtocol)) writeJson(resolve(root, `${reviewerTaskRoot}/${name}.json`), body);
+  const reviewerBase = {
+    ...workerBase, role: 'phase_reviewer', thread_id: 'fixture-reviewer', session_id: 'fixture-reviewer-session', turn_id: 'fixture-reviewer-turn',
+    environment: 'worktree', snapshot_patch_sha256: portablePatchSha, snapshot_manifest_path: portableManifestPath, worktree_path: reviewerWorktree,
+    prompt_sha256: sha256Bytes(Buffer.from(JSON.stringify(reviewerPrompt))),
+    thread_request_path: `${reviewerTaskRoot}/sessionRequest.json`, thread_response_path: `${reviewerTaskRoot}/sessionResponse.json`,
+    turn_request_path: `${reviewerTaskRoot}/turnRequest.json`, turn_response_path: `${reviewerTaskRoot}/turnResponse.json`,
+    thread_request_sha256: sha256File(`${reviewerTaskRoot}/sessionRequest.json`), thread_response_sha256: sha256File(`${reviewerTaskRoot}/sessionResponse.json`),
+    turn_request_sha256: sha256File(`${reviewerTaskRoot}/turnRequest.json`), turn_response_sha256: sha256File(`${reviewerTaskRoot}/turnResponse.json`),
+    capability_artifact_path: `${reviewerTaskRoot}/sessionRequest.json`, capability_artifact_sha256: sha256File(`${reviewerTaskRoot}/sessionRequest.json`)
+  };
+  const reviewerCreatedPath = `${reviewerTaskRoot}/created.json`;
+  writeJson(resolve(root, reviewerCreatedPath), { ...reviewerBase, status: 'created', created_at: '2099-01-01T00:03:00Z', completed_at: null, source_diff_status: 'pending', lifecycle_parent_path: null, lifecycle_parent_sha256: null, turn_completed_path: null, turn_completed_sha256: null });
+  const reviewerCompletionPath = `${reviewerTaskRoot}/completed-event.json`;
+  writeJson(resolve(root, reviewerCompletionPath), { method: 'turn/completed', params: { sessionId: 'fixture-reviewer', turn: { id: 'fixture-reviewer-turn', status: 'completed' } } });
+  const reviewerCompletedPath = `${reviewerTaskRoot}/completed.json`;
+  writeJson(resolve(root, reviewerCompletedPath), {
+    ...reviewerBase, status: 'completed', created_at: '2099-01-01T00:03:00Z', completed_at: '2099-01-01T00:04:00Z', source_diff_status: 'clean',
+    lifecycle_parent_path: reviewerCreatedPath, lifecycle_parent_sha256: sha256File(reviewerCreatedPath), turn_completed_path: reviewerCompletionPath, turn_completed_sha256: sha256File(reviewerCompletionPath)
+  });
+  priorReviewPath = `${portableRoot}/phases/P00/review.json`;
+  writeJson(resolve(root, priorReviewPath), {
+    schema: 'rushd.phase-review.v1', run_id: portableRunId, phase_id: 'P00', attempt: 1, checkpoint_patch_sha256: portablePatchSha, verdict: 'pass',
+    confidence: 'high', next_action: 'advance', reviewer_source_diff: 'clean', reviewer_receipt_path: reviewerCompletedPath, evidence_root: reviewEvidenceRoot,
+    evidence_hashes: Object.fromEntries(reviewCheckEvidence.map((path) => [path, sha256File(path)])),
+    commands: [{ command: 'npm test', exit_code: 0, summary: 'Independent synthetic gate passed.', log_path: reviewCommandLog, log_sha256: sha256File(reviewCommandLog), started_at: '2099-01-01T00:03:10Z', finished_at: '2099-01-01T00:03:20Z', cwd: root, runner_task_id: 'fixture-reviewer' }],
+    checks: reviewAcceptanceIds.map((id, index) => ({ id, status: 'pass', evidence: [reviewCheckEvidence[index]] })),
+    findings: [], non_blocking_suggestions: []
+  });
+  }
+  const reconciliationFields = {
+    schema: 'rushd.precommit-reconciliation.v1', run_id: portableRunId, phase_id: 'P00', amendment_id: 'RUSHD-20260822-PORTABLE-PRECOMMIT-RECONCILIATION',
+    prior_attempt: 1, prior_checkpoint_path: priorCheckpointPath, prior_checkpoint_sha256: sha256File(priorCheckpointPath),
+    prior_review_path: priorReviewPath, prior_review_sha256: sha256File(priorReviewPath), failing_log_path: failingLogPath,
+    failing_log_sha256: sha256File(failingLogPath), failure_signature: 'HEAD is not the approved external-continuation authority overlay',
+    failing_summary: 'The sealed later authority tip moved after the reviewed verifier froze an older authority chain.',
+    affected_paths: ['scripts/verify-p00-baseline.mjs'], current_head_sha: head, created_at: '2099-01-01T00:05:00Z'
+  };
+  const reconciliationPath = `${reconciliationRoot}/record.json`;
+  writeJson(resolve(root, reconciliationPath), reconciliationFields);
+  const reconciliationValidation = run([validator, reconciliationPath]);
+  if (reconciliationValidation.status !== 0) throw new Error(`Valid pre-commit reconciliation rejected: ${reconciliationValidation.stderr}`);
+  console.log('PASS exact pre-commit reconciliation record');
+  writeJson(resolve(root, reconciliationPath), { ...reconciliationFields, prior_review_sha256: '0'.repeat(64) });
+  expectRejected('stale PASS substitution', run([validator, reconciliationPath]), /PASS artifact hash mismatch/);
+  writeJson(resolve(root, reconciliationPath), { ...reconciliationFields, affected_paths: ['index.html'] });
+  expectRejected('pre-commit scope expansion', run([validator, reconciliationPath]), /outside the phase allowlist/);
+
+  writeJson(resolve(root, reconciliationPath), reconciliationFields);
+  const reopenTaskRoot = `${portableRoot}/tasks/portable-worker-reopen`;
+  const reopenCreatedPath = `${reopenTaskRoot}/created.json`;
+  mkdirSync(resolve(root, reopenTaskRoot), { recursive: true });
+  writeJson(resolve(root, reopenCreatedPath), { ...loadJson(portableWorkerCreatedPath), attempt: 2 });
+  const pausedStatePath = `${portableRoot}/paused-state.json`;
+  const pausedState = {
+    schema: 'rushd.run-state.v1', run_id: portableRunId, plan_version: plan.plan_version,
+    source_baseline_sha: execFileSync('git', ['rev-parse', 'HEAD^'], { encoding: 'utf8' }).trim(), authority_commit_sha: head,
+    status: 'passed_pending_commit', current_phase: 'P00', current_attempt: 1, active_worker: 'fixture-worker',
+    active_worker_receipt_path: portableWorkerCompletedPath, active_reviewer: null, active_reviewer_receipt_path: null,
+    active_final_audit_id: null, checkpoint_path: priorCheckpointPath, review_path: priorReviewPath, adjudication_path: null,
+    worker_threads: {}, review_attempts: {}, escalations: {}, phase_commits: {}, base_sha: head, completed_phases: [],
+    remediation: null, release_candidate_sha: null, final_audits: [], full_gate: null, publication_authority: null,
+    post_deployment_verification: null, human_required: null, resume_state: null, paused_tasks: null, failure: null,
+    unexplained_changes: [], state_revision: 0, genesis_state_sha256: null, previous_state_sha256: null,
+    transition_journal_path: `${portableRoot}/state.journal.jsonl`, updated_at: null
+  };
+  writeJson(resolve(root, pausedStatePath), pausedState);
+  if (run([validator, pausedStatePath]).status !== 0) throw new Error('Portable passed-pending-commit fixture was rejected');
+  const reopenReceipt = loadJson(reopenCreatedPath);
+  const reconciliationEvidence = [reconciliationPath, reopenCreatedPath, portableWorkerCompletedPath, priorCheckpointPath, priorReviewPath, reopenReceipt.thread_request_path, reopenReceipt.thread_response_path, reopenReceipt.turn_request_path, reopenReceipt.turn_response_path];
+  const reconciliationTransitionBase = {
+    schema: 'rushd.state-transition.v1', event_id: 'SELFTEST-PRECOMMIT-RECONCILIATION', from: 'passed_pending_commit',
+    to: 'worker_running', transition_kind: 'precommit_reconciliation', note: 'exercise exact precommit reopen',
+    reconciliation_record_path: reconciliationPath,
+    evidence: [...reconciliationEvidence], evidence_hashes: Object.fromEntries(reconciliationEvidence.map((path) => [path, sha256File(path)])),
+    changes: {
+      current_attempt: 2, active_worker_receipt_path: reopenCreatedPath, checkpoint_path: null, review_path: null,
+      adjudication_path: null, precommit_reconciliation: { record_path: reconciliationPath, record_sha256: sha256File(reconciliationPath), affected_paths: reconciliationFields.affected_paths }
+    }
+  };
+  expectRejected('precommit unexpected change', run([transition, pausedStatePath, (() => {
+    const path = `${reconciliationRoot}/unexpected-change.json`;
+    writeJson(path, { ...reconciliationTransitionBase, changes: { ...reconciliationTransitionBase.changes, current_attempt: 3 } });
+    return path;
+  })()]), /Unexpected transition changes|current_attempt/);
+  expectRejected('precommit missing record evidence', run([transition, pausedStatePath, (() => {
+    const path = `${reconciliationRoot}/missing-evidence.json`;
+    writeJson(path, { ...reconciliationTransitionBase, evidence: reconciliationEvidence.slice(1), evidence_hashes: Object.fromEntries(reconciliationEvidence.slice(1).map((path) => [path, sha256File(path)])) });
+    return path;
+  })()]), /Transition evidence omits/);
+  expectRejected('precommit substituted record', run([transition, pausedStatePath, (() => {
+    const path = `${reconciliationRoot}/substituted-record.json`;
+    const request = structuredClone(reconciliationTransitionBase);
+    const substitutedPath = `${portableRoot}/tasks/portable-reviewer/created.json`;
+    request.reconciliation_record_path = substitutedPath;
+    request.evidence = request.evidence.map((item) => (item === reconciliationPath ? substitutedPath : item));
+    request.evidence_hashes = Object.fromEntries(request.evidence.map((item) => [item, sha256File(item)]));
+    request.changes.precommit_reconciliation.record_path = `${portableRoot}/tasks/portable-reviewer/created.json`;
+    request.changes.precommit_reconciliation.record_sha256 = sha256File(substitutedPath);
+    writeJson(path, request);
+    return path;
+  })()]), /must use rushd.precommit-reconciliation.v1|schema/);
+  writeJson(resolve(root, reconciliationPath), { ...reconciliationFields, current_head_sha: execFileSync('git', ['rev-parse', 'HEAD^'], { encoding: 'utf8' }).trim() });
+  const staleHeadPath = `${reconciliationRoot}/stale-head.json`;
+  const staleHeadRequest = structuredClone(reconciliationTransitionBase);
+  staleHeadRequest.evidence_hashes[reconciliationPath] = sha256File(reconciliationPath);
+  staleHeadRequest.changes.precommit_reconciliation.record_sha256 = sha256File(reconciliationPath);
+  writeJson(resolve(root, staleHeadPath), staleHeadRequest);
+  expectRejected('precommit stale HEAD', run([transition, pausedStatePath, staleHeadPath]), /Reconciliation head is invalid|does not match the paused phase\/head/);
+  writeJson(resolve(root, reconciliationPath), reconciliationFields);
+  const wrongWorkerRequest = structuredClone(reconciliationTransitionBase);
+  wrongWorkerRequest.event_id = 'SELFTEST-PRECOMMIT-WORKER';
+  wrongWorkerRequest.changes.active_worker_receipt_path = `${portableRoot}/tasks/portable-reviewer/created.json`;
+  expectRejected('precommit worker substitution', run([transition, pausedStatePath, (() => {
+    const path = `${reconciliationRoot}/wrong-worker.json`;
+    writeJson(path, wrongWorkerRequest);
+    return path;
+  })()]), /Pre-commit reconciliation must reuse|Receipt role phase_reviewer/);
+  const reopenedTransitionPath = `${reconciliationRoot}/transition.json`;
+  writeJson(resolve(root, reopenedTransitionPath), reconciliationTransitionBase);
+  const reopenedResult = run([transition, pausedStatePath, reopenedTransitionPath]);
+  if (reopenedResult.status !== 0) throw new Error(`Valid precommit reconciliation transition failed:\n${reopenedResult.stdout}\n${reopenedResult.stderr}`);
+  const reopenedState = loadJson(pausedStatePath);
+  if (reopenedState.current_attempt !== 2 || reopenedState.checkpoint_path !== null || reopenedState.review_path !== null || !reopenedState.precommit_reconciliation) throw new Error('Precommit reopen did not bind the replacement attempt');
+  console.log('PASS journaled precommit reconciliation reopen');
+
+  const followupTaskRoot = `${portableRunId.startsWith('.') ? '' : ''}.codex/runs/${portableRunId}/tasks/portable-worker-attempt-2`;
+  const followupCreatedPath = `${followupTaskRoot}/created.json`;
+  const followupCompletedPath = `${followupTaskRoot}/completed.json`;
+  const followupCompletionPath = `${followupTaskRoot}/completed-event.json`;
+  mkdirSync(resolve(root, followupTaskRoot), { recursive: true });
+  writeJson(resolve(root, followupCreatedPath), { ...loadJson(portableWorkerCreatedPath), attempt: 2 });
+  writeJson(resolve(root, followupCompletionPath), { method: 'turn/completed', params: { sessionId: 'fixture-worker', turn: { id: 'fixture-worker-turn', status: 'completed' } } });
+  const originalWorkerCreated = loadJson(portableWorkerCreatedPath);
+  writeJson(resolve(root, followupCompletedPath), {
+    ...originalWorkerCreated, attempt: 2, status: 'completed', completed_at: '2099-01-01T00:06:00Z', source_diff_status: 'explained',
+    lifecycle_parent_path: followupCreatedPath, lifecycle_parent_sha256: sha256File(followupCreatedPath),
+    turn_completed_path: followupCompletionPath, turn_completed_sha256: sha256File(followupCompletionPath)
+  });
+  const replacementManifestFor = (includeIndex) => {
+    const extraBytes = Buffer.from('unapproved phase-owned expansion fixture\n');
+    const files = includeIndex ? [{ path: 'docs/baseline/selftest-extra.txt', state: 'present', kind: 'file', executable: false, size: extraBytes.length, sha256: sha256Bytes(extraBytes) }] : [];
+    files.push({ path: reconciliationFields.affected_paths[0], state: 'present', kind: 'file', executable: false, size: patchedBytes.length, sha256: sha256Bytes(patchedBytes) });
+    return { schema: 'rushd.patch-manifest.v1', base_sha: head, files };
+  };
+  const replacementCheckpointFor = (includeIndex) => {
+    const core = replacementManifestFor(includeIndex);
+    const patchSha = sha256Bytes(Buffer.from(JSON.stringify(core)));
+    const suffix = includeIndex ? 'bad' : 'good';
+    const manifestPath = `${portableRoot}/phases/P00/patch-attempt-02-${suffix}.json`;
+    writeJson(resolve(root, manifestPath), { ...core, patch_sha256: patchSha });
+    const checkpoint = structuredClone(loadJson(priorCheckpointPath));
+    const replacementEvidenceRoot = `${portableRoot}/evidence/P00/worker-attempt-02`;
+    mkdirSync(resolve(root, replacementEvidenceRoot), { recursive: true });
+    for (const name of ['gate-evidence.txt', 'npm-test.log']) {
+      writeFileSync(resolve(root, replacementEvidenceRoot, name), readFileSync(resolve(root, portableRoot, 'evidence/P00/worker-attempt-01', name)));
+    }
+    checkpoint.evidence_root = replacementEvidenceRoot;
+    checkpoint.evidence_hashes = Object.fromEntries(Object.keys(checkpoint.evidence_hashes).map((oldPath) => [
+      `${replacementEvidenceRoot}/${oldPath.split('/').at(-1)}`,
+      sha256File(`${replacementEvidenceRoot}/${oldPath.split('/').at(-1)}`)
+    ]));
+    checkpoint.acceptance = checkpoint.acceptance.map((item) => ({
+      ...item,
+      evidence: item.evidence.map((oldPath) => `${replacementEvidenceRoot}/${oldPath.split('/').at(-1)}`)
+    }));
+    checkpoint.commands = checkpoint.commands.map((command) => ({ ...command, log_path: `${replacementEvidenceRoot}/npm-test.log`, log_sha256: sha256File(`${replacementEvidenceRoot}/npm-test.log`) }));
+    checkpoint.attempt = 2;
+    checkpoint.patch_sha256 = patchSha;
+    checkpoint.patch_manifest_path = manifestPath;
+    checkpoint.worker_receipt_path = followupCompletedPath;
+    checkpoint.changed_files = includeIndex
+      ? [{ path: 'docs/baseline/selftest-extra.txt', change: 'modified', purpose: 'Unapproved phase-owned expansion.' }, { path: reconciliationFields.affected_paths[0], change: 'modified', purpose: 'Approved reconciliation.' }]
+      : [{ path: reconciliationFields.affected_paths[0], change: 'modified', purpose: 'Approved reconciliation.' }];
+    const path = `${portableRoot}/phases/P00/checkpoint-attempt-02-${suffix}.json`;
+    writeJson(resolve(root, path), checkpoint);
+    return path;
+  };
+  const readyTransitionFor = (checkpointPath, eventId) => ({
+    schema: 'rushd.state-transition.v1', event_id: eventId, from: 'worker_running', to: 'ready_for_review',
+    transition_kind: 'checkpoint_ready', note: 'bind replacement checkpoint scope',
+    evidence: [checkpointPath, loadJson(checkpointPath).patch_manifest_path, followupCompletedPath, followupCreatedPath, followupCompletionPath],
+    evidence_hashes: Object.fromEntries([checkpointPath, loadJson(checkpointPath).patch_manifest_path, followupCompletedPath, followupCreatedPath, followupCompletionPath].map((path) => [path, sha256File(path)])),
+    changes: { checkpoint_path: checkpointPath, active_worker_receipt_path: followupCompletedPath }
+  });
+  const badCheckpointPath = replacementCheckpointFor(true);
+  const badReadyPath = `${portableRoot}/phases/P00/ready-bad.json`;
+  writeJson(resolve(root, badReadyPath), readyTransitionFor(badCheckpointPath, 'SELFTEST-PRECOMMIT-BAD-READY'));
+  expectRejected('reconciliation checkpoint scope expansion', run([transition, pausedStatePath, badReadyPath]), /unapproved path|outside affected_paths/);
+  const goodCheckpointPath = replacementCheckpointFor(false);
+  const goodChanges = loadJson(goodCheckpointPath).changed_files.map((change) => change.path);
+  if (!goodChanges.every((path) => matchesAny(path, reconciliationFields.affected_paths))) throw new Error('Scoped reconciliation checkpoint fixture is invalid');
+  if (!loadJson(reconciliationPath).affected_paths.some((pattern) => matchesAny(goodChanges[0], [pattern]))) throw new Error('Reconciliation allowlist did not match scoped checkpoint');
+  console.log('PASS reconciliation checkpoint affected-path binding');
 
   const unsafeManifestPath = `${runRelative}/unsafe-manifest.json`;
   const unsafeManifestBase = { schema: 'rushd.patch-manifest.v1', base_sha: head, files: [{ path: '../escape', state: 'deleted' }] };

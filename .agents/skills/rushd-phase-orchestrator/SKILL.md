@@ -37,6 +37,14 @@ correction, commit, escalation, or final-audit prompt.
   and hashed `turn/completed` event before accepting review.
 - **Correct an attempt:** send only numbered blocking findings to the same phase task and
   require a new checkpoint attempt.
+- **Reconcile before commit:** only for an uncommitted PASS whose preserved full-gate failure
+  proves that later sealed authority-only commits invalidated a phase assumption. Seal
+  `rushd.precommit-reconciliation.v1`, reuse the same phase worker with a fresh attempt receipt,
+  change only named phase-owned paths, rerun the complete gate, and obtain a fresh independent
+  review before commit.
+- **Use a portable runtime:** create equivalent immutable session/start, turn/start, response,
+  and turn/completed records for ZCode/GLM. Use the `zcode_glm` adapter only when prompt hashes,
+  source SHA, worktree/local boundary, model/effort, and reviewer cleanliness remain enforced.
 - **Recover an interrupted worker turn:** only for a preserved App Server
   `usageLimitExceeded` event, resume the same thread/phase/attempt, validate a
   `rushd.worker-turn-recovery.v1` record, and use the journaled `recover_worker_turn`
@@ -106,12 +114,13 @@ correction, commit, escalation, or final-audit prompt.
 
 ## Model routing
 
-- Manager and implementer: `gpt-5.6-sol`, high.
-- Medium-risk reviewer: `gpt-5.6-sol`, medium.
-- Hard reviewer: `gpt-5.6-sol`, high.
-- Escalation only: `gpt-5.6-sol`, xhigh.
-- Browser/test/trace support: `gpt-5.6-terra`, high.
-- Mechanical evidence: `gpt-5.6-luna`, medium.
+- Codex: manager/implementer `gpt-5.6-sol`, high; medium-risk review medium; hard review high;
+  escalation xhigh.
+- ZCode/GLM: manager/implementer/reviewer `glm-5.3`, high; escalation `glm-5.3`, xhigh. The
+  implementation and review sessions must be separate and zero-context.
+- Browser/test/trace support: use the strongest available authorized route; do not substitute an
+  unpinned browser where a pinned-browser gate exists.
+- Mechanical evidence: use the cheapest route that can exactly create/hash/validate artifacts.
 
 ## Validate artifacts
 
