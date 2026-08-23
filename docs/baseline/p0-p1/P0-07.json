@@ -1,0 +1,21 @@
+{
+  "schema": "rushd.p00-final-reproduction-evidence.v1",
+  "issue_id": "P0-07",
+  "final_evidence_path": "docs/baseline/p0-p1/P0-07.json",
+  "captured_at": "2026-08-11T15:04:36.499Z",
+  "source_sha": "b56c80bc2e2eb103ebe5bc258bfeeea60accf53c",
+  "reproduction_type": "automated",
+  "sanitized_fixture": "tests/fixtures/v1/legacy-vault.json",
+  "preconditions": [
+    "Legacy vault balance is 650 SAR and transaction history sums to 100 SAR."
+  ],
+  "steps": [
+    "Run npm test.",
+    "Apply the current vault normalization branch."
+  ],
+  "expected_current_result": "Normalized balance becomes 100 and 550 disappears.",
+  "captured_current_result": "Automated characterization records fallback=650, transaction-derived=100, current=100.",
+  "p01_action": "Preserve the standalone legacy opening value.",
+  "regression_owner": "P01",
+  "result": "reproduced"
+}

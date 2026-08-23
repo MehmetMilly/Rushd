@@ -1,0 +1,23 @@
+{
+  "schema": "rushd.p00-final-reproduction-evidence.v1",
+  "issue_id": "P0-04",
+  "final_evidence_path": "docs/baseline/p0-p1/P0-04.json",
+  "captured_at": "2026-08-11T15:04:36.499Z",
+  "source_sha": "b56c80bc2e2eb103ebe5bc258bfeeea60accf53c",
+  "reproduction_type": "manual",
+  "sanitized_fixture": "tests/fixtures/v1/populated.json",
+  "preconditions": [
+    "Use a fake positive prior-cycle surplus.",
+    "Fail the settlement-setting write after the vault transaction succeeds."
+  ],
+  "steps": [
+    "Settle to vault.",
+    "Retain the first vault transfer after the injected failure.",
+    "Retry settlement and inspect vault transactions."
+  ],
+  "expected_current_result": "Retry can create a second transfer for one settlement.",
+  "captured_current_result": "Source inspection confirms addVaultTransaction completes before upsertMonthEndSettlement and uses a new UUID on retry.",
+  "p01_action": "Make settlement atomic and idempotent.",
+  "regression_owner": "P01",
+  "result": "reproduced"
+}

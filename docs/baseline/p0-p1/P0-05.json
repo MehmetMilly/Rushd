@@ -1,0 +1,21 @@
+{
+  "schema": "rushd.p00-final-reproduction-evidence.v1",
+  "issue_id": "P0-05",
+  "final_evidence_path": "docs/baseline/p0-p1/P0-05.json",
+  "captured_at": "2026-08-11T15:04:36.499Z",
+  "source_sha": "b56c80bc2e2eb103ebe5bc258bfeeea60accf53c",
+  "reproduction_type": "automated",
+  "sanitized_fixture": "tests/fixtures/v1/populated.json",
+  "preconditions": [
+    "Budget is 1000 SAR, paid actuals are 100 SAR, and an unpaid essential reservation is 500 SAR."
+  ],
+  "steps": [
+    "Run npm test.",
+    "Evaluate the production snapshot rule that totals only paid expenses."
+  ],
+  "expected_current_result": "Snapshot surplus is 900 instead of the reservation-aware 400.",
+  "captured_current_result": "Automated characterization records current=900 and reservation-aware=400.",
+  "p01_action": "Include unpaid reserved obligations in availability and settlement.",
+  "regression_owner": "P01",
+  "result": "reproduced"
+}

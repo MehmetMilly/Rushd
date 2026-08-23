@@ -1,0 +1,22 @@
+{
+  "schema": "rushd.p00-final-reproduction-evidence.v1",
+  "issue_id": "P0-01",
+  "final_evidence_path": "docs/baseline/p0-p1/P0-01.json",
+  "captured_at": "2026-08-11T15:04:36.499Z",
+  "source_sha": "b56c80bc2e2eb103ebe5bc258bfeeea60accf53c",
+  "reproduction_type": "automated",
+  "sanitized_fixture": "tests/fixtures/v1/paid-generated.json",
+  "preconditions": [
+    "Load the paid generated fixture.",
+    "The paid item has templateProtected=false and its source template has edited fields."
+  ],
+  "steps": [
+    "Run npm test.",
+    "The characterization applies the current mutability predicate to the paid generated record."
+  ],
+  "expected_current_result": "The paid record remains eligible for rebuild because eligibility ignores isPaid.",
+  "captured_current_result": "Paid=true and templateProtected=false evaluates as mutable under the production predicate.",
+  "p01_action": "Fix or visibly block paid generated mutation.",
+  "regression_owner": "P01",
+  "result": "reproduced"
+}

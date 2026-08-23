@@ -1,0 +1,23 @@
+{
+  "schema": "rushd.p00-final-reproduction-evidence.v1",
+  "issue_id": "P0-08",
+  "final_evidence_path": "docs/baseline/p0-p1/P0-08.json",
+  "captured_at": "2026-08-11T15:04:36.499Z",
+  "source_sha": "b56c80bc2e2eb103ebe5bc258bfeeea60accf53c",
+  "reproduction_type": "manual",
+  "sanitized_fixture": "tests/fixtures/v1/populated.json",
+  "preconditions": [
+    "Open two same-origin tabs with the populated fake fixture.",
+    "Keep the first tab database connection open."
+  ],
+  "steps": [
+    "Request factory reset from the second tab.",
+    "Observe blocked deletion and reload behavior.",
+    "Inspect remaining language/calendar/preferences."
+  ],
+  "expected_current_result": "Database deletion can remain blocked and non-cleared preferences survive.",
+  "captured_current_result": "Source inspection confirms no onblocked handler and reset clears theme/motion but not language/calendar.",
+  "p01_action": "Add a safe visible reset-blocked path and complete preference cleanup.",
+  "regression_owner": "P01",
+  "result": "reproduced"
+}

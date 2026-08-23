@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const http = require('node:http');
-const { readFile } = require('node:fs/promises');
+const { mkdir, readFile } = require('node:fs/promises');
 const { extname, join } = require('node:path');
 const { chromium } = require('playwright');
 
@@ -87,7 +87,8 @@ async function close() {
   });
   assert.deepEqual(relevantMessages, []);
 
-  await page.screenshot({ path: 'docs/assets/screenshots/dashboard-with-expense.png', fullPage: false });
+  await mkdir('test-results/browser-smoke', { recursive: true });
+  await page.screenshot({ path: 'test-results/browser-smoke/dashboard-with-expense.png', fullPage: false });
 
   await browser.close();
   await close();

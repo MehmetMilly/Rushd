@@ -1,0 +1,201 @@
+{
+  "schema": "rushd.p00-storage-inventory.v1",
+  "captured_at": "2026-08-11T15:04:36.499Z",
+  "source_database": {
+    "name": "MicroSaveOS_DB",
+    "version": 1
+  },
+  "object_stores": [
+    {
+      "name": "settings",
+      "key_path": "key",
+      "indexes": [],
+      "value_shape": "{key,value}"
+    },
+    {
+      "name": "templates",
+      "key_path": "id",
+      "indexes": [],
+      "normalization": "normalizeDefinitionRecord"
+    },
+    {
+      "name": "expenses",
+      "key_path": "id",
+      "indexes": [
+        {
+          "name": "date",
+          "key_path": "date"
+        },
+        {
+          "name": "isPaid",
+          "key_path": "isPaid"
+        }
+      ],
+      "normalization": "normalizeExpenseRecord"
+    }
+  ],
+  "local_storage_keys": [
+    "rushd_lang",
+    "rushd_calendar",
+    "rushd_theme",
+    "rushd_motion",
+    "rushd_import_success",
+    "microsave_import_success",
+    "rushd_month_start_prompt_deferred",
+    "rushd_month_end_prompt_deferred"
+  ],
+  "current_export_version": "3.1",
+  "required_cases": [
+    "empty",
+    "populated",
+    "paid-generated",
+    "plan-edit",
+    "legacy-vault",
+    "malformed",
+    "boundary",
+    "large-history"
+  ],
+  "performance_record_counts": [
+    0,
+    100,
+    1000
+  ],
+  "fixtures": [
+    {
+      "path": "tests/fixtures/v1/backups/boundary.backup.json",
+      "sha256": "63bac37865c7d74f97226f035f5c275ac44dee27a3c9959b274332100cc38401",
+      "byte_length": 3448,
+      "case_id": "boundary",
+      "record_count": 5,
+      "sanitized": true
+    },
+    {
+      "path": "tests/fixtures/v1/backups/empty.backup.json",
+      "sha256": "c7f49fbe7336fcd3283fe8de3e2a57f0af32be8fef927eb5494cfca37d1a0603",
+      "byte_length": 855,
+      "case_id": "empty",
+      "record_count": 0,
+      "sanitized": true
+    },
+    {
+      "path": "tests/fixtures/v1/backups/large-history-100.backup.json",
+      "sha256": "d8ff55ed7eff2b3fb69d1a85d2ec0a51dae85ffe3db1f76d49f446bc2f572bd3",
+      "byte_length": 44047,
+      "case_id": "large-history-100",
+      "record_count": 100,
+      "sanitized": true
+    },
+    {
+      "path": "tests/fixtures/v1/backups/large-history.backup.json",
+      "sha256": "e88c68144f59b4d63927de40df423f54231b1441af08a8fc7939e9a94fd7e590",
+      "byte_length": 414393,
+      "case_id": "large-history",
+      "record_count": 1000,
+      "sanitized": true
+    },
+    {
+      "path": "tests/fixtures/v1/backups/legacy-vault.backup.json",
+      "sha256": "5f43d154f67c625474891c8f57691030f98f5054e0ef761ced7d99b31c353046",
+      "byte_length": 1695,
+      "case_id": "legacy-vault",
+      "record_count": 1,
+      "sanitized": true
+    },
+    {
+      "path": "tests/fixtures/v1/backups/malformed.backup.json",
+      "sha256": "738c03e33677b662905097873b560c5108c15e3f3494d37b7027efda45afac89",
+      "byte_length": 71,
+      "case_id": "malformed",
+      "record_count": 0,
+      "sanitized": true
+    },
+    {
+      "path": "tests/fixtures/v1/backups/paid-generated.backup.json",
+      "sha256": "4b090dea233288075be08977a174978ef116258d925bbcbd4771341df700bac7",
+      "byte_length": 1682,
+      "case_id": "paid-generated",
+      "record_count": 1,
+      "sanitized": true
+    },
+    {
+      "path": "tests/fixtures/v1/backups/plan-edit.backup.json",
+      "sha256": "b799552ebe6aabb43cd330548a2325d6c657df3abd3b35b1dadcfdfff54b246c",
+      "byte_length": 2655,
+      "case_id": "plan-edit",
+      "record_count": 2,
+      "sanitized": true
+    },
+    {
+      "path": "tests/fixtures/v1/backups/populated.backup.json",
+      "sha256": "d0e7b1a4c253ae2bd903683807bc794de89669f1d7d23c39cc8a8829bc2bd40e",
+      "byte_length": 4972,
+      "case_id": "populated",
+      "record_count": 5,
+      "sanitized": true
+    },
+    {
+      "path": "tests/fixtures/v1/boundary.json",
+      "sha256": "d516fad09bafad218cffd68ab50f54b3e09fe4dca4f4a53bdfa561b48d13606f",
+      "byte_length": 9093,
+      "case_id": "boundary",
+      "record_count": 5,
+      "sanitized": true
+    },
+    {
+      "path": "tests/fixtures/v1/empty.json",
+      "sha256": "3db306b43b16a4e5f2fed542842e4d97082a5fb15fe37d219f2e3837206c8019",
+      "byte_length": 2980,
+      "case_id": "empty",
+      "record_count": 0,
+      "sanitized": true
+    },
+    {
+      "path": "tests/fixtures/v1/large-history.json",
+      "sha256": "5cc426ca08127ef74dd3c5396c1e502ca16959bbde9541a70982a9a54931e1f7",
+      "byte_length": 920680,
+      "case_id": "large-history",
+      "record_count": 1000,
+      "sanitized": true
+    },
+    {
+      "path": "tests/fixtures/v1/legacy-vault.json",
+      "sha256": "3cc480a4f46266ab219f094a0e6122c2b0ce7743826bf25756f1ffeaaeb23573",
+      "byte_length": 4916,
+      "case_id": "legacy-vault",
+      "record_count": 1,
+      "sanitized": true
+    },
+    {
+      "path": "tests/fixtures/v1/malformed.json",
+      "sha256": "729bfef26734b86c544d596ed2836095f82e2aad99f9dfc24e8a23254e6ae43b",
+      "byte_length": 3590,
+      "case_id": "malformed",
+      "record_count": 0,
+      "sanitized": true
+    },
+    {
+      "path": "tests/fixtures/v1/paid-generated.json",
+      "sha256": "b37947b25f9c34ad9a14037227cac13a7e27dcc28214386d74df1c384c5d4244",
+      "byte_length": 4863,
+      "case_id": "paid-generated",
+      "record_count": 1,
+      "sanitized": true
+    },
+    {
+      "path": "tests/fixtures/v1/plan-edit.json",
+      "sha256": "6e9a76d1be5e62d725ae1510796976b68404680bd0f98e655f54b6bd2f2fd541",
+      "byte_length": 7070,
+      "case_id": "plan-edit",
+      "record_count": 2,
+      "sanitized": true
+    },
+    {
+      "path": "tests/fixtures/v1/populated.json",
+      "sha256": "457917a142849fca8d8f5aed89ecf1e715362198131872053d486e60b3265481",
+      "byte_length": 12259,
+      "case_id": "populated",
+      "record_count": 5,
+      "sanitized": true
+    }
+  ]
+}

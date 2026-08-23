@@ -1,0 +1,195 @@
+{
+  "schema": "rushd.v1-fixture.v1",
+  "case_id": "paid-generated",
+  "description": "Paid generated item remains marked mutable and reproduces paid plan-history mutation.",
+  "sanitization": {
+    "marker": "SYNTHETIC_P00_ONLY",
+    "contains_real_financial_data": false,
+    "generated_at": "2026-08-10T09:00:00.000Z"
+  },
+  "frozen_clock_utc": "2026-08-10T09:00:00.000Z",
+  "local_storage": {
+    "rushd_lang": "ar",
+    "rushd_theme": "dark",
+    "rushd_motion": "full",
+    "rushd_calendar": "gregorian"
+  },
+  "indexed_db": {
+    "name": "MicroSaveOS_DB",
+    "version": 1,
+    "stores": {
+      "settings": [
+        {
+          "key": "baseAllowance",
+          "value": 2400
+        },
+        {
+          "key": "safeToSpendMode",
+          "value": "monthly"
+        },
+        {
+          "key": "motionLevel",
+          "value": "full"
+        },
+        {
+          "key": "theme",
+          "value": "dark"
+        },
+        {
+          "key": "templateProfiles",
+          "value": [
+            {
+              "id": "legacy",
+              "name": "FAKE Default",
+              "offdays": [
+                5,
+                6
+              ]
+            }
+          ]
+        },
+        {
+          "key": "activeTemplateProfileId",
+          "value": "legacy"
+        },
+        {
+          "key": "monthlyTemplateAssignments",
+          "value": [
+            {
+              "monthKey": "2026-08",
+              "assignedProfileId": "legacy",
+              "effectiveDate": "2026-08-01"
+            }
+          ]
+        },
+        {
+          "key": "vault",
+          "value": {
+            "balance": 0,
+            "transactions": [],
+            "goals": []
+          }
+        },
+        {
+          "key": "monthEndSettlements",
+          "value": []
+        },
+        {
+          "key": "onboardingState",
+          "value": {
+            "status": "skipped",
+            "updatedAt": "2026-08-10T09:00:00.000Z",
+            "source": "p00-fixture"
+          }
+        }
+      ],
+      "templates": [
+        {
+          "id": "fake-paid-origin",
+          "name": "FAKE Renamed Commute",
+          "expectedCost": 55,
+          "defaultAmount": 30,
+          "monthlyBudget": 0,
+          "maxUsesPerMonth": 0,
+          "category": "transport",
+          "classification": "essential",
+          "source": "template",
+          "recurrence": "daily",
+          "applicability": "everyday",
+          "profileId": "legacy",
+          "days": []
+        }
+      ],
+      "expenses": [
+        {
+          "id": "fake-paid-generated",
+          "name": "FAKE Original Commute",
+          "expectedCost": 40,
+          "actualPaid": 38,
+          "isPaid": true,
+          "category": "food",
+          "classification": "essential",
+          "source": "template",
+          "flexibleDefinitionId": null,
+          "templateOriginId": "fake-paid-origin",
+          "templateProtected": false,
+          "date": "2026-08-10",
+          "timestamp": 1786352400000
+        }
+      ]
+    }
+  },
+  "backup": {
+    "version": "3.1",
+    "exportedAt": "2026-08-10T09:00:00.000Z",
+    "settings": {
+      "baseAllowance": 2400,
+      "safeToSpendMode": "monthly",
+      "motionLevel": "full",
+      "theme": "dark",
+      "templateProfiles": [
+        {
+          "id": "legacy",
+          "name": "FAKE Default",
+          "offdays": [
+            5,
+            6
+          ]
+        }
+      ],
+      "activeTemplateProfileId": "legacy",
+      "monthlyTemplateAssignments": [
+        {
+          "monthKey": "2026-08",
+          "assignedProfileId": "legacy",
+          "effectiveDate": "2026-08-01"
+        }
+      ],
+      "vault": {
+        "balance": 0,
+        "transactions": [],
+        "goals": []
+      },
+      "monthEndSettlements": [],
+      "onboardingState": {
+        "status": "skipped",
+        "updatedAt": "2026-08-10T09:00:00.000Z",
+        "source": "p00-fixture"
+      }
+    },
+    "templates": [
+      {
+        "id": "fake-paid-origin",
+        "name": "FAKE Renamed Commute",
+        "expectedCost": 55,
+        "defaultAmount": 30,
+        "monthlyBudget": 0,
+        "maxUsesPerMonth": 0,
+        "category": "transport",
+        "classification": "essential",
+        "source": "template",
+        "recurrence": "daily",
+        "applicability": "everyday",
+        "profileId": "legacy",
+        "days": []
+      }
+    ],
+    "expenses": [
+      {
+        "id": "fake-paid-generated",
+        "name": "FAKE Original Commute",
+        "expectedCost": 40,
+        "actualPaid": 38,
+        "isPaid": true,
+        "category": "food",
+        "classification": "essential",
+        "source": "template",
+        "flexibleDefinitionId": null,
+        "templateOriginId": "fake-paid-origin",
+        "templateProtected": false,
+        "date": "2026-08-10",
+        "timestamp": 1786352400000
+      }
+    ]
+  }
+}

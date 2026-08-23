@@ -1,0 +1,283 @@
+{
+  "schema": "rushd.p00-accessibility-performance.v1",
+  "captured_at": "2026-08-11T15:04:36.499Z",
+  "browser_versions": {
+    "capture_runner": {
+      "name": "Playwright Chromium",
+      "version": "151.0.7922.34",
+      "executable_path": "/Users/mehmet/Desktop/Rushd/node_modules/playwright-core/.local-browsers/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+    },
+    "pinned_playwright": {
+      "package_version": "1.62.1",
+      "chromium_version": "151.0.7922.34",
+      "revision": 1234
+    },
+    "node": "v26.3.0",
+    "npm": "11.16.0",
+    "os": {
+      "name": "macOS",
+      "version": "26.5.1",
+      "build": "25F80",
+      "architecture": "arm64"
+    }
+  },
+  "accessibility_method": "Axe-core executed by pinned Playwright Chromium at every captured state before the matching native viewport screenshot was hashed.",
+  "state_level_evidence": [
+    {
+      "path": "docs/baseline/current/ar/dark/390x844/accessibility.json",
+      "sha256": "21842efb5dbb5382861e0d7a690c5b353647850a8312bfc989532c3874de718b",
+      "byte_length": 247719,
+      "state_count": 19
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1024x1366/accessibility.json",
+      "sha256": "ef1b5ffdfbeacfd9cf0af1d2005bd22d74954f4ee767bfa10c4274a386d18f07",
+      "byte_length": 242067,
+      "state_count": 19
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1440x900/accessibility.json",
+      "sha256": "7c421fc66603925088afabf1ae3465d68b3724bc5c72155b4d87d39611842c7f",
+      "byte_length": 243682,
+      "state_count": 19
+    },
+    {
+      "path": "docs/baseline/current/ar/light/390x844/accessibility.json",
+      "sha256": "6a9c4bd46f30a8fc9a40d8758d602d9935fc08e662638d2598b7aacba23a0d42",
+      "byte_length": 247739,
+      "state_count": 19
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1024x1366/accessibility.json",
+      "sha256": "ae56a25e310734cd85b8966a7c1b0d43f7c49b78bc63b940d80009e18dfedcb2",
+      "byte_length": 242076,
+      "state_count": 19
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1440x900/accessibility.json",
+      "sha256": "b0e6bc5c81004d6cbc458ff319a94942979b8f3550be78378aad847cf0deba20",
+      "byte_length": 243702,
+      "state_count": 19
+    },
+    {
+      "path": "docs/baseline/current/en/dark/390x844/accessibility.json",
+      "sha256": "cb57ae6e662c733a6e1f257519760b38753a070cdea6055f4591c572887733b6",
+      "byte_length": 246938,
+      "state_count": 19
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1024x1366/accessibility.json",
+      "sha256": "192e34c1f03e7594ed38a8c742e7ca5ba60c70b7aeef48aaa2dcae4945fc47a5",
+      "byte_length": 241007,
+      "state_count": 19
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1440x900/accessibility.json",
+      "sha256": "6fc426df222ee285c3d19e7edf35d1b0faf9e53222f9fc5d58ce3a2c6714bde3",
+      "byte_length": 242622,
+      "state_count": 19
+    },
+    {
+      "path": "docs/baseline/current/en/light/390x844/accessibility.json",
+      "sha256": "8f42e231ad4446c2598993f2dfdd53e03a931e11aa499308cbdbf4656a4e4e16",
+      "byte_length": 246958,
+      "state_count": 19
+    },
+    {
+      "path": "docs/baseline/current/en/light/1024x1366/accessibility.json",
+      "sha256": "c9c41a713c613afde1fd3594a48d362688d777b1beccac2b1e446d5361b826a7",
+      "byte_length": 241027,
+      "state_count": 19
+    },
+    {
+      "path": "docs/baseline/current/en/light/1440x900/accessibility.json",
+      "sha256": "a7761a6322c52d12f29ae220cf87104bba3f96f705b36d94c97964bb7b8832fe",
+      "byte_length": 242653,
+      "state_count": 19
+    }
+  ],
+  "accessibility_observations": {
+    "activated_state_count": 228,
+    "total_violation_instances": 692,
+    "unique_violation_ids": [
+      "label",
+      "meta-viewport",
+      "region",
+      "scrollable-region-focusable",
+      "select-name"
+    ],
+    "language_direction_pairs": [
+      "ar:rtl",
+      "en:ltr"
+    ],
+    "motion_profiles_captured": [
+      "auto",
+      "full",
+      "balanced",
+      "lite"
+    ],
+    "known_baseline_findings_are_not_release_passes": true
+  },
+  "performance_runner": {
+    "name": "Playwright Chromium",
+    "version": "151.0.7922.34"
+  },
+  "browser_performance": {
+    "schema": "rushd.p00-playwright-performance.v1",
+    "captured_at": "2026-08-11T14:59:14.480Z",
+    "runner": {
+      "engine": "Playwright Chromium",
+      "playwright_version": "1.62.1",
+      "chromium_version": "151.0.7922.34"
+    },
+    "method": "Native Playwright navigation timing and DOM-node comparison for every locked matrix combination.",
+    "samples": [
+      {
+        "language": "ar",
+        "theme": "dark",
+        "viewport": "390x844",
+        "dom_content_loaded_ms": 290.2000000476837,
+        "load_event_ms": 290.2000000476837,
+        "dom_nodes": 748
+      },
+      {
+        "language": "ar",
+        "theme": "dark",
+        "viewport": "1024x1366",
+        "dom_content_loaded_ms": 293,
+        "load_event_ms": 293.09999990463257,
+        "dom_nodes": 748
+      },
+      {
+        "language": "ar",
+        "theme": "dark",
+        "viewport": "1440x900",
+        "dom_content_loaded_ms": 340.89999997615814,
+        "load_event_ms": 341,
+        "dom_nodes": 748
+      },
+      {
+        "language": "ar",
+        "theme": "light",
+        "viewport": "390x844",
+        "dom_content_loaded_ms": 278.6999999284744,
+        "load_event_ms": 278.7999999523163,
+        "dom_nodes": 748
+      },
+      {
+        "language": "ar",
+        "theme": "light",
+        "viewport": "1024x1366",
+        "dom_content_loaded_ms": 294.2999999523163,
+        "load_event_ms": 294.2999999523163,
+        "dom_nodes": 748
+      },
+      {
+        "language": "ar",
+        "theme": "light",
+        "viewport": "1440x900",
+        "dom_content_loaded_ms": 315.89999997615814,
+        "load_event_ms": 316,
+        "dom_nodes": 748
+      },
+      {
+        "language": "en",
+        "theme": "dark",
+        "viewport": "390x844",
+        "dom_content_loaded_ms": 301.2000000476837,
+        "load_event_ms": 301.2000000476837,
+        "dom_nodes": 748
+      },
+      {
+        "language": "en",
+        "theme": "dark",
+        "viewport": "1024x1366",
+        "dom_content_loaded_ms": 329.10000002384186,
+        "load_event_ms": 329.2000000476837,
+        "dom_nodes": 748
+      },
+      {
+        "language": "en",
+        "theme": "dark",
+        "viewport": "1440x900",
+        "dom_content_loaded_ms": 347.60000002384186,
+        "load_event_ms": 347.60000002384186,
+        "dom_nodes": 748
+      },
+      {
+        "language": "en",
+        "theme": "light",
+        "viewport": "390x844",
+        "dom_content_loaded_ms": 329.10000002384186,
+        "load_event_ms": 329.10000002384186,
+        "dom_nodes": 748
+      },
+      {
+        "language": "en",
+        "theme": "light",
+        "viewport": "1024x1366",
+        "dom_content_loaded_ms": 289.39999997615814,
+        "load_event_ms": 289.5,
+        "dom_nodes": 748
+      },
+      {
+        "language": "en",
+        "theme": "light",
+        "viewport": "1440x900",
+        "dom_content_loaded_ms": 363.8000000715256,
+        "load_event_ms": 364,
+        "dom_nodes": 748
+      }
+    ]
+  },
+  "fixture_performance": {
+    "schema": "rushd.p00-fixture-performance.v1",
+    "captured_at": "2026-08-10T05:15:57.000Z",
+    "node": "v26.3.0",
+    "platform": "darwin-arm64",
+    "method": "Fifty in-process JSON.parse samples per deterministic sanitized backup; this is an initial comparison baseline, not a product performance budget.",
+    "results": [
+      {
+        "id": "empty",
+        "path": "tests/fixtures/v1/backups/empty.backup.json",
+        "byte_length": 855,
+        "record_count": 0,
+        "iterations": 50,
+        "parse_ms": {
+          "min": 0.0011669999999988079,
+          "median": 0.0012499999999988631,
+          "p95": 0.002082999999998947,
+          "max": 0.01208300000000051
+        }
+      },
+      {
+        "id": "history-100",
+        "path": "tests/fixtures/v1/backups/large-history-100.backup.json",
+        "byte_length": 44047,
+        "record_count": 100,
+        "iterations": 50,
+        "parse_ms": {
+          "min": 0.03849999999999909,
+          "median": 0.04062500000000213,
+          "p95": 0.05895900000000154,
+          "max": 0.2332080000000012
+        }
+      },
+      {
+        "id": "history-1000",
+        "path": "tests/fixtures/v1/backups/large-history.backup.json",
+        "byte_length": 414393,
+        "record_count": 1000,
+        "iterations": 50,
+        "parse_ms": {
+          "min": 0.3471669999999989,
+          "median": 0.36179100000000375,
+          "p95": 0.46237500000000153,
+          "max": 0.511917000000004
+        }
+      }
+    ]
+  },
+  "budget_status": "recorded_only",
+  "budget_note": "P00 records the initial comparison baseline. It does not claim the final p75 LCP/INP/CLS or physical-device release targets pass."
+}

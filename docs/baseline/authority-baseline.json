@@ -1,0 +1,422 @@
+{
+  "schema": "rushd.p00-authority-baseline.v1",
+  "captured_at": "2026-08-10T05:27:11.573Z",
+  "run_id": "rushd-20260810-rebuild",
+  "source_baseline_sha": "ed45d83d235e230f9d530de6c421f68c3dd5020b",
+  "authority_commit_sha": "2af7468685a7ce3fd5db24ecaeda6d5534be42d3",
+  "phase_base_sha": "b56c80bc2e2eb103ebe5bc258bfeeea60accf53c",
+  "head_sha_at_packaging": "b56c80bc2e2eb103ebe5bc258bfeeea60accf53c",
+  "relationships": {
+    "authority_parent": "ed45d83d235e230f9d530de6c421f68c3dd5020b",
+    "authority_parent_matches_source_baseline": true,
+    "authority_is_ancestor_of_base": true,
+    "base_matches_head": true
+  },
+  "authority_commit_subject": "Rushd: freeze rebuild plan and orchestration authority",
+  "authority_files": [
+    {
+      "path": ".agents/skills/rushd-phase-orchestrator/SKILL.md",
+      "sha256": "503973873e27e865e0c7ec4dae549a8931b533aea5700a460effc5de5304609d"
+    },
+    {
+      "path": ".agents/skills/rushd-phase-orchestrator/agents/openai.yaml",
+      "sha256": "039c93f481b5f49de9ed12e0f99e503fdf1ae55f59a458b8f21abc8d40406557"
+    },
+    {
+      "path": ".agents/skills/rushd-phase-orchestrator/scripts/compute-patch-hash.mjs",
+      "sha256": "04d2ded4e95b77331d02df5d4a28f37e1adce6ef174ba059765352aa32e64b99"
+    },
+    {
+      "path": ".agents/skills/rushd-phase-orchestrator/scripts/create-worktree-snapshot.mjs",
+      "sha256": "c723ee13253ac06bc925b920697a35bc5ef685000d17698b52787cb2542cdcc8"
+    },
+    {
+      "path": ".agents/skills/rushd-phase-orchestrator/scripts/self-test.mjs",
+      "sha256": "a9f9c67f74b1dccd715891bd26fd93c60c768e7dc365d5893a2e57287fb9c4c6"
+    },
+    {
+      "path": ".agents/skills/rushd-phase-orchestrator/scripts/transition-self-test.mjs",
+      "sha256": "3c26e8cd64bfa8031deeef0b0fd8c1645ab8c8e7afd265eb4361974726235b30"
+    },
+    {
+      "path": ".agents/skills/rushd-phase-orchestrator/scripts/transition-state.mjs",
+      "sha256": "143f6cc80b8aa781c6bdd56a8b4d742e4067859ba99b04a166614565519fdb29"
+    },
+    {
+      "path": ".agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs",
+      "sha256": "adb00fcd2dc1e8036e1ccd6c505f37e700addb3e2c34e7437ffd6503a39a32c3"
+    },
+    {
+      "path": ".agents/skills/rushd-phase-orchestrator/scripts/workflow-lib.mjs",
+      "sha256": "e4b7c218e1456f9294aae832d792169630435f91074671012fa0beb75d2e2154"
+    },
+    {
+      "path": ".codex/agents/evidence_packer.toml",
+      "sha256": "7685db389ee14b9553cef988c53e725f5c61c8565a367d82358842b370a0dbb6"
+    },
+    {
+      "path": ".codex/agents/phase_escalation_reviewer.toml",
+      "sha256": "29dfa828fbe85286d479e4f4ccaf9f33bec1478a1cb6b6edf24cf7ddaaa3b4eb"
+    },
+    {
+      "path": ".codex/agents/phase_implementer.toml",
+      "sha256": "35f39d25761050b7c4d35f70c2a6e8001c95d616d19bea272137a4f6872386ec"
+    },
+    {
+      "path": ".codex/agents/phase_reviewer_hard.toml",
+      "sha256": "2707ac5a1510a11726e46f50f0679b3a3f4cd89ee9ca577bee8d3b7532aa05f0"
+    },
+    {
+      "path": ".codex/agents/phase_reviewer_medium.toml",
+      "sha256": "8e53a45d5ce234dae1b3757a1f660d7aa6c84a652d01e79546231fe08ae29049"
+    },
+    {
+      "path": ".codex/agents/test_support.toml",
+      "sha256": "fbfe34a668fc4f14275f12178c029c4538c042dc51298831f0feaa19eef16153"
+    },
+    {
+      "path": "docs/RUSHD_EXECUTION_PROTOCOL.md",
+      "sha256": "5fbb21506c9bc73d030e32660539997fbcbc6ea544b261f2d8d628c3540b6e12"
+    },
+    {
+      "path": "docs/RUSHD_MASTER_PLAN_FINAL.md",
+      "sha256": "3822909d3a4e021585a9b1b6c1435286b787d26d0ad163406f74e92d215f4deb"
+    },
+    {
+      "path": "docs/RUSHD_PHASE_PROMPTS.md",
+      "sha256": "6d89668c9c0a4b28a0a50f1f2e333c1caeb095286acc178b74f540760240bc5f"
+    },
+    {
+      "path": "docs/implementation/phase-plan.json",
+      "sha256": "87b911ee35f4cf8e637a49bce44e75d68226c1f25420df2dcbb6dc186eb880c7"
+    }
+  ],
+  "protected_path_policy": "protected_paths_override_allowed_paths",
+  "protected_patterns": [
+    "docs/RUSHD_FOUNDER_FEEDBACK_2026-08-10.md",
+    "docs/RUSHD_FOUNDER_REVIEW.md",
+    "docs/RUSHD_MASTER_PLAN.md",
+    "docs/RUSHD_PRODUCT_DISCUSSION_2026-08-10.md",
+    "docs/RUSHD_FINAL_FOUNDER_BRIEF.md",
+    "docs/RUSHD_MASTER_PLAN_FINAL.md",
+    "docs/RUSHD_EXECUTION_PROTOCOL.md",
+    "docs/RUSHD_PHASE_PROMPTS.md",
+    "docs/implementation/phase-plan.json",
+    "docs/implementation/P0-P1-INVENTORY.md",
+    "docs/implementation/*-template.json",
+    ".agents/skills/rushd-phase-orchestrator/**",
+    ".agents/skills/rushd-motion-lab/**",
+    ".codex/agents/**"
+  ],
+  "protected_inventory": [
+    {
+      "pattern": ".agents/skills/rushd-motion-lab/**",
+      "path": ".agents/skills/rushd-motion-lab/SKILL.md",
+      "sha256": "d5e83a8e6db952085d1eeaf6659b4ee5c574f89d750992446de80f74e3e23e8c",
+      "byte_length": 6012,
+      "matches_base": true
+    },
+    {
+      "pattern": ".agents/skills/rushd-motion-lab/**",
+      "path": ".agents/skills/rushd-motion-lab/agents/openai.yaml",
+      "sha256": "af4e5e98f01393f5285f0f9db1c3410dccc306721606e4e0c9057e20a8dd4a90",
+      "byte_length": 214,
+      "matches_base": true
+    },
+    {
+      "pattern": ".agents/skills/rushd-phase-orchestrator/**",
+      "path": ".agents/skills/rushd-phase-orchestrator/SKILL.md",
+      "sha256": "503973873e27e865e0c7ec4dae549a8931b533aea5700a460effc5de5304609d",
+      "byte_length": 6806,
+      "matches_base": true
+    },
+    {
+      "pattern": ".agents/skills/rushd-phase-orchestrator/**",
+      "path": ".agents/skills/rushd-phase-orchestrator/agents/openai.yaml",
+      "sha256": "039c93f481b5f49de9ed12e0f99e503fdf1ae55f59a458b8f21abc8d40406557",
+      "byte_length": 240,
+      "matches_base": true
+    },
+    {
+      "pattern": ".agents/skills/rushd-phase-orchestrator/**",
+      "path": ".agents/skills/rushd-phase-orchestrator/scripts/compute-patch-hash.mjs",
+      "sha256": "04d2ded4e95b77331d02df5d4a28f37e1adce6ef174ba059765352aa32e64b99",
+      "byte_length": 2047,
+      "matches_base": true
+    },
+    {
+      "pattern": ".agents/skills/rushd-phase-orchestrator/**",
+      "path": ".agents/skills/rushd-phase-orchestrator/scripts/create-worktree-snapshot.mjs",
+      "sha256": "c723ee13253ac06bc925b920697a35bc5ef685000d17698b52787cb2542cdcc8",
+      "byte_length": 3631,
+      "matches_base": true
+    },
+    {
+      "pattern": ".agents/skills/rushd-phase-orchestrator/**",
+      "path": ".agents/skills/rushd-phase-orchestrator/scripts/self-test.mjs",
+      "sha256": "a9f9c67f74b1dccd715891bd26fd93c60c768e7dc365d5893a2e57287fb9c4c6",
+      "byte_length": 15044,
+      "matches_base": true
+    },
+    {
+      "pattern": ".agents/skills/rushd-phase-orchestrator/**",
+      "path": ".agents/skills/rushd-phase-orchestrator/scripts/transition-self-test.mjs",
+      "sha256": "3c26e8cd64bfa8031deeef0b0fd8c1645ab8c8e7afd265eb4361974726235b30",
+      "byte_length": 10701,
+      "matches_base": true
+    },
+    {
+      "pattern": ".agents/skills/rushd-phase-orchestrator/**",
+      "path": ".agents/skills/rushd-phase-orchestrator/scripts/transition-state.mjs",
+      "sha256": "143f6cc80b8aa781c6bdd56a8b4d742e4067859ba99b04a166614565519fdb29",
+      "byte_length": 52839,
+      "matches_base": true
+    },
+    {
+      "pattern": ".agents/skills/rushd-phase-orchestrator/**",
+      "path": ".agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs",
+      "sha256": "adb00fcd2dc1e8036e1ccd6c505f37e700addb3e2c34e7437ffd6503a39a32c3",
+      "byte_length": 72030,
+      "matches_base": true
+    },
+    {
+      "pattern": ".agents/skills/rushd-phase-orchestrator/**",
+      "path": ".agents/skills/rushd-phase-orchestrator/scripts/workflow-lib.mjs",
+      "sha256": "e4b7c218e1456f9294aae832d792169630435f91074671012fa0beb75d2e2154",
+      "byte_length": 12026,
+      "matches_base": true
+    },
+    {
+      "pattern": ".codex/agents/**",
+      "path": ".codex/agents/evidence_packer.toml",
+      "sha256": "7685db389ee14b9553cef988c53e725f5c61c8565a367d82358842b370a0dbb6",
+      "byte_length": 583,
+      "matches_base": true
+    },
+    {
+      "pattern": ".codex/agents/**",
+      "path": ".codex/agents/phase_escalation_reviewer.toml",
+      "sha256": "29dfa828fbe85286d479e4f4ccaf9f33bec1478a1cb6b6edf24cf7ddaaa3b4eb",
+      "byte_length": 815,
+      "matches_base": true
+    },
+    {
+      "pattern": ".codex/agents/**",
+      "path": ".codex/agents/phase_implementer.toml",
+      "sha256": "35f39d25761050b7c4d35f70c2a6e8001c95d616d19bea272137a4f6872386ec",
+      "byte_length": 783,
+      "matches_base": true
+    },
+    {
+      "pattern": ".codex/agents/**",
+      "path": ".codex/agents/phase_reviewer_hard.toml",
+      "sha256": "2707ac5a1510a11726e46f50f0679b3a3f4cd89ee9ca577bee8d3b7532aa05f0",
+      "byte_length": 927,
+      "matches_base": true
+    },
+    {
+      "pattern": ".codex/agents/**",
+      "path": ".codex/agents/phase_reviewer_medium.toml",
+      "sha256": "8e53a45d5ce234dae1b3757a1f660d7aa6c84a652d01e79546231fe08ae29049",
+      "byte_length": 896,
+      "matches_base": true
+    },
+    {
+      "pattern": ".codex/agents/**",
+      "path": ".codex/agents/test_support.toml",
+      "sha256": "fbfe34a668fc4f14275f12178c029c4538c042dc51298831f0feaa19eef16153",
+      "byte_length": 682,
+      "matches_base": true
+    },
+    {
+      "pattern": "docs/RUSHD_EXECUTION_PROTOCOL.md",
+      "path": "docs/RUSHD_EXECUTION_PROTOCOL.md",
+      "sha256": "5fbb21506c9bc73d030e32660539997fbcbc6ea544b261f2d8d628c3540b6e12",
+      "byte_length": 24176,
+      "matches_base": true
+    },
+    {
+      "pattern": "docs/RUSHD_FINAL_FOUNDER_BRIEF.md",
+      "path": "docs/RUSHD_FINAL_FOUNDER_BRIEF.md",
+      "sha256": "66f7738a67ab03af6e6b61faf899938ca0133ff3d27cb682df6a78617bf2d9f2",
+      "byte_length": 14730,
+      "matches_base": true
+    },
+    {
+      "pattern": "docs/RUSHD_FOUNDER_FEEDBACK_2026-08-10.md",
+      "path": "docs/RUSHD_FOUNDER_FEEDBACK_2026-08-10.md",
+      "sha256": "1e644cbe65c4433a82dcfbfd3b25d85121c1185651bd2b30dd7efde77c13bcb2",
+      "byte_length": 17798,
+      "matches_base": true
+    },
+    {
+      "pattern": "docs/RUSHD_FOUNDER_REVIEW.md",
+      "path": "docs/RUSHD_FOUNDER_REVIEW.md",
+      "sha256": "e28e8e619db530c3e42e035118ca098a585b44fc8ab82e5af3ae4118750a67c8",
+      "byte_length": 18643,
+      "matches_base": true
+    },
+    {
+      "pattern": "docs/RUSHD_MASTER_PLAN.md",
+      "path": "docs/RUSHD_MASTER_PLAN.md",
+      "sha256": "796c0408b1604d40d0c604200ff7e470142b4e08585cd22381dfed4f6898652d",
+      "byte_length": 172645,
+      "matches_base": true
+    },
+    {
+      "pattern": "docs/RUSHD_MASTER_PLAN_FINAL.md",
+      "path": "docs/RUSHD_MASTER_PLAN_FINAL.md",
+      "sha256": "3822909d3a4e021585a9b1b6c1435286b787d26d0ad163406f74e92d215f4deb",
+      "byte_length": 53993,
+      "matches_base": true
+    },
+    {
+      "pattern": "docs/RUSHD_PHASE_PROMPTS.md",
+      "path": "docs/RUSHD_PHASE_PROMPTS.md",
+      "sha256": "6d89668c9c0a4b28a0a50f1f2e333c1caeb095286acc178b74f540760240bc5f",
+      "byte_length": 14333,
+      "matches_base": true
+    },
+    {
+      "pattern": "docs/RUSHD_PRODUCT_DISCUSSION_2026-08-10.md",
+      "path": "docs/RUSHD_PRODUCT_DISCUSSION_2026-08-10.md",
+      "sha256": "3aadcc1b0eb9c09f17f8fecd2074f127f7a9f34cb37ed1eb4b3750590c6e1a80",
+      "byte_length": 37225,
+      "matches_base": true
+    },
+    {
+      "pattern": "docs/implementation/P0-P1-INVENTORY.md",
+      "path": "docs/implementation/P0-P1-INVENTORY.md",
+      "sha256": "6635d85bcaa597af3edb5e143d5363d0aad4b9c03efb4bb1baaf673650d67613",
+      "byte_length": 4285,
+      "matches_base": true
+    },
+    {
+      "pattern": "docs/implementation/*-template.json",
+      "path": "docs/implementation/adjudication-template.json",
+      "sha256": "76eb4ed532cbb57260bb29be63dcc099ae04de21269f156ac47fd979806e8ff3",
+      "byte_length": 505,
+      "matches_base": true
+    },
+    {
+      "pattern": "docs/implementation/*-template.json",
+      "path": "docs/implementation/checkpoint-template.json",
+      "sha256": "00cbe0e5610f7d3228cc3fc12e5cda22599895f788c0dd3986164987a88e3d49",
+      "byte_length": 1559,
+      "matches_base": true
+    },
+    {
+      "pattern": "docs/implementation/*-template.json",
+      "path": "docs/implementation/final-audit-template.json",
+      "sha256": "673d1896c54eecb8ea5e2db03bc559adca9801b29af4e82cf0f2cafb08989521",
+      "byte_length": 1787,
+      "matches_base": true
+    },
+    {
+      "pattern": "docs/implementation/*-template.json",
+      "path": "docs/implementation/full-gate-template.json",
+      "sha256": "e7081d071596c32b2eb3f1159ede2a49ea5b1af3e8910fd7326d397bc5b00783",
+      "byte_length": 2153,
+      "matches_base": true
+    },
+    {
+      "pattern": "docs/implementation/*-template.json",
+      "path": "docs/implementation/human-attestation-template.json",
+      "sha256": "bb2a8008ee0ad70e9ee047119a424126efd4ff95b7e2d36a12daee5962201733",
+      "byte_length": 700,
+      "matches_base": true
+    },
+    {
+      "pattern": "docs/implementation/*-template.json",
+      "path": "docs/implementation/phase-commit-template.json",
+      "sha256": "c2b76a2671b35abef63a731a3afd8e3ad5d2cb6d2d006d62de5150682c2d9f93",
+      "byte_length": 580,
+      "matches_base": true
+    },
+    {
+      "pattern": "docs/implementation/phase-plan.json",
+      "path": "docs/implementation/phase-plan.json",
+      "sha256": "87b911ee35f4cf8e637a49bce44e75d68226c1f25420df2dcbb6dc186eb880c7",
+      "byte_length": 32979,
+      "matches_base": true
+    },
+    {
+      "pattern": "docs/implementation/*-template.json",
+      "path": "docs/implementation/plan-amendment-template.json",
+      "sha256": "c048b573647685350d2507012d94ddbcbecc9008df826c9cc47dbff7e806446f",
+      "byte_length": 582,
+      "matches_base": true
+    },
+    {
+      "pattern": "docs/implementation/*-template.json",
+      "path": "docs/implementation/post-deployment-template.json",
+      "sha256": "c516015540a74d82f9ae3958003190a5eda697275565abd2a99f712cb375955c",
+      "byte_length": 764,
+      "matches_base": true
+    },
+    {
+      "pattern": "docs/implementation/*-template.json",
+      "path": "docs/implementation/publication-authority-template.json",
+      "sha256": "0f752ca2af2683f894acacc7f7a477e14848b1135542849e4cd09d4963440983",
+      "byte_length": 491,
+      "matches_base": true
+    },
+    {
+      "pattern": "docs/implementation/*-template.json",
+      "path": "docs/implementation/regression-review-template.json",
+      "sha256": "63f16ca286e014df5782dd1d05cf708e69cc643f63cdd304ce067565be1db6ea",
+      "byte_length": 2638,
+      "matches_base": true
+    },
+    {
+      "pattern": "docs/implementation/*-template.json",
+      "path": "docs/implementation/review-template.json",
+      "sha256": "8d69233e44627811c22a21d58e4a33a1b32f6ff904e574532d312aebfe19e403",
+      "byte_length": 1259,
+      "matches_base": true
+    },
+    {
+      "pattern": "docs/implementation/*-template.json",
+      "path": "docs/implementation/state-template.json",
+      "sha256": "76697c05e2bb2da6489afda9515cec34a0d9cb80aec900ac6d6ff52155fb7e2a",
+      "byte_length": 1207,
+      "matches_base": true
+    },
+    {
+      "pattern": "docs/implementation/*-template.json",
+      "path": "docs/implementation/task-receipt-template.json",
+      "sha256": "bd5f372c4fc3cbe2f08f47cca2492e9bb5816d41cb44c5b459dc9c7fef7a439c",
+      "byte_length": 1057,
+      "matches_base": true
+    },
+    {
+      "pattern": "docs/implementation/*-template.json",
+      "path": "docs/implementation/transition-request-template.json",
+      "sha256": "5dcdeaf657817fe44789022665639b9da5cd761317dc30bdb3515dd89e0651ac",
+      "byte_length": 489,
+      "matches_base": true
+    }
+  ],
+  "supersession_log": [
+    {
+      "authority": "docs/RUSHD_MASTER_PLAN_FINAL.md",
+      "supersedes": "docs/RUSHD_MASTER_PLAN.md"
+    },
+    {
+      "authority": "docs/RUSHD_MASTER_PLAN_FINAL.md",
+      "supersedes": "docs/RUSHD_FOUNDER_REVIEW.md"
+    },
+    {
+      "authority": "docs/RUSHD_MASTER_PLAN_FINAL.md",
+      "supersedes": "docs/RUSHD_PRODUCT_DISCUSSION_2026-08-10.md"
+    },
+    {
+      "authority": "docs/RUSHD_MASTER_PLAN_FINAL.md",
+      "supersedes": "docs/RUSHD_FOUNDER_FEEDBACK_2026-08-10.md"
+    },
+    {
+      "authority": "docs/RUSHD_MASTER_PLAN_FINAL.md",
+      "supersedes": "aspirational sections of docs/roadmap.md, docs/data-model.md, docs/architecture.md, and docs/privacy-notes.md"
+    }
+  ]
+}

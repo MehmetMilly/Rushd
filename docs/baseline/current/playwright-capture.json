@@ -1,0 +1,157 @@
+{
+  "schema": "rushd.p00-playwright-capture.v1",
+  "captured_at": "2026-08-11T14:59:14.480Z",
+  "captured_local_at": "2026-08-11T17:59:14.480+03:00",
+  "timezone": "Asia/Riyadh",
+  "source_sha": "b56c80bc2e2eb103ebe5bc258bfeeea60accf53c",
+  "playwright_version": "1.62.1",
+  "chromium_version": "151.0.7922.34",
+  "chromium_executable_path": "/Users/mehmet/Desktop/Rushd/node_modules/playwright-core/.local-browsers/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+  "runtime_connection": {
+    "mode": "external-cdp",
+    "endpoint": "http://127.0.0.1:9233"
+  },
+  "capture_method": "Playwright page.screenshot and recordVideo at context-native CSS viewport dimensions",
+  "device_scale_factor": 1,
+  "post_capture_processing": false,
+  "dimension_forcing": false,
+  "padded_borders_added": false,
+  "fixture_sha256": {
+    "empty": "3db306b43b16a4e5f2fed542842e4d97082a5fb15fe37d219f2e3837206c8019",
+    "populated": "457917a142849fca8d8f5aed89ecf1e715362198131872053d486e60b3265481"
+  },
+  "matrix": [
+    {
+      "language": "ar",
+      "theme": "dark",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "state_count": 19,
+      "directory": "docs/baseline/current/ar/dark/390x844",
+      "accessibility_path": "docs/baseline/current/ar/dark/390x844/accessibility.json"
+    },
+    {
+      "language": "ar",
+      "theme": "dark",
+      "viewport": {
+        "width": 1024,
+        "height": 1366
+      },
+      "state_count": 19,
+      "directory": "docs/baseline/current/ar/dark/1024x1366",
+      "accessibility_path": "docs/baseline/current/ar/dark/1024x1366/accessibility.json"
+    },
+    {
+      "language": "ar",
+      "theme": "dark",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "state_count": 19,
+      "directory": "docs/baseline/current/ar/dark/1440x900",
+      "accessibility_path": "docs/baseline/current/ar/dark/1440x900/accessibility.json"
+    },
+    {
+      "language": "ar",
+      "theme": "light",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "state_count": 19,
+      "directory": "docs/baseline/current/ar/light/390x844",
+      "accessibility_path": "docs/baseline/current/ar/light/390x844/accessibility.json"
+    },
+    {
+      "language": "ar",
+      "theme": "light",
+      "viewport": {
+        "width": 1024,
+        "height": 1366
+      },
+      "state_count": 19,
+      "directory": "docs/baseline/current/ar/light/1024x1366",
+      "accessibility_path": "docs/baseline/current/ar/light/1024x1366/accessibility.json"
+    },
+    {
+      "language": "ar",
+      "theme": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "state_count": 19,
+      "directory": "docs/baseline/current/ar/light/1440x900",
+      "accessibility_path": "docs/baseline/current/ar/light/1440x900/accessibility.json"
+    },
+    {
+      "language": "en",
+      "theme": "dark",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "state_count": 19,
+      "directory": "docs/baseline/current/en/dark/390x844",
+      "accessibility_path": "docs/baseline/current/en/dark/390x844/accessibility.json"
+    },
+    {
+      "language": "en",
+      "theme": "dark",
+      "viewport": {
+        "width": 1024,
+        "height": 1366
+      },
+      "state_count": 19,
+      "directory": "docs/baseline/current/en/dark/1024x1366",
+      "accessibility_path": "docs/baseline/current/en/dark/1024x1366/accessibility.json"
+    },
+    {
+      "language": "en",
+      "theme": "dark",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "state_count": 19,
+      "directory": "docs/baseline/current/en/dark/1440x900",
+      "accessibility_path": "docs/baseline/current/en/dark/1440x900/accessibility.json"
+    },
+    {
+      "language": "en",
+      "theme": "light",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "state_count": 19,
+      "directory": "docs/baseline/current/en/light/390x844",
+      "accessibility_path": "docs/baseline/current/en/light/390x844/accessibility.json"
+    },
+    {
+      "language": "en",
+      "theme": "light",
+      "viewport": {
+        "width": 1024,
+        "height": 1366
+      },
+      "state_count": 19,
+      "directory": "docs/baseline/current/en/light/1024x1366",
+      "accessibility_path": "docs/baseline/current/en/light/1024x1366/accessibility.json"
+    },
+    {
+      "language": "en",
+      "theme": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "state_count": 19,
+      "directory": "docs/baseline/current/en/light/1440x900",
+      "accessibility_path": "docs/baseline/current/en/light/1440x900/accessibility.json"
+    }
+  ]
+}

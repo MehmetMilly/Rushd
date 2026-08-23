@@ -1,0 +1,160 @@
+{
+  "schema": "rushd.v1-fixture.v1",
+  "case_id": "malformed",
+  "description": "Malformed raw storage and backup candidates for import and numeric validation characterization.",
+  "sanitization": {
+    "marker": "SYNTHETIC_P00_ONLY",
+    "contains_real_financial_data": false,
+    "generated_at": "2026-08-10T09:00:00.000Z"
+  },
+  "frozen_clock_utc": "2026-08-10T09:00:00.000Z",
+  "local_storage": {
+    "rushd_lang": "ar",
+    "rushd_theme": "dark",
+    "rushd_motion": "full",
+    "rushd_calendar": "gregorian"
+  },
+  "indexed_db": {
+    "name": "MicroSaveOS_DB",
+    "version": 1,
+    "stores": {
+      "settings": [
+        {
+          "key": "baseAllowance",
+          "value": "not-a-number"
+        },
+        {
+          "key": "safeToSpendMode",
+          "value": "monthly"
+        },
+        {
+          "key": "motionLevel",
+          "value": "full"
+        },
+        {
+          "key": "theme",
+          "value": "dark"
+        },
+        {
+          "key": "templateProfiles",
+          "value": [
+            {
+              "id": "legacy",
+              "name": "FAKE Default",
+              "offdays": [
+                5,
+                6
+              ]
+            }
+          ]
+        },
+        {
+          "key": "activeTemplateProfileId",
+          "value": "legacy"
+        },
+        {
+          "key": "monthlyTemplateAssignments",
+          "value": [
+            {
+              "monthKey": "2026-08",
+              "assignedProfileId": "legacy",
+              "effectiveDate": "2026-08-01"
+            }
+          ]
+        },
+        {
+          "key": "vault",
+          "value": {
+            "balance": -50,
+            "transactions": "bad",
+            "goals": null
+          }
+        },
+        {
+          "key": "monthEndSettlements",
+          "value": []
+        },
+        {
+          "key": "onboardingState",
+          "value": {
+            "status": "skipped",
+            "updatedAt": "2026-08-10T09:00:00.000Z",
+            "source": "p00-fixture"
+          }
+        }
+      ],
+      "templates": [
+        {
+          "id": "fake-malformed-template",
+          "name": "",
+          "expectedCost": "Infinity",
+          "recurrence": "monthly"
+        }
+      ],
+      "expenses": [
+        {
+          "id": "fake-malformed-expense",
+          "name": "FAKE Expense fake-malformed-expense",
+          "expectedCost": -1,
+          "actualPaid": "NaN",
+          "isPaid": "yes",
+          "category": "other",
+          "classification": "essential",
+          "source": "manual",
+          "flexibleDefinitionId": null,
+          "templateOriginId": null,
+          "templateProtected": true,
+          "date": "not-a-date",
+          "timestamp": null
+        }
+      ]
+    }
+  },
+  "backup": {
+    "version": "3.1",
+    "exportedAt": "not-a-date",
+    "expenses": []
+  },
+  "malformed_backup_candidates": [
+    {
+      "id": "missing-expenses",
+      "payload": {
+        "version": "3.1",
+        "settings": {}
+      }
+    },
+    {
+      "id": "non-array-expenses",
+      "payload": {
+        "version": "3.1",
+        "expenses": {}
+      }
+    },
+    {
+      "id": "weak-schema-accepted",
+      "payload": {
+        "expenses": [],
+        "settings": {
+          "baseAllowance": -5
+        },
+        "templates": [
+          {
+            "bad": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "excess-precision",
+      "payload": {
+        "expenses": [
+          {
+            "id": "fake-precision",
+            "expectedCost": 1.234,
+            "actualPaid": 0
+          }
+        ]
+      }
+    }
+  ]
+}

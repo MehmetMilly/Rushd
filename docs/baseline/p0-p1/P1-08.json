@@ -1,0 +1,23 @@
+{
+  "schema": "rushd.p00-final-reproduction-evidence.v1",
+  "issue_id": "P1-08",
+  "final_evidence_path": "docs/baseline/p0-p1/P1-08.json",
+  "captured_at": "2026-08-11T15:04:36.499Z",
+  "source_sha": "b56c80bc2e2eb103ebe5bc258bfeeea60accf53c",
+  "reproduction_type": "manual",
+  "sanitized_fixture": "tests/fixtures/v1/large-history.json",
+  "preconditions": [
+    "Delay the first getAllExpenses result in a large fake ledger.",
+    "Select a second date before releasing the first request."
+  ],
+  "steps": [
+    "Start loadDay for date A.",
+    "Start and finish loadDay for date B.",
+    "Release A and inspect flexible/statistics month keys."
+  ],
+  "expected_current_result": "A late first request can start the last derived refresh and publish for the now-stale date.",
+  "captured_current_result": "Source inspection confirms loadDay guards currentViewExpenses but still calls derived refreshes after a stale expense fetch.",
+  "p01_action": "Guard the entire load/derived pipeline by one generation.",
+  "regression_owner": "P01",
+  "result": "reproduced"
+}

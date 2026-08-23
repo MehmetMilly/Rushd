@@ -1,0 +1,111 @@
+{
+  "version": "3.1",
+  "exportedAt": "2026-08-10T09:00:00.000Z",
+  "settings": {
+    "baseAllowance": 2400,
+    "safeToSpendMode": "monthly",
+    "motionLevel": "full",
+    "theme": "dark",
+    "templateProfiles": [
+      {
+        "id": "legacy",
+        "name": "FAKE Original Plan",
+        "offdays": [
+          5,
+          6
+        ]
+      },
+      {
+        "id": "fake-new-plan",
+        "name": "FAKE Edited Plan",
+        "offdays": [
+          4,
+          5
+        ]
+      }
+    ],
+    "activeTemplateProfileId": "fake-new-plan",
+    "monthlyTemplateAssignments": [
+      {
+        "monthKey": "2026-08",
+        "assignedProfileId": "legacy",
+        "effectiveDate": "2026-08-15"
+      }
+    ],
+    "vault": {
+      "balance": 0,
+      "transactions": [],
+      "goals": []
+    },
+    "monthEndSettlements": [],
+    "onboardingState": {
+      "status": "skipped",
+      "updatedAt": "2026-08-10T09:00:00.000Z",
+      "source": "p00-fixture"
+    }
+  },
+  "templates": [
+    {
+      "id": "fake-update-template",
+      "name": "FAKE Updated Item",
+      "expectedCost": 75,
+      "defaultAmount": 30,
+      "monthlyBudget": 0,
+      "maxUsesPerMonth": 0,
+      "category": "other",
+      "classification": "essential",
+      "source": "template",
+      "recurrence": "daily",
+      "applicability": "everyday",
+      "profileId": "fake-new-plan",
+      "days": []
+    },
+    {
+      "id": "fake-create-template",
+      "name": "FAKE New Item",
+      "expectedCost": 35,
+      "defaultAmount": 30,
+      "monthlyBudget": 0,
+      "maxUsesPerMonth": 0,
+      "category": "other",
+      "classification": "essential",
+      "source": "template",
+      "recurrence": "daily",
+      "applicability": "everyday",
+      "profileId": "fake-new-plan",
+      "days": []
+    }
+  ],
+  "expenses": [
+    {
+      "id": "fake-plan-update",
+      "name": "FAKE Old Item",
+      "expectedCost": 25,
+      "actualPaid": 0,
+      "isPaid": false,
+      "category": "other",
+      "classification": "essential",
+      "source": "template",
+      "flexibleDefinitionId": null,
+      "templateOriginId": "fake-update-template",
+      "templateProtected": false,
+      "date": "2026-08-16",
+      "timestamp": 1786870800000
+    },
+    {
+      "id": "fake-plan-delete",
+      "name": "FAKE Removed Item",
+      "expectedCost": 25,
+      "actualPaid": 0,
+      "isPaid": false,
+      "category": "other",
+      "classification": "essential",
+      "source": "template",
+      "flexibleDefinitionId": null,
+      "templateOriginId": "fake-removed-template",
+      "templateProtected": false,
+      "date": "2026-08-17",
+      "timestamp": 1786957200000
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "schema": "rushd.p00-final-reproduction-evidence.v1",
+  "issue_id": "P1-07",
+  "final_evidence_path": "docs/baseline/p0-p1/P1-07.json",
+  "captured_at": "2026-08-11T15:04:36.499Z",
+  "source_sha": "b56c80bc2e2eb103ebe5bc258bfeeea60accf53c",
+  "reproduction_type": "automated",
+  "sanitized_fixture": "tests/fixtures/v1/plan-edit.json",
+  "preconditions": [
+    "The month assignment starts mid-month and the assigned profile/template is edited later."
+  ],
+  "steps": [
+    "Run npm test.",
+    "Inspect the current resolution of assignment and mutable template record."
+  ],
+  "expected_current_result": "The month-wide lookup uses the current profile/template without an immutable revision boundary.",
+  "captured_current_result": "Automated characterization confirms assignment lookup is by monthKey and template lookup uses current records.",
+  "p01_action": "Contain unsafe profile reapplication pending versioned plan domain work.",
+  "regression_owner": "P01",
+  "result": "reproduced"
+}

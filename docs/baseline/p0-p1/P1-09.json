@@ -1,0 +1,21 @@
+{
+  "schema": "rushd.p00-final-reproduction-evidence.v1",
+  "issue_id": "P1-09",
+  "final_evidence_path": "docs/baseline/p0-p1/P1-09.json",
+  "captured_at": "2026-08-11T15:04:36.499Z",
+  "source_sha": "b56c80bc2e2eb103ebe5bc258bfeeea60accf53c",
+  "reproduction_type": "automated",
+  "sanitized_fixture": "tests/fixtures/v1/boundary.json",
+  "preconditions": [
+    "Use negative, excess-precision, non-finite, Arabic, and Western numeric strings."
+  ],
+  "steps": [
+    "Run npm test.",
+    "Evaluate current Number/parseFloat-style acceptance boundaries."
+  ],
+  "expected_current_result": "Invalid financial values are not rejected by one checked boundary.",
+  "captured_current_result": "Automated characterization records accepted negative/excess-precision values and inconsistent Arabic parsing.",
+  "p01_action": "Visibly block unsafe numeric values pending canonical money normalization.",
+  "regression_owner": "P01",
+  "result": "reproduced"
+}

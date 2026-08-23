@@ -1,0 +1,21 @@
+{
+  "schema": "rushd.p00-final-reproduction-evidence.v1",
+  "issue_id": "P0-06",
+  "final_evidence_path": "docs/baseline/p0-p1/P0-06.json",
+  "captured_at": "2026-08-11T15:04:36.499Z",
+  "source_sha": "b56c80bc2e2eb103ebe5bc258bfeeea60accf53c",
+  "reproduction_type": "automated",
+  "sanitized_fixture": "tests/fixtures/v1/populated.json",
+  "preconditions": [
+    "Vault balance is 100 SAR and two goals each target 100 SAR."
+  ],
+  "steps": [
+    "Run npm test.",
+    "Apply the current per-goal progress mapping."
+  ],
+  "expected_current_result": "Both goals report 100% from the same 100 SAR.",
+  "captured_current_result": "Automated characterization records progress [100,100] against one balance of 100.",
+  "p01_action": "Use goal-owned allocations only.",
+  "regression_owner": "P01",
+  "result": "reproduced"
+}

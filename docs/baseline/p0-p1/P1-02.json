@@ -1,0 +1,21 @@
+{
+  "schema": "rushd.p00-final-reproduction-evidence.v1",
+  "issue_id": "P1-02",
+  "final_evidence_path": "docs/baseline/p0-p1/P1-02.json",
+  "captured_at": "2026-08-11T15:04:36.499Z",
+  "source_sha": "b56c80bc2e2eb103ebe5bc258bfeeea60accf53c",
+  "reproduction_type": "automated",
+  "sanitized_fixture": "tests/fixtures/v1/boundary.json",
+  "preconditions": [
+    "Two paid actual amounts are 0.1 and 0.2 major units."
+  ],
+  "steps": [
+    "Run npm test.",
+    "Sum the values using the current Number arithmetic."
+  ],
+  "expected_current_result": "The total is 0.30000000000000004.",
+  "captured_current_result": "Automated characterization records the IEEE-754 residue.",
+  "p01_action": "Contain unsafe numeric inputs pending integer-money domain work.",
+  "regression_owner": "P01",
+  "result": "reproduced"
+}

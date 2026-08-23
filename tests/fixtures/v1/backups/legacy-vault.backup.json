@@ -1,0 +1,73 @@
+{
+  "version": "3.1",
+  "exportedAt": "2026-08-10T09:00:00.000Z",
+  "settings": {
+    "baseAllowance": 2400,
+    "safeToSpendMode": "monthly",
+    "motionLevel": "full",
+    "theme": "dark",
+    "templateProfiles": [
+      {
+        "id": "legacy",
+        "name": "FAKE Default",
+        "offdays": [
+          5,
+          6
+        ]
+      }
+    ],
+    "activeTemplateProfileId": "legacy",
+    "monthlyTemplateAssignments": [
+      {
+        "monthKey": "2026-08",
+        "assignedProfileId": "legacy",
+        "effectiveDate": "2026-08-01"
+      }
+    ],
+    "vault": {
+      "balance": 650,
+      "transactions": [
+        {
+          "id": "fake-first-transfer",
+          "type": "surplus_transfer",
+          "amount": 100,
+          "date": "2026-08-01",
+          "monthKey": "2026-08",
+          "sourceMonthKey": "2026-07",
+          "createdAt": "2026-08-01T09:00:00.000Z"
+        }
+      ],
+      "goals": [
+        {
+          "id": "fake-vault-goal",
+          "name": "FAKE Emergency Goal",
+          "targetAmount": 900
+        }
+      ]
+    },
+    "monthEndSettlements": [],
+    "onboardingState": {
+      "status": "skipped",
+      "updatedAt": "2026-08-10T09:00:00.000Z",
+      "source": "p00-fixture"
+    }
+  },
+  "templates": [],
+  "expenses": [
+    {
+      "id": "fake-vault-history",
+      "name": "FAKE Expense fake-vault-history",
+      "expectedCost": 25,
+      "actualPaid": 25,
+      "isPaid": true,
+      "category": "other",
+      "classification": "essential",
+      "source": "manual",
+      "flexibleDefinitionId": null,
+      "templateOriginId": null,
+      "templateProtected": true,
+      "date": "2026-08-10",
+      "timestamp": 1786352400000
+    }
+  ]
+}

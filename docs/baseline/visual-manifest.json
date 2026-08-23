@@ -1,0 +1,2670 @@
+{
+  "schema": "rushd.p00-visual-manifest.v1",
+  "captured_at": "2026-08-11T15:04:36.499Z",
+  "source_sha": "b56c80bc2e2eb103ebe5bc258bfeeea60accf53c",
+  "capture_data": "synthetic three-expense, one-goal, one-template UI state plus empty state; no real financial data",
+  "browser_versions": {
+    "capture_runner": {
+      "name": "Playwright Chromium",
+      "version": "151.0.7922.34",
+      "executable_path": "/Users/mehmet/Desktop/Rushd/node_modules/playwright-core/.local-browsers/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+    },
+    "pinned_playwright": {
+      "package_version": "1.62.1",
+      "chromium_version": "151.0.7922.34",
+      "revision": 1234
+    },
+    "node": "v26.3.0",
+    "npm": "11.16.0",
+    "os": {
+      "name": "macOS",
+      "version": "26.5.1",
+      "build": "25F80",
+      "architecture": "arm64"
+    }
+  },
+  "capture_manifest_path": "docs/baseline/current/playwright-capture.json",
+  "capture_manifest_sha256": "315338e3bceba3602bfec7b47d57c01a4b6e4e92011b9c71ffce2d397411d398",
+  "native_viewport_capture": true,
+  "matrix": [
+    {
+      "language": "ar",
+      "theme": "dark",
+      "viewport": "390x844",
+      "directory": "docs/baseline/current/ar/dark/390x844",
+      "fixture_states": [
+        "empty",
+        "populated",
+        "error",
+        "loading"
+      ],
+      "png_count": 19,
+      "motion": [
+        "motion-add-full.webm",
+        "motion-add-full.mp4"
+      ],
+      "accessibility_path": "docs/baseline/current/ar/dark/390x844/accessibility.json",
+      "accessibility_sha256": "21842efb5dbb5382861e0d7a690c5b353647850a8312bfc989532c3874de718b",
+      "missing": [],
+      "wrong_dimensions": [],
+      "result": "pass"
+    },
+    {
+      "language": "ar",
+      "theme": "dark",
+      "viewport": "1024x1366",
+      "directory": "docs/baseline/current/ar/dark/1024x1366",
+      "fixture_states": [
+        "empty",
+        "populated",
+        "error",
+        "loading"
+      ],
+      "png_count": 19,
+      "motion": [
+        "motion-add-full.webm",
+        "motion-add-full.mp4"
+      ],
+      "accessibility_path": "docs/baseline/current/ar/dark/1024x1366/accessibility.json",
+      "accessibility_sha256": "ef1b5ffdfbeacfd9cf0af1d2005bd22d74954f4ee767bfa10c4274a386d18f07",
+      "missing": [],
+      "wrong_dimensions": [],
+      "result": "pass"
+    },
+    {
+      "language": "ar",
+      "theme": "dark",
+      "viewport": "1440x900",
+      "directory": "docs/baseline/current/ar/dark/1440x900",
+      "fixture_states": [
+        "empty",
+        "populated",
+        "error",
+        "loading"
+      ],
+      "png_count": 19,
+      "motion": [
+        "motion-add-full.webm",
+        "motion-add-full.mp4"
+      ],
+      "accessibility_path": "docs/baseline/current/ar/dark/1440x900/accessibility.json",
+      "accessibility_sha256": "7c421fc66603925088afabf1ae3465d68b3724bc5c72155b4d87d39611842c7f",
+      "missing": [],
+      "wrong_dimensions": [],
+      "result": "pass"
+    },
+    {
+      "language": "ar",
+      "theme": "light",
+      "viewport": "390x844",
+      "directory": "docs/baseline/current/ar/light/390x844",
+      "fixture_states": [
+        "empty",
+        "populated",
+        "error",
+        "loading"
+      ],
+      "png_count": 19,
+      "motion": [
+        "motion-add-full.webm",
+        "motion-add-full.mp4"
+      ],
+      "accessibility_path": "docs/baseline/current/ar/light/390x844/accessibility.json",
+      "accessibility_sha256": "6a9c4bd46f30a8fc9a40d8758d602d9935fc08e662638d2598b7aacba23a0d42",
+      "missing": [],
+      "wrong_dimensions": [],
+      "result": "pass"
+    },
+    {
+      "language": "ar",
+      "theme": "light",
+      "viewport": "1024x1366",
+      "directory": "docs/baseline/current/ar/light/1024x1366",
+      "fixture_states": [
+        "empty",
+        "populated",
+        "error",
+        "loading"
+      ],
+      "png_count": 19,
+      "motion": [
+        "motion-add-full.webm",
+        "motion-add-full.mp4"
+      ],
+      "accessibility_path": "docs/baseline/current/ar/light/1024x1366/accessibility.json",
+      "accessibility_sha256": "ae56a25e310734cd85b8966a7c1b0d43f7c49b78bc63b940d80009e18dfedcb2",
+      "missing": [],
+      "wrong_dimensions": [],
+      "result": "pass"
+    },
+    {
+      "language": "ar",
+      "theme": "light",
+      "viewport": "1440x900",
+      "directory": "docs/baseline/current/ar/light/1440x900",
+      "fixture_states": [
+        "empty",
+        "populated",
+        "error",
+        "loading"
+      ],
+      "png_count": 19,
+      "motion": [
+        "motion-add-full.webm",
+        "motion-add-full.mp4"
+      ],
+      "accessibility_path": "docs/baseline/current/ar/light/1440x900/accessibility.json",
+      "accessibility_sha256": "b0e6bc5c81004d6cbc458ff319a94942979b8f3550be78378aad847cf0deba20",
+      "missing": [],
+      "wrong_dimensions": [],
+      "result": "pass"
+    },
+    {
+      "language": "en",
+      "theme": "dark",
+      "viewport": "390x844",
+      "directory": "docs/baseline/current/en/dark/390x844",
+      "fixture_states": [
+        "empty",
+        "populated",
+        "error",
+        "loading"
+      ],
+      "png_count": 19,
+      "motion": [
+        "motion-add-full.webm",
+        "motion-add-full.mp4"
+      ],
+      "accessibility_path": "docs/baseline/current/en/dark/390x844/accessibility.json",
+      "accessibility_sha256": "cb57ae6e662c733a6e1f257519760b38753a070cdea6055f4591c572887733b6",
+      "missing": [],
+      "wrong_dimensions": [],
+      "result": "pass"
+    },
+    {
+      "language": "en",
+      "theme": "dark",
+      "viewport": "1024x1366",
+      "directory": "docs/baseline/current/en/dark/1024x1366",
+      "fixture_states": [
+        "empty",
+        "populated",
+        "error",
+        "loading"
+      ],
+      "png_count": 19,
+      "motion": [
+        "motion-add-full.webm",
+        "motion-add-full.mp4"
+      ],
+      "accessibility_path": "docs/baseline/current/en/dark/1024x1366/accessibility.json",
+      "accessibility_sha256": "192e34c1f03e7594ed38a8c742e7ca5ba60c70b7aeef48aaa2dcae4945fc47a5",
+      "missing": [],
+      "wrong_dimensions": [],
+      "result": "pass"
+    },
+    {
+      "language": "en",
+      "theme": "dark",
+      "viewport": "1440x900",
+      "directory": "docs/baseline/current/en/dark/1440x900",
+      "fixture_states": [
+        "empty",
+        "populated",
+        "error",
+        "loading"
+      ],
+      "png_count": 19,
+      "motion": [
+        "motion-add-full.webm",
+        "motion-add-full.mp4"
+      ],
+      "accessibility_path": "docs/baseline/current/en/dark/1440x900/accessibility.json",
+      "accessibility_sha256": "6fc426df222ee285c3d19e7edf35d1b0faf9e53222f9fc5d58ce3a2c6714bde3",
+      "missing": [],
+      "wrong_dimensions": [],
+      "result": "pass"
+    },
+    {
+      "language": "en",
+      "theme": "light",
+      "viewport": "390x844",
+      "directory": "docs/baseline/current/en/light/390x844",
+      "fixture_states": [
+        "empty",
+        "populated",
+        "error",
+        "loading"
+      ],
+      "png_count": 19,
+      "motion": [
+        "motion-add-full.webm",
+        "motion-add-full.mp4"
+      ],
+      "accessibility_path": "docs/baseline/current/en/light/390x844/accessibility.json",
+      "accessibility_sha256": "8f42e231ad4446c2598993f2dfdd53e03a931e11aa499308cbdbf4656a4e4e16",
+      "missing": [],
+      "wrong_dimensions": [],
+      "result": "pass"
+    },
+    {
+      "language": "en",
+      "theme": "light",
+      "viewport": "1024x1366",
+      "directory": "docs/baseline/current/en/light/1024x1366",
+      "fixture_states": [
+        "empty",
+        "populated",
+        "error",
+        "loading"
+      ],
+      "png_count": 19,
+      "motion": [
+        "motion-add-full.webm",
+        "motion-add-full.mp4"
+      ],
+      "accessibility_path": "docs/baseline/current/en/light/1024x1366/accessibility.json",
+      "accessibility_sha256": "c9c41a713c613afde1fd3594a48d362688d777b1beccac2b1e446d5361b826a7",
+      "missing": [],
+      "wrong_dimensions": [],
+      "result": "pass"
+    },
+    {
+      "language": "en",
+      "theme": "light",
+      "viewport": "1440x900",
+      "directory": "docs/baseline/current/en/light/1440x900",
+      "fixture_states": [
+        "empty",
+        "populated",
+        "error",
+        "loading"
+      ],
+      "png_count": 19,
+      "motion": [
+        "motion-add-full.webm",
+        "motion-add-full.mp4"
+      ],
+      "accessibility_path": "docs/baseline/current/en/light/1440x900/accessibility.json",
+      "accessibility_sha256": "a7761a6322c52d12f29ae220cf87104bba3f96f705b36d94c97964bb7b8832fe",
+      "missing": [],
+      "wrong_dimensions": [],
+      "result": "pass"
+    }
+  ],
+  "motion_profiles": [
+    {
+      "profile": "auto",
+      "webm": "docs/baseline/current/motion-profiles/auto/motion-add-auto.webm",
+      "mp4": "docs/baseline/current/motion-profiles/auto/motion-add-auto.mp4"
+    },
+    {
+      "profile": "full",
+      "webm": "docs/baseline/current/motion-profiles/full/motion-add-full.webm",
+      "mp4": "docs/baseline/current/motion-profiles/full/motion-add-full.mp4"
+    },
+    {
+      "profile": "balanced",
+      "webm": "docs/baseline/current/motion-profiles/balanced/motion-add-balanced.webm",
+      "mp4": "docs/baseline/current/motion-profiles/balanced/motion-add-balanced.mp4"
+    },
+    {
+      "profile": "lite",
+      "webm": "docs/baseline/current/motion-profiles/lite/motion-add-lite.webm",
+      "mp4": "docs/baseline/current/motion-profiles/lite/motion-add-lite.mp4"
+    }
+  ],
+  "state_accessibility_evidence": [
+    {
+      "path": "docs/baseline/current/ar/dark/390x844/accessibility.json",
+      "sha256": "21842efb5dbb5382861e0d7a690c5b353647850a8312bfc989532c3874de718b",
+      "byte_length": 247719,
+      "state_count": 19
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1024x1366/accessibility.json",
+      "sha256": "ef1b5ffdfbeacfd9cf0af1d2005bd22d74954f4ee767bfa10c4274a386d18f07",
+      "byte_length": 242067,
+      "state_count": 19
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1440x900/accessibility.json",
+      "sha256": "7c421fc66603925088afabf1ae3465d68b3724bc5c72155b4d87d39611842c7f",
+      "byte_length": 243682,
+      "state_count": 19
+    },
+    {
+      "path": "docs/baseline/current/ar/light/390x844/accessibility.json",
+      "sha256": "6a9c4bd46f30a8fc9a40d8758d602d9935fc08e662638d2598b7aacba23a0d42",
+      "byte_length": 247739,
+      "state_count": 19
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1024x1366/accessibility.json",
+      "sha256": "ae56a25e310734cd85b8966a7c1b0d43f7c49b78bc63b940d80009e18dfedcb2",
+      "byte_length": 242076,
+      "state_count": 19
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1440x900/accessibility.json",
+      "sha256": "b0e6bc5c81004d6cbc458ff319a94942979b8f3550be78378aad847cf0deba20",
+      "byte_length": 243702,
+      "state_count": 19
+    },
+    {
+      "path": "docs/baseline/current/en/dark/390x844/accessibility.json",
+      "sha256": "cb57ae6e662c733a6e1f257519760b38753a070cdea6055f4591c572887733b6",
+      "byte_length": 246938,
+      "state_count": 19
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1024x1366/accessibility.json",
+      "sha256": "192e34c1f03e7594ed38a8c742e7ca5ba60c70b7aeef48aaa2dcae4945fc47a5",
+      "byte_length": 241007,
+      "state_count": 19
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1440x900/accessibility.json",
+      "sha256": "6fc426df222ee285c3d19e7edf35d1b0faf9e53222f9fc5d58ce3a2c6714bde3",
+      "byte_length": 242622,
+      "state_count": 19
+    },
+    {
+      "path": "docs/baseline/current/en/light/390x844/accessibility.json",
+      "sha256": "8f42e231ad4446c2598993f2dfdd53e03a931e11aa499308cbdbf4656a4e4e16",
+      "byte_length": 246958,
+      "state_count": 19
+    },
+    {
+      "path": "docs/baseline/current/en/light/1024x1366/accessibility.json",
+      "sha256": "c9c41a713c613afde1fd3594a48d362688d777b1beccac2b1e446d5361b826a7",
+      "byte_length": 241027,
+      "state_count": 19
+    },
+    {
+      "path": "docs/baseline/current/en/light/1440x900/accessibility.json",
+      "sha256": "a7761a6322c52d12f29ae220cf87104bba3f96f705b36d94c97964bb7b8832fe",
+      "byte_length": 242653,
+      "state_count": 19
+    }
+  ],
+  "artifact_count": 260,
+  "artifacts": [
+    {
+      "path": "docs/baseline/current/ar/dark/1024x1366/add-modal.png",
+      "sha256": "80ca825b639a6a4f16253c4766a18f63c6f48a6c551bef57ef84e574308a7882",
+      "byte_length": 102627,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1024x1366/apply-plan-modal.png",
+      "sha256": "29aafa3518b43b3f4030cb5d107579ff727575380116d09f31d0b02d06432a3a",
+      "byte_length": 294220,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1024x1366/confirm-reset-modal.png",
+      "sha256": "6964d45d9f2b655cec1359aea045bdba9e3ee5c6c6698ca3af4476ba8d6af6ee",
+      "byte_length": 114089,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1024x1366/edit-modal.png",
+      "sha256": "a3d4503adbb769bf0a711daa67b81d9dcbbce03f4080efae3513d25f6546e5bb",
+      "byte_length": 125286,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1024x1366/empty-dashboard.png",
+      "sha256": "c1c584888ef6693d0dfb9b66eb682c808af815fc2f296b2254137496f78092cd",
+      "byte_length": 234455,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1024x1366/empty-plans.png",
+      "sha256": "9201597fe57e2cbd7bca7570cbc938c1f3eaaf2c62de0f2ec136d3b8636f4edb",
+      "byte_length": 262426,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1024x1366/empty-settings.png",
+      "sha256": "ab645aa8aa73b4df76ac882d41453d94b5738ad77308e3378a067fb5502361f0",
+      "byte_length": 279852,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1024x1366/empty-statistics.png",
+      "sha256": "9fd4a3fca3e5cb9eadbb63e23ae64424deb492f136ad7649302526187fa7e8af",
+      "byte_length": 224976,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1024x1366/empty-vault.png",
+      "sha256": "370576a8fe4aa364791d09a7fe85271db8dade7b1f8f6c0512717446ad110087",
+      "byte_length": 201687,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1024x1366/error-toast.png",
+      "sha256": "d1c337cd9ffcc57d6753d458a3527e3e31d7ce25e44deebefb29ddc04bc58183",
+      "byte_length": 77649,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1024x1366/keyboard-focus-dashboard.png",
+      "sha256": "cbbb77c88cbc2a28397e8e4436f5053f1f4c84e5bef4f03e504730967002f907",
+      "byte_length": 234908,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1024x1366/loading-onboarding.png",
+      "sha256": "87de24a58881de43d005bc956e4af0f31b49ea8e1e5945585b4e375ce928d8a8",
+      "byte_length": 89960,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1024x1366/motion-add-full.mp4",
+      "sha256": "34909826cd1d43bff1b1c01fa793248d989e641cccadd1309fe58b12f01e36dc",
+      "byte_length": 200721,
+      "media_type": "mp4",
+      "symlink": false
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1024x1366/motion-add-full.webm",
+      "sha256": "29195c34fe7175db7b184fb2780727fff7b0fc6a1ff86c372f242e3083614948",
+      "byte_length": 271576,
+      "media_type": "webm",
+      "symlink": false
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1024x1366/onboarding.png",
+      "sha256": "7ba0ae5b8b0d012d22f8de615b855ef2a45add05715fd1b15d11b544909568be",
+      "byte_length": 90250,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1024x1366/populated-dashboard.png",
+      "sha256": "20271a3d5ab7ba7b086b5401e6cba7f0a2c06e6a9fa4bb5a1bb5df75f855beeb",
+      "byte_length": 247536,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1024x1366/populated-plans.png",
+      "sha256": "ccb5932f8f1e9ac030aa3997dbbf67cb689bf5d62834d1d8728fe14aa17c84b6",
+      "byte_length": 267287,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1024x1366/populated-settings.png",
+      "sha256": "0db74d264dd2128651a1d502ada50415cc881844a445fd8423ca35fde48f6fee",
+      "byte_length": 227514,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1024x1366/populated-statistics.png",
+      "sha256": "dc6d9e66a87fa1dcf3234a1a14505be50854de7ef469a1c6cfd129d451d56188",
+      "byte_length": 269931,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1024x1366/populated-vault.png",
+      "sha256": "15082a6d68ca0fa8876810ffc92aa84d9b000f9ddd0f065564542b1dcf9b547a",
+      "byte_length": 226407,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1024x1366/profile-modal.png",
+      "sha256": "f094d449b19cc2bd7a85935fd8fab464c2048e4057d848be8e9675b80d1be525",
+      "byte_length": 313884,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1440x900/add-modal.png",
+      "sha256": "87be1d1f35fc96ee963ed36e92ef0bdf60400cc2a42c95afa5020b0d12cba7d7",
+      "byte_length": 101120,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1440x900/apply-plan-modal.png",
+      "sha256": "65dc713e377e5495aef6b449c11242631cf246df9a4324f3ad54e8e565d5a8ec",
+      "byte_length": 218118,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1440x900/confirm-reset-modal.png",
+      "sha256": "ee0dde816a6e0b50a19dea69468979069f61863b783d03c987c69d1a77b9635a",
+      "byte_length": 83621,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1440x900/edit-modal.png",
+      "sha256": "1b02ce0f82edb1d1aa0607ea4641ce1c4b73b85dd95e9af1cdbd2057a69c72f5",
+      "byte_length": 257619,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1440x900/empty-dashboard.png",
+      "sha256": "0f26ad851c4e8402d6319eb6fa969a8b13dab51e0f2c85ec4e2dc04ca04f9ae3",
+      "byte_length": 217273,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1440x900/empty-plans.png",
+      "sha256": "295bd427109ee71f052cf0bf8d10dd472c2167705ede01dc230f894ce65f5957",
+      "byte_length": 185149,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1440x900/empty-settings.png",
+      "sha256": "d96dd11f6c681b3806357019a31e81073b1e8c3f4a3364ad77d7519dafafaf7e",
+      "byte_length": 190917,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1440x900/empty-statistics.png",
+      "sha256": "beffa48358bd5a258198551e8c5413b912f333c2c0c9ac83a9ed88c34653c06d",
+      "byte_length": 207737,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1440x900/empty-vault.png",
+      "sha256": "0efb308424692a8196be809aa6033e4348bf6ff1872e3958f407d141adb710a4",
+      "byte_length": 184470,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1440x900/error-toast.png",
+      "sha256": "528ef1163c53a32041f5e1ef9569542078b951c61da02a5ef99bcd27dfafae2c",
+      "byte_length": 79932,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1440x900/keyboard-focus-dashboard.png",
+      "sha256": "1204e9054ce176e9072e0797000a192261cfea9b3577dab5fe84372f5131ea70",
+      "byte_length": 217878,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1440x900/loading-onboarding.png",
+      "sha256": "1032c6faf894be831e788b02c7d9a4f1a555b78ae35c5a01c892afc52c68ee08",
+      "byte_length": 86874,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1440x900/motion-add-full.mp4",
+      "sha256": "82682f2bc19426f405a369177000662f6b8e6f8d867db4252d872a3b71dbae09",
+      "byte_length": 226829,
+      "media_type": "mp4",
+      "symlink": false
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1440x900/motion-add-full.webm",
+      "sha256": "e116c4ca29622890429c135bb24cef51e69c7e0a1b3fc2d5b01700b58c641dfa",
+      "byte_length": 281524,
+      "media_type": "webm",
+      "symlink": false
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1440x900/onboarding.png",
+      "sha256": "204e5a42f71b6c65d19fb0ed02620dbe25b55641ca6c12f32afb68b6351ed52e",
+      "byte_length": 87153,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1440x900/populated-dashboard.png",
+      "sha256": "4096ac22ed9573a03124f5b3eae8dcba7f3cdd74fd752fbf15c79da106f60c02",
+      "byte_length": 233913,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1440x900/populated-plans.png",
+      "sha256": "aa3a06b94257678b41f66faf19ec3d91700c79489428cb5a198d99cbbe30ae6d",
+      "byte_length": 190605,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1440x900/populated-settings.png",
+      "sha256": "2f4301e59c89b9396a46482dd2d7a2038be5db518d8e17ed79e8834b9b2a613c",
+      "byte_length": 189902,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1440x900/populated-statistics.png",
+      "sha256": "aa136e52e82c598dde128a08447d08ab40a48e093ac820746c9f6e63ed6e207c",
+      "byte_length": 226678,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1440x900/populated-vault.png",
+      "sha256": "3687c58bb697efbd45512ac9248010b6f17ce85340d146604a1a1c7f46883548",
+      "byte_length": 168370,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/1440x900/profile-modal.png",
+      "sha256": "41d049644be1bcbce6d7a8427afb2bd2e7f488a34da5d950f5256bd2310ca342",
+      "byte_length": 282238,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/390x844/add-modal.png",
+      "sha256": "86d969d80142ce4885452ca1a92301e995cafeeab62b559e7a7ea48a97e53eb6",
+      "byte_length": 59713,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/390x844/apply-plan-modal.png",
+      "sha256": "89088afa3aa2d8c8bbb5d269d47b39420c066a4ff1497fe833b7ccd190b4d04f",
+      "byte_length": 57690,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/390x844/confirm-reset-modal.png",
+      "sha256": "40d3519a9e7d5fd3ce1b68e017f195184ec6f6b51ae5636f6e430b3c328e73de",
+      "byte_length": 53386,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/390x844/edit-modal.png",
+      "sha256": "cacaa72d2b894e9145039fb7b07f3f2219b17af68100dc8fd9fb55750c2f707d",
+      "byte_length": 63207,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/390x844/empty-dashboard.png",
+      "sha256": "6c0a64664b64dd437ff30d54e194c9565069c9be3e9db359bdee2faf8be2da94",
+      "byte_length": 104100,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/390x844/empty-plans.png",
+      "sha256": "3cedebc594004b52c7df230faccd62e11ba86e94d326d5815806481a2518bbd3",
+      "byte_length": 95731,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/390x844/empty-settings.png",
+      "sha256": "0a45532c5d1e70c56d2966b291de031c99374ca6f19e23dfb046ae5c7f83cd0d",
+      "byte_length": 116534,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/390x844/empty-statistics.png",
+      "sha256": "5887b3fff45bb5d898eeed40c9e2674bae20581f57229e8593a8e7c511af3726",
+      "byte_length": 104440,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/390x844/empty-vault.png",
+      "sha256": "c4c8eb56735d91b1a6e6f0ffd428bb70e9415cec3ac67fe7198ae7fbd6433078",
+      "byte_length": 85943,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/390x844/error-toast.png",
+      "sha256": "a2eeeef8db444e476e834c4a5aab6a7a2c50075ff65c496faf7c2440630b6eb4",
+      "byte_length": 108733,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/390x844/keyboard-focus-dashboard.png",
+      "sha256": "2319d4ead477fb8bcc94138c59cdf608294e8567b333c3a173134ac9a22936e5",
+      "byte_length": 104555,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/390x844/loading-onboarding.png",
+      "sha256": "1c29eabf58b90254b3960d1813759274f0e7de8abe623e3a4f0e4102e1b22f39",
+      "byte_length": 56158,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/390x844/motion-add-full.mp4",
+      "sha256": "91010a1efe30c7dbe6b811263f65e1cd7cb01056d03a0fec903f3f25a2e32f56",
+      "byte_length": 102350,
+      "media_type": "mp4",
+      "symlink": false
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/390x844/motion-add-full.webm",
+      "sha256": "a189de9d7d6f7ccc5cdfeaaf2cac4ebf9b8201005b8f31ab6f5ef0675035c2b5",
+      "byte_length": 180727,
+      "media_type": "webm",
+      "symlink": false
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/390x844/onboarding.png",
+      "sha256": "9c224532447e88b3aad71f5e3e2265f5d0ac8bb5e6aa1afadef1640a3e0e7054",
+      "byte_length": 56458,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/390x844/populated-dashboard.png",
+      "sha256": "13c946d09c46fb057144586604fa666d3caed66cb1d4451c9ff19828e412b63b",
+      "byte_length": 118675,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/390x844/populated-plans.png",
+      "sha256": "6985fcd57432b551e9b71285115c97755197cf4d1d2d3d7b503ce69014b9380e",
+      "byte_length": 99005,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/390x844/populated-settings.png",
+      "sha256": "4abfdf8534e964b43b9916f9e3209cc025e2dc0c7cf3014f73751aee3188dd43",
+      "byte_length": 116464,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/390x844/populated-statistics.png",
+      "sha256": "b99add941ea293d72efd3eb05f3be5c8a48de2863c7f20ee8d8ff1ccba226ea5",
+      "byte_length": 118918,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/390x844/populated-vault.png",
+      "sha256": "f241f5b92742b2e727a8d2526d49b493625f784d13196eeb6d3e6b95fcb04c0c",
+      "byte_length": 107147,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/dark/390x844/profile-modal.png",
+      "sha256": "db200edc861237df30ef72d06156fd1bb9a5651c41fbac9882b57ee5fe1ba56c",
+      "byte_length": 60521,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1024x1366/add-modal.png",
+      "sha256": "ff3292f477b36e649ba3fe5061480083e41d355ff8fa81afdc153fab697abb15",
+      "byte_length": 112004,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1024x1366/apply-plan-modal.png",
+      "sha256": "ffca40be6f0030b004edb70dd1f459655c32e181934a4320dc7890f89eb95031",
+      "byte_length": 200143,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1024x1366/confirm-reset-modal.png",
+      "sha256": "60b8d7ece3d835c59133a4066944a6fc600f13e88764de9edc0702a6bd556e02",
+      "byte_length": 126425,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1024x1366/edit-modal.png",
+      "sha256": "378b890c8e3bda66d81545e20b8b11cf7f59a5e7e4b8de23175fef56e51a8f8a",
+      "byte_length": 240922,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1024x1366/empty-dashboard.png",
+      "sha256": "bbcd27a9b76cc00dea2238b7510555e702a49fd6df9b0ff960a979685a424962",
+      "byte_length": 122314,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1024x1366/empty-plans.png",
+      "sha256": "1d1b49804ac6896f0cd86460615cf41bc49819c3716b6ab74a2bf81963b6ebcf",
+      "byte_length": 159903,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1024x1366/empty-settings.png",
+      "sha256": "756cb838da66b6458cb5fe3973d418e6f51e782b668cf89dd39a47208466367d",
+      "byte_length": 113246,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1024x1366/empty-statistics.png",
+      "sha256": "abd7a186650930062bdc0d562eb00245ff5bf17293a8af96b776419bfe99308a",
+      "byte_length": 108597,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1024x1366/empty-vault.png",
+      "sha256": "94bb016bad14f06c501ac0865f155ddba3fa575ef5eda18e3e4790f83c435611",
+      "byte_length": 82579,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1024x1366/error-toast.png",
+      "sha256": "035d27cfca117645ad19a98b483f2937c165bcf3013bb6e58af7f463fcd3ab1f",
+      "byte_length": 76611,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1024x1366/keyboard-focus-dashboard.png",
+      "sha256": "cf5db20ced3ff19fac87dfe4321551af194343aa7f365adf69ff2932cb819603",
+      "byte_length": 123069,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1024x1366/loading-onboarding.png",
+      "sha256": "c572f4cee029d3ed33d410416f347f9cd57d26b1c2f8843833994604d0d849e8",
+      "byte_length": 95489,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1024x1366/motion-add-full.mp4",
+      "sha256": "9d7a8db735a66e2e6dee23629eaddaf184f22021cbff45429498484b9a7af55f",
+      "byte_length": 227816,
+      "media_type": "mp4",
+      "symlink": false
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1024x1366/motion-add-full.webm",
+      "sha256": "ed3442834a884dddfb821a3e058db36147471be329f125ab189544e6f601ad73",
+      "byte_length": 307852,
+      "media_type": "webm",
+      "symlink": false
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1024x1366/onboarding.png",
+      "sha256": "5793d4150e3a8593130c7b5821fd280d86716e9ec86def721eed66194bf85561",
+      "byte_length": 95762,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1024x1366/populated-dashboard.png",
+      "sha256": "4d061442ca06327cf88d6549d6425ce3ba70890c6ac2c8b2fb6d636b30b44dd5",
+      "byte_length": 137026,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1024x1366/populated-plans.png",
+      "sha256": "1c3a93887cdc248d6e42308abb40d3f64e7c16c573f4dabb547a93fa3b0ba1ee",
+      "byte_length": 163004,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1024x1366/populated-settings.png",
+      "sha256": "9371153d3eb23518513395ae60e7422759cd1d01919298e8d66fbe331ee3849b",
+      "byte_length": 113245,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1024x1366/populated-statistics.png",
+      "sha256": "63f2e5ba8eb07f626739f222de50415056d2dc57d53b6695e2b65c492443ce97",
+      "byte_length": 160544,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1024x1366/populated-vault.png",
+      "sha256": "ce30042d62f8331d6974966343fe65176c090dcb30b0501f3977cc96e1f5bc36",
+      "byte_length": 105335,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1024x1366/profile-modal.png",
+      "sha256": "d6820637050d911212b03da8475138cd7222958d4a51681cb89d8617789abffb",
+      "byte_length": 224925,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1440x900/add-modal.png",
+      "sha256": "0dbbb96fe50c4b0f406690463bf7506def5d83028b03742dc639fc2d9d9ca304",
+      "byte_length": 111235,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1440x900/apply-plan-modal.png",
+      "sha256": "1e91111150c0089c0eba309c6491d0f435f6190ea8d4e59b3acd06d4436e8ac0",
+      "byte_length": 191626,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1440x900/confirm-reset-modal.png",
+      "sha256": "6977216c52e28156a5c3dd42420e76a3e97c4da531484ca36ed7140bde8f8ea7",
+      "byte_length": 95825,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1440x900/edit-modal.png",
+      "sha256": "8a22c1e8ce6ee0b615d60ebe23dd3726e551832d6edbd24156ce6f1e5beb1532",
+      "byte_length": 247304,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1440x900/empty-dashboard.png",
+      "sha256": "91d81286526909bcf7adc909f89535fef8b3d5afb617239716576ae801f5c9ce",
+      "byte_length": 123163,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1440x900/empty-plans.png",
+      "sha256": "acc8fab5f0e20ef36fe7a4e4a5b44775d9a41ccf36b6adf5a1092dddd4915323",
+      "byte_length": 90568,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1440x900/empty-settings.png",
+      "sha256": "ed1bb7e639f77cbf880c6acf406f60e70cf9235c232a37b5d9f895647d463b2f",
+      "byte_length": 90694,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1440x900/empty-statistics.png",
+      "sha256": "30f1b40f4a977c0c1f77b96f9fe68339aa3a11ea6cb255bab521232cf40abbd8",
+      "byte_length": 113120,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1440x900/empty-vault.png",
+      "sha256": "b3129eb7c93d98e6eadc30ba06e85352f138d3c20d501365f6a717a6c0d8582c",
+      "byte_length": 84760,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1440x900/error-toast.png",
+      "sha256": "183341e9d6beb1fdbb6d8b21ab0694603f0777b3a7bca1077240599114d776b8",
+      "byte_length": 79510,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1440x900/keyboard-focus-dashboard.png",
+      "sha256": "b4a26c461335ff3351ea7f497bb54ba14c7eae07c450fc0817dbf06ec8d691ff",
+      "byte_length": 124065,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1440x900/loading-onboarding.png",
+      "sha256": "a28953ba83d4e751bfeb3cc982ea7afd8c2cec99df4e29b25e1247a2bdbee760",
+      "byte_length": 96112,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1440x900/motion-add-full.mp4",
+      "sha256": "bb06f21378f0d9987e138dce28c610f491e237de394ff40048f228cbb52a7651",
+      "byte_length": 237764,
+      "media_type": "mp4",
+      "symlink": false
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1440x900/motion-add-full.webm",
+      "sha256": "39cfe23f159b26f506accf3ac46d997cac813c536eb27ff900a377c1b00d67f5",
+      "byte_length": 270704,
+      "media_type": "webm",
+      "symlink": false
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1440x900/onboarding.png",
+      "sha256": "1b725b8bc3be58fc3596a56183d9303b1259a0cb89aa8e20b1bf2fdf3acff71a",
+      "byte_length": 96412,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1440x900/populated-dashboard.png",
+      "sha256": "d453bb70ee749b456d1d3c9851aefb26af3a30c554f8d7d6da7dda973f65dfdf",
+      "byte_length": 140796,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1440x900/populated-plans.png",
+      "sha256": "8577289b16e624c0729ba26a3856eaf8f5fc79bc87837b516ce0fcaa86f601c7",
+      "byte_length": 92462,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1440x900/populated-settings.png",
+      "sha256": "82dff99232e2f45fe52fdc85350fa606feb16f8f5f82c9007aeeeda18beb5d95",
+      "byte_length": 90839,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1440x900/populated-statistics.png",
+      "sha256": "b69730d770d011aa1ed3884e28ea212e4494a78794fba13a84a1135817eb42e4",
+      "byte_length": 137147,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1440x900/populated-vault.png",
+      "sha256": "c955ea9d456366845e7469052cad2fdeed797ae8002bfb48ea87ad2db35f7c72",
+      "byte_length": 108038,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/light/1440x900/profile-modal.png",
+      "sha256": "10b8526cce986c2080484dc3cdd6c9ac0cde45a365a6c60ec41938ed5bf44a66",
+      "byte_length": 214536,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/ar/light/390x844/add-modal.png",
+      "sha256": "0ba1c4f31fd2b331cfad7c986b7b43b1589bc2f9ea76d5422ecd1baebc467f62",
+      "byte_length": 64223,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/light/390x844/apply-plan-modal.png",
+      "sha256": "9dbedfd46cf7c02025f6ea4fa8086a134a72b523bc59b7f9ff2b031c33bdae0e",
+      "byte_length": 61908,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/light/390x844/confirm-reset-modal.png",
+      "sha256": "2f18c70e6eea7fc0060857c105a7a4890f98600fdeab0ad2be80fbf7fb5be629",
+      "byte_length": 61326,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/light/390x844/edit-modal.png",
+      "sha256": "64ac797b71cf20f0c3d6764a5e49e8dbe17c984bd573d778cbd8608c52c36a9e",
+      "byte_length": 69175,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/light/390x844/empty-dashboard.png",
+      "sha256": "c9d36c7ed125366b52ab48f58440be68ebcd7a0ac59b86d1f0104fcd09fd70ed",
+      "byte_length": 80526,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/light/390x844/empty-plans.png",
+      "sha256": "3678c4f1aeee77f9667b225e8ce8d99b64beacdb6e6a137353c3e81aad926042",
+      "byte_length": 70771,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/light/390x844/empty-settings.png",
+      "sha256": "11a5eec4288dd677b7edf5ac13a86b1e4ff0506539207cf3be0aa495a7ac7fa6",
+      "byte_length": 93501,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/light/390x844/empty-statistics.png",
+      "sha256": "772f2c0ae3bfffb90663cf455aee4e8880be507cf3348d57d9854d468829b212",
+      "byte_length": 82261,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/light/390x844/empty-vault.png",
+      "sha256": "098a53719149203244fbcf5795ea3cfa883c0a4b2ae2014b1d450c3685a6a283",
+      "byte_length": 59537,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/light/390x844/error-toast.png",
+      "sha256": "bd186b6d1b616ef1e50563c55a4d8b21b75f7c4e5767ab7b4aa2092c3090bab6",
+      "byte_length": 88366,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/light/390x844/keyboard-focus-dashboard.png",
+      "sha256": "fbc0cc8f2a156dc51ac6288d09d6f5bdc177a5f6af66b06ab7e77573afdaaa61",
+      "byte_length": 81216,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/light/390x844/loading-onboarding.png",
+      "sha256": "221ea326549d9753c38ba473eb82ba8f672a14d95ca93d6d7f21ac79d6c613e6",
+      "byte_length": 59564,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/light/390x844/motion-add-full.mp4",
+      "sha256": "17ccdaf1f284471d171602c96adee41e65ac79ca155dc0a585352a8bb52acdf4",
+      "byte_length": 124504,
+      "media_type": "mp4",
+      "symlink": false
+    },
+    {
+      "path": "docs/baseline/current/ar/light/390x844/motion-add-full.webm",
+      "sha256": "33f9b7b201d853887ef2baf2d6d449c71ef95f70f8471f35ef66dd88a44e613c",
+      "byte_length": 225750,
+      "media_type": "webm",
+      "symlink": false
+    },
+    {
+      "path": "docs/baseline/current/ar/light/390x844/onboarding.png",
+      "sha256": "ee829efa0bddec04e831a13d94b2aa4c407e136a11703b3ea150c5f6a7810fe6",
+      "byte_length": 59849,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/light/390x844/populated-dashboard.png",
+      "sha256": "e9e6360b26c32c987c08417602e32fff4a5b9f758c5a22cd0b7c328c74e413a5",
+      "byte_length": 95016,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/light/390x844/populated-plans.png",
+      "sha256": "31f592f5ddfcf91af7497f761622e7fcf098fc83a22b2719a250a2e880be8e5c",
+      "byte_length": 72848,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/light/390x844/populated-settings.png",
+      "sha256": "08806c4e806915b8b16bea0183b36367a81646b40ec6071835c5177c8d7a7cf1",
+      "byte_length": 93553,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/light/390x844/populated-statistics.png",
+      "sha256": "a83068312ac7dce7a25bdc248e93bec00881e598c396937de79cc40fd2e9a29c",
+      "byte_length": 97350,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/light/390x844/populated-vault.png",
+      "sha256": "48a99f1926fe988a88ccd712bfdc3ef2190fd4f0ec9762299b9a11687737a8cf",
+      "byte_length": 78824,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/ar/light/390x844/profile-modal.png",
+      "sha256": "bf825898e8f52fbad482788c0d0f581aa126318f5be88cb394de13f39f7aae44",
+      "byte_length": 72120,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1024x1366/add-modal.png",
+      "sha256": "8ace1c66aa7c889c996edff45b73c2c18c8241c00922fea4a0b11054c68098c8",
+      "byte_length": 264449,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1024x1366/apply-plan-modal.png",
+      "sha256": "48ee018f7550ede0daa065d60d0e15556f6e75f640060c3ed9bdce763fe40f0f",
+      "byte_length": 298815,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1024x1366/confirm-reset-modal.png",
+      "sha256": "82db2104389d221ee0a529ab7017f28d4a7a0c68bc1e35e640b287a7a455fe0f",
+      "byte_length": 328475,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1024x1366/edit-modal.png",
+      "sha256": "7e71d42996ccb8ec18ed96b3720a3d0f3ef12ed441ac82cd79fa85b8bb959961",
+      "byte_length": 302008,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1024x1366/empty-dashboard.png",
+      "sha256": "be2501c653d06359477024b22f4e908eb86c0670adfacbee96e9a948ea8dd230",
+      "byte_length": 229611,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1024x1366/empty-plans.png",
+      "sha256": "725b5fe59b4195de035e5cb64279ebeb365c7e4d5d981976df98af0540397a1c",
+      "byte_length": 270694,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1024x1366/empty-settings.png",
+      "sha256": "74ec5e525757a8367c944d83b61c32be12e487d94edb7d64af52890f870b6ffb",
+      "byte_length": 287539,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1024x1366/empty-statistics.png",
+      "sha256": "65d8b5ce113f79f7c990112fde9d0cb8017f16106c5afdba7486021e30351f3a",
+      "byte_length": 233320,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1024x1366/empty-vault.png",
+      "sha256": "fe9a5095dd6ade3c3dff57f2ad2fb54b278eb9f67935aa5d35f786dc9b6c4b2e",
+      "byte_length": 205349,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1024x1366/error-toast.png",
+      "sha256": "d68f4be4d74e3373ba1a72161fbc7c597f298b5b47803c77b81a71ebb62ac88e",
+      "byte_length": 76773,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1024x1366/keyboard-focus-dashboard.png",
+      "sha256": "7dcc1fc8b1daa95122da42e74836b5c20bb08bc16bb6d50ede9a8c0631af63dd",
+      "byte_length": 230678,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1024x1366/loading-onboarding.png",
+      "sha256": "09535aa8f99d7c0c74acb55f41afe2321c5bd8dec4f060ce1facc128e30c4b21",
+      "byte_length": 92556,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1024x1366/motion-add-full.mp4",
+      "sha256": "0dc92c161b812c2faa8e1c46917d70e05a10d4c42341e4d680ae204d93470863",
+      "byte_length": 212481,
+      "media_type": "mp4",
+      "symlink": false
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1024x1366/motion-add-full.webm",
+      "sha256": "d80002680a2ef162b05898563d0967e615273ae2dcf20884156e659d0fcf82f5",
+      "byte_length": 282422,
+      "media_type": "webm",
+      "symlink": false
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1024x1366/onboarding.png",
+      "sha256": "b2e187bcec184d5af3d5bee13f9db2000df417e5828bf8150c6bec6b8ef8a439",
+      "byte_length": 92825,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1024x1366/populated-dashboard.png",
+      "sha256": "5f0335394c899c34fcdf2d544be4c1ed2b4cfc942a232a3e01b448615c14365e",
+      "byte_length": 243327,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1024x1366/populated-plans.png",
+      "sha256": "94fa9f93a2087f94fe99144bc17da1e5fb68388fa01333f5a74d7e15e3a2ff5d",
+      "byte_length": 275297,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1024x1366/populated-settings.png",
+      "sha256": "723eebe37ded2ccfdaa6a488f9948f5e1147fa4edfdfbb7e50dd1adbf8ad7e4b",
+      "byte_length": 236884,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1024x1366/populated-statistics.png",
+      "sha256": "c9a2b57e48bde93f4d546d141f51064b0e495e42ac20983544f5b8f2d99d003e",
+      "byte_length": 283985,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1024x1366/populated-vault.png",
+      "sha256": "2ed5756eaabcfd1a030ba585a2e297c60d23662d5efc43cd61a09d0e45c0655c",
+      "byte_length": 229418,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1024x1366/profile-modal.png",
+      "sha256": "517d4394e27db5cf40db041aa1b504b3bd5d16bb5789e562f47542e53181c768",
+      "byte_length": 308241,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1440x900/add-modal.png",
+      "sha256": "02c7da5f6cc03f85844c6cb529b1737f6830ea7af28582bf262618b0f7d0fc74",
+      "byte_length": 101553,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1440x900/apply-plan-modal.png",
+      "sha256": "b91193948430c2b6d47faceb738fa3ae4ea10cebe3e0dae0b281dca9a5ad751b",
+      "byte_length": 274743,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1440x900/confirm-reset-modal.png",
+      "sha256": "262e7fdb93b7b60b1ddf73ba9ffc2f95cd1069cbaf633a3d49a0db056fc207a2",
+      "byte_length": 226724,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1440x900/edit-modal.png",
+      "sha256": "cecbeea9f5b296065c50976b4df9928d4a0dae7c6bd74374c0a0e320551682df",
+      "byte_length": 282268,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1440x900/empty-dashboard.png",
+      "sha256": "ec861718a3e031efe411055d029f873618528b2c61e2b76959558a0d4fbd748a",
+      "byte_length": 211647,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1440x900/empty-plans.png",
+      "sha256": "0dd7b5556204cdcc3bc7fc6630e71351ceb418095ffe678bf304d095415b1cd2",
+      "byte_length": 191367,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1440x900/empty-settings.png",
+      "sha256": "ca126d63a0436e53904358afe8533e77e26b841238055c1b6b13e0c80b6e8fd6",
+      "byte_length": 197135,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1440x900/empty-statistics.png",
+      "sha256": "69ca86815990b252d2ed7107f3465eaa5373e1e0282648286c1b7d76ec270903",
+      "byte_length": 216464,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1440x900/empty-vault.png",
+      "sha256": "e51ab207522e3ba606821998cd44977c8eb1e014119a0df3843ade0630e932c8",
+      "byte_length": 187512,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1440x900/error-toast.png",
+      "sha256": "d10c3a799702d6f1044c12c16d95b781416707b466943cdb4b5f439dc2347c9d",
+      "byte_length": 78526,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1440x900/keyboard-focus-dashboard.png",
+      "sha256": "3b9960e93c9ef79ab314ab52a18317f65f2c1bba3ef628975b8c33827a936226",
+      "byte_length": 212821,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1440x900/loading-onboarding.png",
+      "sha256": "1b5795205bf3611111227002512db33c4e90bb002f703068d856dea37aa98686",
+      "byte_length": 88251,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1440x900/motion-add-full.mp4",
+      "sha256": "642785685ab86147411c4d5fbd101dfcc27de7946405b24e54110c6fd86b4e52",
+      "byte_length": 236324,
+      "media_type": "mp4",
+      "symlink": false
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1440x900/motion-add-full.webm",
+      "sha256": "608e70dc1443251e08af31cbbbe7bf721228f152ed2e5756fc52ac488f42e41d",
+      "byte_length": 288519,
+      "media_type": "webm",
+      "symlink": false
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1440x900/onboarding.png",
+      "sha256": "12c74aa217153bc7f032643cdd2b68227edd118573fd2595d513eb36736bc62c",
+      "byte_length": 88516,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1440x900/populated-dashboard.png",
+      "sha256": "cbedb7512c19cdb04b866cba80ff57f41c477ae253e87071fc692bb7e2057492",
+      "byte_length": 227806,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1440x900/populated-plans.png",
+      "sha256": "40ef334e68a12d0675352f83520ca490766a1b29d0cc91184d34685d83e9c370",
+      "byte_length": 198326,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1440x900/populated-settings.png",
+      "sha256": "3854bb95820c322b29daafe0593d4d2fe158d78de5b20921c97d1d11e537ea8f",
+      "byte_length": 197157,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1440x900/populated-statistics.png",
+      "sha256": "7f06517d778e6ca386c13327680a5eaecc73b0ab17fb2e26c6f311177e22d6cd",
+      "byte_length": 236468,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1440x900/populated-vault.png",
+      "sha256": "eca7678f1f2279c7123001c73e152437b62361c3538dbb4ecd3f97305f8da78d",
+      "byte_length": 213889,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/dark/1440x900/profile-modal.png",
+      "sha256": "cd46dec1842b81750f8d647ce31620be57cf387d4ff22d4b27e5192db80921d1",
+      "byte_length": 282805,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/dark/390x844/add-modal.png",
+      "sha256": "692b29ef57a3d3428dcc64fbc3e45a989550734a645f66164c9c28b455071001",
+      "byte_length": 62762,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/dark/390x844/apply-plan-modal.png",
+      "sha256": "0812beb07cc42b2199f83537f64c4a326a900c036da27186fb031d529a9f96ad",
+      "byte_length": 56728,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/dark/390x844/confirm-reset-modal.png",
+      "sha256": "e8aea04f9f1b05fb6faa4f067973eaff16ba636967ed39b63c592f818b46d48d",
+      "byte_length": 106080,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/dark/390x844/edit-modal.png",
+      "sha256": "5b4d40317c657057b474632a1cbdf343f6017964554486a30c74294442811f73",
+      "byte_length": 66931,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/dark/390x844/empty-dashboard.png",
+      "sha256": "b7acef8d6b72aff5c906ba2f945d75512780a1860d783cd2d684e751c8caaf23",
+      "byte_length": 102907,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/dark/390x844/empty-plans.png",
+      "sha256": "872a1f86a8334fa0a0c80e1cd16cb0f0bac468a323ab5107eab38ccd6c607775",
+      "byte_length": 100018,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/dark/390x844/empty-settings.png",
+      "sha256": "302d391bce8e5254a8e9b4dccd17487ac925138c448587bd5eb63f24b392f59a",
+      "byte_length": 120856,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/dark/390x844/empty-statistics.png",
+      "sha256": "cd79c1de466ce9054071c87524c308ea736595c15df5a0a0bf618e4c0d8e849e",
+      "byte_length": 113890,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/dark/390x844/empty-vault.png",
+      "sha256": "1fcf40c79425d5bc3d97e7608e78b4ae5503fdd36cdc4a15d163a221014f9ba0",
+      "byte_length": 89020,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/dark/390x844/error-toast.png",
+      "sha256": "dcb350bcebb99064f8a79c5937254687720a391e09c631facdc9ddbae1d6fe6a",
+      "byte_length": 52344,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/dark/390x844/keyboard-focus-dashboard.png",
+      "sha256": "5e1ddb569e3a9d3429f0352fedfcc9956d583fb685788b2c76315b5abd0f9fe3",
+      "byte_length": 103780,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/dark/390x844/loading-onboarding.png",
+      "sha256": "6768f22c1b3467c7cc0a5ff38b0d9dc26d411aeccabef925b44fa99e9afb5d2f",
+      "byte_length": 59821,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/dark/390x844/motion-add-full.mp4",
+      "sha256": "83e462236ca5e778ed3fb19ddaca332f08ae7591e52128f2afe45334c52f5a81",
+      "byte_length": 137606,
+      "media_type": "mp4",
+      "symlink": false
+    },
+    {
+      "path": "docs/baseline/current/en/dark/390x844/motion-add-full.webm",
+      "sha256": "6918d4ee84e28d8bbc8cc36eb8f0c55a61653a1c5e53e14f0de292e0668c8c29",
+      "byte_length": 186819,
+      "media_type": "webm",
+      "symlink": false
+    },
+    {
+      "path": "docs/baseline/current/en/dark/390x844/onboarding.png",
+      "sha256": "932a39fe49440619a82fc0aba0def1fc698491de6918a4873ed96d1cb421ce7b",
+      "byte_length": 60159,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/dark/390x844/populated-dashboard.png",
+      "sha256": "f30ff892d989780dc7427a8961bb6f339d5081be66e78ffa5b7eaadbbf018c52",
+      "byte_length": 117389,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/dark/390x844/populated-plans.png",
+      "sha256": "88d5ce87fbe0f1d45427d2127ff15af5322a6cf649bd01e0f23eefe40aaeb8b3",
+      "byte_length": 103562,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/dark/390x844/populated-settings.png",
+      "sha256": "896a4731b5a8751866404aaacf29165b5df6b6d2f5698734fa78e752ea4f95f8",
+      "byte_length": 120782,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/dark/390x844/populated-statistics.png",
+      "sha256": "dc15f45dfa89bc1d3cf0cc287e7b6322db39286c5779daf971c07d040fb56714",
+      "byte_length": 129267,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/dark/390x844/populated-vault.png",
+      "sha256": "098e2e83d373f6ca155254b3cdaec7c865de895d171dfd920e23d1ee5221eba9",
+      "byte_length": 111021,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/dark/390x844/profile-modal.png",
+      "sha256": "b4d4af4869c181a28112e43751c07d9025a01e9f49d6fbacea8be075b234fb4d",
+      "byte_length": 72170,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/light/1024x1366/add-modal.png",
+      "sha256": "8de830e8a81c4da0c8f8e09d1ae77b5a936808818468e02fb3c9a0295fe0461f",
+      "byte_length": 197888,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/light/1024x1366/apply-plan-modal.png",
+      "sha256": "5d3f6fc3d48a4b7fc0733b9e2268c20add74808fc83752c96c89200a08b1ba93",
+      "byte_length": 245728,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/light/1024x1366/confirm-reset-modal.png",
+      "sha256": "019e5cea2ba11d5cea1089fc545c6441f62b7b4a5198952f5fbc195b8ef00606",
+      "byte_length": 279946,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/light/1024x1366/edit-modal.png",
+      "sha256": "1aaa37b35af7796224d5b11d57e642f13faf38ac4da71a5713db2dfa6ffb883a",
+      "byte_length": 209323,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/light/1024x1366/empty-dashboard.png",
+      "sha256": "4349ee76f39ec137137bc61def506eef73da73cca997f64bc875aa31c744553e",
+      "byte_length": 122062,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/light/1024x1366/empty-plans.png",
+      "sha256": "89aa214556d660d789e7c57c5b5be1befc9b9bc718eb5ea83c00840058502078",
+      "byte_length": 167029,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/light/1024x1366/empty-settings.png",
+      "sha256": "b1f0f6f136348468be20fa5df63d4715a58391bb300c129ba48f8a0d48f7f7c3",
+      "byte_length": 188674,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/light/1024x1366/empty-statistics.png",
+      "sha256": "1b56f0e5fddeb9d66f3e5db5ede7d76cd0299506ab185369b911243a74c7607a",
+      "byte_length": 119607,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/light/1024x1366/empty-vault.png",
+      "sha256": "c5d1d2fa273380e6f67820cd738c0f082c41126bd0266cc26bcf02e3405890b6",
+      "byte_length": 87441,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/light/1024x1366/error-toast.png",
+      "sha256": "151af92e8c16b6f81f41bd1c4862ee7a1b293fed0ffeb9cfb7f61eecc246afea",
+      "byte_length": 75877,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/light/1024x1366/keyboard-focus-dashboard.png",
+      "sha256": "629d600dc4660a260fd62fb321eac8e27d1697ac728c4c9d05f83512381d245c",
+      "byte_length": 122942,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/light/1024x1366/loading-onboarding.png",
+      "sha256": "b2108cacfda038c0aa9da13339bcbe58ccd8fab93009c251f923cce8f1c1be24",
+      "byte_length": 98454,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/light/1024x1366/motion-add-full.mp4",
+      "sha256": "047c8b2c508d66d4d6d11daef6e8fb2d1b95475a699d122dc7ee9c85ed594b84",
+      "byte_length": 260061,
+      "media_type": "mp4",
+      "symlink": false
+    },
+    {
+      "path": "docs/baseline/current/en/light/1024x1366/motion-add-full.webm",
+      "sha256": "49c3fbb9360dc616d1cf6621658311a01bffa6865dfe3c75c61e350de93df385",
+      "byte_length": 407831,
+      "media_type": "webm",
+      "symlink": false
+    },
+    {
+      "path": "docs/baseline/current/en/light/1024x1366/onboarding.png",
+      "sha256": "d3fdc7e5f5f03df52558ae3f663a48470eb891c555ab9adc7e0b180fb119cee5",
+      "byte_length": 98686,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/light/1024x1366/populated-dashboard.png",
+      "sha256": "4c1cde051ff565babdee5aca8ac7ee122f543125e123952a17265bde7e31323f",
+      "byte_length": 137055,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/light/1024x1366/populated-plans.png",
+      "sha256": "a4dfa82ea189e9b3ab0dc2ee62199fb249a45073965fcd81b0bddd194d1736f7",
+      "byte_length": 170948,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/light/1024x1366/populated-settings.png",
+      "sha256": "e65ebacfe1ee5a9e6d96a500dfebf8be97f2b02e783cf2f4973975a6117b50ce",
+      "byte_length": 124327,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/light/1024x1366/populated-statistics.png",
+      "sha256": "f6d13f8db786870630b880d5b7a80f4c9fab4d184438e956f806269799d8e0c9",
+      "byte_length": 174084,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/light/1024x1366/populated-vault.png",
+      "sha256": "238c377a4a21f104a6c4b10078637a6aa9380c3d44bb34177df4b4ec63f0b554",
+      "byte_length": 110839,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/light/1024x1366/profile-modal.png",
+      "sha256": "29f35d54db1f98140310c060e5d13ba37fac223e028dec59b72d26ebdf5c13d5",
+      "byte_length": 223550,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1024,
+      "height": 1366
+    },
+    {
+      "path": "docs/baseline/current/en/light/1440x900/add-modal.png",
+      "sha256": "0655996b8c231838900cf6c6b3b9c45fb53ecf46b574d1c2f5d9f114beebbaac",
+      "byte_length": 174030,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/light/1440x900/apply-plan-modal.png",
+      "sha256": "31a14d9b4cf2ed44e6a8c8d465d75f9c994ea7a16da83b736d7ae309b1075e88",
+      "byte_length": 198683,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/light/1440x900/confirm-reset-modal.png",
+      "sha256": "655d2d2ab0329d08734651f8ffb8b89cb2699b655267eabbf7f01e5fd29fb669",
+      "byte_length": 144735,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/light/1440x900/edit-modal.png",
+      "sha256": "c72106b8fa239daa74d63679c52c64d7b703db37262c706414bb93740b1c001c",
+      "byte_length": 213596,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/light/1440x900/empty-dashboard.png",
+      "sha256": "689e1ec1b37c7cbd1e384c7d344e347bc3fa854aeb4f2cd6b625e55fa84803a9",
+      "byte_length": 123968,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/light/1440x900/empty-plans.png",
+      "sha256": "1f553f4d2916c920b2fbf3afe82a1ee20083aa1c63bc0604e4f51f0ac061b6b1",
+      "byte_length": 95928,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/light/1440x900/empty-settings.png",
+      "sha256": "09b3e9b7d3242772e34285eb65cdfc96700b1a07c4133394eba42ec1350f6db5",
+      "byte_length": 170464,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/light/1440x900/empty-statistics.png",
+      "sha256": "b088c4747cdc669d2620c3cd0e921b06246ef889d0353dba88c8944cd4bfd221",
+      "byte_length": 123609,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/light/1440x900/empty-vault.png",
+      "sha256": "ed46c6df53acff81eea6f83b0851e39759c7e4f28c573116da5ec91cd58ba1db",
+      "byte_length": 90055,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/light/1440x900/error-toast.png",
+      "sha256": "c9f15954d35f77e66f0e09ac05b0347765618b0e06e339022e703eac84409dfa",
+      "byte_length": 78908,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/light/1440x900/keyboard-focus-dashboard.png",
+      "sha256": "73dfa4166864a98539df2930d56cac96022d13af8e14b449dca42bc7a8db2bb5",
+      "byte_length": 124916,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/light/1440x900/loading-onboarding.png",
+      "sha256": "eae87d0812a55b56ffab5801a9ab4e281ce7312915ef7dcb0b27f09892cefc55",
+      "byte_length": 97594,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/light/1440x900/motion-add-full.mp4",
+      "sha256": "7f2c10188e3dfd0e6300caa881b8c71157316ed479b5899690f64e1851a1d25d",
+      "byte_length": 244316,
+      "media_type": "mp4",
+      "symlink": false
+    },
+    {
+      "path": "docs/baseline/current/en/light/1440x900/motion-add-full.webm",
+      "sha256": "e6fc8d3d38373bffc5f51cb23dca63dc2e064f9b04e4ba0c6f0c3bc7534e2e2e",
+      "byte_length": 273055,
+      "media_type": "webm",
+      "symlink": false
+    },
+    {
+      "path": "docs/baseline/current/en/light/1440x900/onboarding.png",
+      "sha256": "697def1720281b441c8d297095e8545ee4097c6bbcd7ee337e3ad43cbf61e4cf",
+      "byte_length": 97815,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/light/1440x900/populated-dashboard.png",
+      "sha256": "30368d9aaa76faa5f3200b61ed4c113be27e2b1d912bf5a73e852209469fec05",
+      "byte_length": 141063,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/light/1440x900/populated-plans.png",
+      "sha256": "31d6fc1a34187348a09d663415aa63756bbcfec1b14a05bb8856d536035aa76d",
+      "byte_length": 97575,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/light/1440x900/populated-settings.png",
+      "sha256": "a0d6079065e1e3eb6eefaa87fca1bb0ea6368296e468a55ee1030d662230cf22",
+      "byte_length": 170494,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/light/1440x900/populated-statistics.png",
+      "sha256": "25b6642b47e32ca9e1df0c5e388477f69934879dddc6c6916eacb3cb3bb546d4",
+      "byte_length": 145529,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/light/1440x900/populated-vault.png",
+      "sha256": "55b6e798291c505da72b353d281ae599bed8899e804b2d6168d84ce48b9d672c",
+      "byte_length": 114551,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/light/1440x900/profile-modal.png",
+      "sha256": "0df3b5be0410069205a54c56eebf9b5b762e563bab6865afa2044185c4450029",
+      "byte_length": 215765,
+      "media_type": "png",
+      "symlink": false,
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "docs/baseline/current/en/light/390x844/add-modal.png",
+      "sha256": "45a14982473b507ca6eefd7d0b83f09827bb496f3686851719f7a52db42993ca",
+      "byte_length": 68044,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/light/390x844/apply-plan-modal.png",
+      "sha256": "eed536477edcfb6c37de7b980279f7c0c2e0c8dbb9d783ef640e8dffe26c18be",
+      "byte_length": 61527,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/light/390x844/confirm-reset-modal.png",
+      "sha256": "8e44e3d4d1ff269b2f91a2859105ec9d3736547619b72fcd2b3565d22b256748",
+      "byte_length": 62982,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/light/390x844/edit-modal.png",
+      "sha256": "0ae6aeff14b09a5b1f2085536cb5ce3d63e61ff9e088428554f34fedc820cdf4",
+      "byte_length": 73393,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/light/390x844/empty-dashboard.png",
+      "sha256": "c4f96840dc9780dc8af183db0e2b441207b47f75502fe6d416eee190d4ecd3a9",
+      "byte_length": 82743,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/light/390x844/empty-plans.png",
+      "sha256": "a192eb5df3032ae550907be40e0d0cacde23e891be85fe5f723bf59f86027914",
+      "byte_length": 76765,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/light/390x844/empty-settings.png",
+      "sha256": "5bb805442d122b8ac48de2567b1140615af614eeeb680b8d79a012d55c7f0fe5",
+      "byte_length": 98693,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/light/390x844/empty-statistics.png",
+      "sha256": "443af037f87331895b0fb45f129ae3a8b79614cb64fe170081266edb35f911fd",
+      "byte_length": 91889,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/light/390x844/empty-vault.png",
+      "sha256": "c9dab9b0895dc257b2ff8882c84b7734322e0c9b65f53e2af7e6a82ab406fb5b",
+      "byte_length": 64283,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/light/390x844/error-toast.png",
+      "sha256": "2a35a5d2040b0aad4a8aef955265f85bdbaeb79fb5022c450538ab732a36daca",
+      "byte_length": 54776,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/light/390x844/keyboard-focus-dashboard.png",
+      "sha256": "abd12ea1c20671be4380210bf8ea62a55a1a40d42c349919035715be6b4a1d4a",
+      "byte_length": 83621,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/light/390x844/loading-onboarding.png",
+      "sha256": "98d01d69ee2f370f2c6e887865da0bdd5120a5e289083688cef34ec5f6e9af85",
+      "byte_length": 64087,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/light/390x844/motion-add-full.mp4",
+      "sha256": "144d8738e8774ceb085f19a34844052b27327ae77a90bc724da4b1e687c0afe5",
+      "byte_length": 204806,
+      "media_type": "mp4",
+      "symlink": false
+    },
+    {
+      "path": "docs/baseline/current/en/light/390x844/motion-add-full.webm",
+      "sha256": "547a869f3cce079312253a03bdabb36c4067894ba6f3b8dcd1627fd68406f634",
+      "byte_length": 403348,
+      "media_type": "webm",
+      "symlink": false
+    },
+    {
+      "path": "docs/baseline/current/en/light/390x844/onboarding.png",
+      "sha256": "442df10ed472ad6fc11b8a0440b0f4a16ff2e75a6b523eb6444764e421c44f79",
+      "byte_length": 64481,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/light/390x844/populated-dashboard.png",
+      "sha256": "608ab61cf5e55bf32ee2dc7ee02c170d2ad2831b048cf1121f5687fe5717b943",
+      "byte_length": 97050,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/light/390x844/populated-plans.png",
+      "sha256": "30e620224e683ca1efd371b1ac9c729f9bb9d0ac5736d5415608d14007f649ff",
+      "byte_length": 78342,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/light/390x844/populated-settings.png",
+      "sha256": "fb1a221d5d43bc99199fefd51fa35b17d3ecb5ff69071315d4d9a17ad7743d58",
+      "byte_length": 98518,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/light/390x844/populated-statistics.png",
+      "sha256": "21a1d7040dc081e31a74d777f10a2c4dddbaa9f1772056472702417e6cca292e",
+      "byte_length": 108146,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/light/390x844/populated-vault.png",
+      "sha256": "0ca8a353180a4fc0a2cb4c896f0b542fb37040a815e073e2b6841611a30d65d7",
+      "byte_length": 84152,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/en/light/390x844/profile-modal.png",
+      "sha256": "d610490b21aead8916e79284abe2dcb9581618ef6ef961724eed3574850b88bb",
+      "byte_length": 75142,
+      "media_type": "png",
+      "symlink": false,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "docs/baseline/current/motion-profiles/auto/motion-add-auto.mp4",
+      "sha256": "6885a40d21b50fe2ca903b14c288a61e838ec70a85343873076f3b03a3f9f50a",
+      "byte_length": 101938,
+      "media_type": "mp4",
+      "symlink": false
+    },
+    {
+      "path": "docs/baseline/current/motion-profiles/auto/motion-add-auto.webm",
+      "sha256": "cc31e93dac36569ac0448e9c0796caadd04aa49223518c207324fe0379c48249",
+      "byte_length": 188347,
+      "media_type": "webm",
+      "symlink": false
+    },
+    {
+      "path": "docs/baseline/current/motion-profiles/balanced/motion-add-balanced.mp4",
+      "sha256": "8f4bfcc4a5bbce0fe192c77e2872186e5569b94111fc5252f41e5e2d5d68ffce",
+      "byte_length": 97931,
+      "media_type": "mp4",
+      "symlink": false
+    },
+    {
+      "path": "docs/baseline/current/motion-profiles/balanced/motion-add-balanced.webm",
+      "sha256": "6a2674b370fbc9f8b29a7c9128d93d1aaf6675cb871e32b5366954ec9fa3dad3",
+      "byte_length": 197519,
+      "media_type": "webm",
+      "symlink": false
+    },
+    {
+      "path": "docs/baseline/current/motion-profiles/full/motion-add-full.mp4",
+      "sha256": "1d25c11b49c928834139fc9b5884392173b0f188abca4fdf19ba07d66d2aa1bb",
+      "byte_length": 124696,
+      "media_type": "mp4",
+      "symlink": false
+    },
+    {
+      "path": "docs/baseline/current/motion-profiles/full/motion-add-full.webm",
+      "sha256": "3cd5ca5ef5d6fce59b925834c6d029bc7e7db2eadcb283ad30eff24cde29ee87",
+      "byte_length": 173834,
+      "media_type": "webm",
+      "symlink": false
+    },
+    {
+      "path": "docs/baseline/current/motion-profiles/lite/motion-add-lite.mp4",
+      "sha256": "62afaf4e33e521d18984edc2f9536d7d96b578dbe9c1e0de9adbc9b910f62460",
+      "byte_length": 127993,
+      "media_type": "mp4",
+      "symlink": false
+    },
+    {
+      "path": "docs/baseline/current/motion-profiles/lite/motion-add-lite.webm",
+      "sha256": "97f97984e64339a46b345ef6a0615b5fc8de5c73821194d72f87620fe4bd55a5",
+      "byte_length": 173575,
+      "media_type": "webm",
+      "symlink": false
+    }
+  ]
+}

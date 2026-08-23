@@ -1,0 +1,443 @@
+{
+  "schema": "rushd.v1-fixture.v1",
+  "case_id": "populated",
+  "description": "Representative fake paid, unpaid, essential, flexible, plan, vault, goal, and prior-cycle records.",
+  "sanitization": {
+    "marker": "SYNTHETIC_P00_ONLY",
+    "contains_real_financial_data": false,
+    "generated_at": "2026-08-10T09:00:00.000Z"
+  },
+  "frozen_clock_utc": "2026-08-10T09:00:00.000Z",
+  "local_storage": {
+    "rushd_lang": "ar",
+    "rushd_theme": "dark",
+    "rushd_motion": "full",
+    "rushd_calendar": "gregorian"
+  },
+  "indexed_db": {
+    "name": "MicroSaveOS_DB",
+    "version": 1,
+    "stores": {
+      "settings": [
+        {
+          "key": "baseAllowance",
+          "value": 2400
+        },
+        {
+          "key": "safeToSpendMode",
+          "value": "monthly"
+        },
+        {
+          "key": "motionLevel",
+          "value": "full"
+        },
+        {
+          "key": "theme",
+          "value": "dark"
+        },
+        {
+          "key": "templateProfiles",
+          "value": [
+            {
+              "id": "legacy",
+              "name": "FAKE Default",
+              "offdays": [
+                5,
+                6
+              ]
+            }
+          ]
+        },
+        {
+          "key": "activeTemplateProfileId",
+          "value": "legacy"
+        },
+        {
+          "key": "monthlyTemplateAssignments",
+          "value": [
+            {
+              "monthKey": "2026-08",
+              "assignedProfileId": "legacy",
+              "effectiveDate": "2026-08-01"
+            }
+          ]
+        },
+        {
+          "key": "vault",
+          "value": {
+            "balance": 450,
+            "transactions": [
+              {
+                "id": "fake-vault-tx-001",
+                "type": "surplus_transfer",
+                "amount": 450,
+                "date": "2026-08-01",
+                "monthKey": "2026-08",
+                "sourceMonthKey": "2026-07",
+                "createdAt": "2026-08-01T09:00:00.000Z"
+              }
+            ],
+            "goals": [
+              {
+                "id": "fake-goal-laptop",
+                "name": "FAKE Laptop",
+                "targetAmount": 1200
+              },
+              {
+                "id": "fake-goal-course",
+                "name": "FAKE Course",
+                "targetAmount": 450
+              }
+            ]
+          }
+        },
+        {
+          "key": "monthEndSettlements",
+          "value": [
+            {
+              "previousMonthKey": "2026-07",
+              "decision": "vault",
+              "targetMonthKey": "",
+              "surplus": 450,
+              "previousMonthBudget": 2400,
+              "previousMonthSpent": 1950,
+              "settledAt": "2026-08-01T09:00:00.000Z",
+              "vaultTransactionId": "fake-vault-tx-001"
+            }
+          ]
+        },
+        {
+          "key": "onboardingState",
+          "value": {
+            "status": "skipped",
+            "updatedAt": "2026-08-10T09:00:00.000Z",
+            "source": "p00-fixture"
+          }
+        }
+      ],
+      "templates": [
+        {
+          "id": "fake-template-transport",
+          "name": "FAKE Commute",
+          "expectedCost": 18,
+          "defaultAmount": 30,
+          "monthlyBudget": 0,
+          "maxUsesPerMonth": 0,
+          "category": "transport",
+          "classification": "essential",
+          "source": "template",
+          "recurrence": "daily",
+          "applicability": "everyday",
+          "profileId": "legacy",
+          "days": []
+        },
+        {
+          "id": "fake-template-coffee",
+          "name": "FAKE Coffee",
+          "expectedCost": 20,
+          "defaultAmount": 20,
+          "monthlyBudget": 200,
+          "maxUsesPerMonth": 10,
+          "category": "food",
+          "classification": "essential",
+          "source": "flexible",
+          "recurrence": "daily",
+          "applicability": "everyday",
+          "profileId": "legacy",
+          "days": []
+        },
+        {
+          "id": "fake-template-internet",
+          "name": "FAKE Internet",
+          "expectedCost": 180,
+          "defaultAmount": 30,
+          "monthlyBudget": 0,
+          "maxUsesPerMonth": 0,
+          "category": "utilities",
+          "classification": "essential",
+          "source": "template",
+          "recurrence": "monthly",
+          "applicability": "everyday",
+          "profileId": "legacy",
+          "days": [
+            5
+          ]
+        }
+      ],
+      "expenses": [
+        {
+          "id": "fake-expense-001",
+          "name": "FAKE Groceries",
+          "expectedCost": 120,
+          "actualPaid": 112.5,
+          "isPaid": true,
+          "category": "food",
+          "classification": "essential",
+          "source": "manual",
+          "flexibleDefinitionId": null,
+          "templateOriginId": null,
+          "templateProtected": true,
+          "date": "2026-08-10",
+          "timestamp": 1786352400000
+        },
+        {
+          "id": "fake-expense-002",
+          "name": "FAKE Internet",
+          "expectedCost": 180,
+          "actualPaid": 0,
+          "isPaid": false,
+          "category": "utilities",
+          "classification": "essential",
+          "source": "template",
+          "flexibleDefinitionId": null,
+          "templateOriginId": "fake-template-internet",
+          "templateProtected": false,
+          "date": "2026-08-10",
+          "timestamp": 1786352400000
+        },
+        {
+          "id": "fake-expense-003",
+          "name": "FAKE Coffee",
+          "expectedCost": 20,
+          "actualPaid": 22,
+          "isPaid": true,
+          "category": "food",
+          "classification": "luxury",
+          "source": "flexible",
+          "flexibleDefinitionId": "fake-template-coffee",
+          "templateOriginId": "fake-template-coffee",
+          "templateProtected": true,
+          "date": "2026-08-09",
+          "timestamp": 1786266000000
+        },
+        {
+          "id": "fake-expense-004",
+          "name": "FAKE Bus",
+          "expectedCost": 18,
+          "actualPaid": 18,
+          "isPaid": true,
+          "category": "transport",
+          "classification": "essential",
+          "source": "manual",
+          "flexibleDefinitionId": null,
+          "templateOriginId": null,
+          "templateProtected": true,
+          "date": "2026-08-08",
+          "timestamp": 1786179600000
+        },
+        {
+          "id": "fake-expense-005",
+          "name": "FAKE Previous Cycle",
+          "expectedCost": 80,
+          "actualPaid": 80,
+          "isPaid": true,
+          "category": "other",
+          "classification": "essential",
+          "source": "manual",
+          "flexibleDefinitionId": null,
+          "templateOriginId": null,
+          "templateProtected": true,
+          "date": "2026-07-28",
+          "timestamp": 1785229200000
+        }
+      ]
+    }
+  },
+  "backup": {
+    "version": "3.1",
+    "exportedAt": "2026-08-10T09:00:00.000Z",
+    "settings": {
+      "baseAllowance": 2400,
+      "safeToSpendMode": "monthly",
+      "motionLevel": "full",
+      "theme": "dark",
+      "templateProfiles": [
+        {
+          "id": "legacy",
+          "name": "FAKE Default",
+          "offdays": [
+            5,
+            6
+          ]
+        }
+      ],
+      "activeTemplateProfileId": "legacy",
+      "monthlyTemplateAssignments": [
+        {
+          "monthKey": "2026-08",
+          "assignedProfileId": "legacy",
+          "effectiveDate": "2026-08-01"
+        }
+      ],
+      "vault": {
+        "balance": 450,
+        "transactions": [
+          {
+            "id": "fake-vault-tx-001",
+            "type": "surplus_transfer",
+            "amount": 450,
+            "date": "2026-08-01",
+            "monthKey": "2026-08",
+            "sourceMonthKey": "2026-07",
+            "createdAt": "2026-08-01T09:00:00.000Z"
+          }
+        ],
+        "goals": [
+          {
+            "id": "fake-goal-laptop",
+            "name": "FAKE Laptop",
+            "targetAmount": 1200
+          },
+          {
+            "id": "fake-goal-course",
+            "name": "FAKE Course",
+            "targetAmount": 450
+          }
+        ]
+      },
+      "monthEndSettlements": [
+        {
+          "previousMonthKey": "2026-07",
+          "decision": "vault",
+          "targetMonthKey": "",
+          "surplus": 450,
+          "previousMonthBudget": 2400,
+          "previousMonthSpent": 1950,
+          "settledAt": "2026-08-01T09:00:00.000Z",
+          "vaultTransactionId": "fake-vault-tx-001"
+        }
+      ],
+      "onboardingState": {
+        "status": "skipped",
+        "updatedAt": "2026-08-10T09:00:00.000Z",
+        "source": "p00-fixture"
+      }
+    },
+    "templates": [
+      {
+        "id": "fake-template-transport",
+        "name": "FAKE Commute",
+        "expectedCost": 18,
+        "defaultAmount": 30,
+        "monthlyBudget": 0,
+        "maxUsesPerMonth": 0,
+        "category": "transport",
+        "classification": "essential",
+        "source": "template",
+        "recurrence": "daily",
+        "applicability": "everyday",
+        "profileId": "legacy",
+        "days": []
+      },
+      {
+        "id": "fake-template-coffee",
+        "name": "FAKE Coffee",
+        "expectedCost": 20,
+        "defaultAmount": 20,
+        "monthlyBudget": 200,
+        "maxUsesPerMonth": 10,
+        "category": "food",
+        "classification": "essential",
+        "source": "flexible",
+        "recurrence": "daily",
+        "applicability": "everyday",
+        "profileId": "legacy",
+        "days": []
+      },
+      {
+        "id": "fake-template-internet",
+        "name": "FAKE Internet",
+        "expectedCost": 180,
+        "defaultAmount": 30,
+        "monthlyBudget": 0,
+        "maxUsesPerMonth": 0,
+        "category": "utilities",
+        "classification": "essential",
+        "source": "template",
+        "recurrence": "monthly",
+        "applicability": "everyday",
+        "profileId": "legacy",
+        "days": [
+          5
+        ]
+      }
+    ],
+    "expenses": [
+      {
+        "id": "fake-expense-001",
+        "name": "FAKE Groceries",
+        "expectedCost": 120,
+        "actualPaid": 112.5,
+        "isPaid": true,
+        "category": "food",
+        "classification": "essential",
+        "source": "manual",
+        "flexibleDefinitionId": null,
+        "templateOriginId": null,
+        "templateProtected": true,
+        "date": "2026-08-10",
+        "timestamp": 1786352400000
+      },
+      {
+        "id": "fake-expense-002",
+        "name": "FAKE Internet",
+        "expectedCost": 180,
+        "actualPaid": 0,
+        "isPaid": false,
+        "category": "utilities",
+        "classification": "essential",
+        "source": "template",
+        "flexibleDefinitionId": null,
+        "templateOriginId": "fake-template-internet",
+        "templateProtected": false,
+        "date": "2026-08-10",
+        "timestamp": 1786352400000
+      },
+      {
+        "id": "fake-expense-003",
+        "name": "FAKE Coffee",
+        "expectedCost": 20,
+        "actualPaid": 22,
+        "isPaid": true,
+        "category": "food",
+        "classification": "luxury",
+        "source": "flexible",
+        "flexibleDefinitionId": "fake-template-coffee",
+        "templateOriginId": "fake-template-coffee",
+        "templateProtected": true,
+        "date": "2026-08-09",
+        "timestamp": 1786266000000
+      },
+      {
+        "id": "fake-expense-004",
+        "name": "FAKE Bus",
+        "expectedCost": 18,
+        "actualPaid": 18,
+        "isPaid": true,
+        "category": "transport",
+        "classification": "essential",
+        "source": "manual",
+        "flexibleDefinitionId": null,
+        "templateOriginId": null,
+        "templateProtected": true,
+        "date": "2026-08-08",
+        "timestamp": 1786179600000
+      },
+      {
+        "id": "fake-expense-005",
+        "name": "FAKE Previous Cycle",
+        "expectedCost": 80,
+        "actualPaid": 80,
+        "isPaid": true,
+        "category": "other",
+        "classification": "essential",
+        "source": "manual",
+        "flexibleDefinitionId": null,
+        "templateOriginId": null,
+        "templateProtected": true,
+        "date": "2026-07-28",
+        "timestamp": 1785229200000
+      }
+    ]
+  }
+}

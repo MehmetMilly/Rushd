@@ -1,0 +1,23 @@
+{
+  "schema": "rushd.p00-final-reproduction-evidence.v1",
+  "issue_id": "P0-03",
+  "final_evidence_path": "docs/baseline/p0-p1/P0-03.json",
+  "captured_at": "2026-08-11T15:04:36.499Z",
+  "source_sha": "b56c80bc2e2eb103ebe5bc258bfeeea60accf53c",
+  "reproduction_type": "manual",
+  "sanitized_fixture": "tests/fixtures/v1/malformed.json",
+  "preconditions": [
+    "Use the weak-schema-accepted fake backup.",
+    "Inject failure after one successful import write."
+  ],
+  "steps": [
+    "Choose the fake backup and confirm import.",
+    "Trigger the deterministic later write failure.",
+    "Reload and inspect settings/templates/expenses."
+  ],
+  "expected_current_result": "Earlier imported records persist after the later failure.",
+  "captured_current_result": "Source inspection confirms settings, templates, and expenses are saved sequentially without rollback.",
+  "p01_action": "Make import atomic or visibly block it.",
+  "regression_owner": "P01",
+  "result": "reproduced"
+}

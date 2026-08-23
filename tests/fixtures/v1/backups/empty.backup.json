@@ -1,0 +1,41 @@
+{
+  "version": "3.1",
+  "exportedAt": "2026-08-10T09:00:00.000Z",
+  "settings": {
+    "baseAllowance": 1000,
+    "safeToSpendMode": "monthly",
+    "motionLevel": "full",
+    "theme": "dark",
+    "templateProfiles": [
+      {
+        "id": "legacy",
+        "name": "FAKE Default",
+        "offdays": [
+          5,
+          6
+        ]
+      }
+    ],
+    "activeTemplateProfileId": "legacy",
+    "monthlyTemplateAssignments": [
+      {
+        "monthKey": "2026-08",
+        "assignedProfileId": "legacy",
+        "effectiveDate": "2026-08-01"
+      }
+    ],
+    "vault": {
+      "balance": 0,
+      "transactions": [],
+      "goals": []
+    },
+    "monthEndSettlements": [],
+    "onboardingState": {
+      "status": "skipped",
+      "updatedAt": "2026-08-10T09:00:00.000Z",
+      "source": "p00-fixture"
+    }
+  },
+  "templates": [],
+  "expenses": []
+}

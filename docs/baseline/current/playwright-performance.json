@@ -1,0 +1,108 @@
+{
+  "schema": "rushd.p00-playwright-performance.v1",
+  "captured_at": "2026-08-11T14:59:14.480Z",
+  "runner": {
+    "engine": "Playwright Chromium",
+    "playwright_version": "1.62.1",
+    "chromium_version": "151.0.7922.34"
+  },
+  "method": "Native Playwright navigation timing and DOM-node comparison for every locked matrix combination.",
+  "samples": [
+    {
+      "language": "ar",
+      "theme": "dark",
+      "viewport": "390x844",
+      "dom_content_loaded_ms": 290.2000000476837,
+      "load_event_ms": 290.2000000476837,
+      "dom_nodes": 748
+    },
+    {
+      "language": "ar",
+      "theme": "dark",
+      "viewport": "1024x1366",
+      "dom_content_loaded_ms": 293,
+      "load_event_ms": 293.09999990463257,
+      "dom_nodes": 748
+    },
+    {
+      "language": "ar",
+      "theme": "dark",
+      "viewport": "1440x900",
+      "dom_content_loaded_ms": 340.89999997615814,
+      "load_event_ms": 341,
+      "dom_nodes": 748
+    },
+    {
+      "language": "ar",
+      "theme": "light",
+      "viewport": "390x844",
+      "dom_content_loaded_ms": 278.6999999284744,
+      "load_event_ms": 278.7999999523163,
+      "dom_nodes": 748
+    },
+    {
+      "language": "ar",
+      "theme": "light",
+      "viewport": "1024x1366",
+      "dom_content_loaded_ms": 294.2999999523163,
+      "load_event_ms": 294.2999999523163,
+      "dom_nodes": 748
+    },
+    {
+      "language": "ar",
+      "theme": "light",
+      "viewport": "1440x900",
+      "dom_content_loaded_ms": 315.89999997615814,
+      "load_event_ms": 316,
+      "dom_nodes": 748
+    },
+    {
+      "language": "en",
+      "theme": "dark",
+      "viewport": "390x844",
+      "dom_content_loaded_ms": 301.2000000476837,
+      "load_event_ms": 301.2000000476837,
+      "dom_nodes": 748
+    },
+    {
+      "language": "en",
+      "theme": "dark",
+      "viewport": "1024x1366",
+      "dom_content_loaded_ms": 329.10000002384186,
+      "load_event_ms": 329.2000000476837,
+      "dom_nodes": 748
+    },
+    {
+      "language": "en",
+      "theme": "dark",
+      "viewport": "1440x900",
+      "dom_content_loaded_ms": 347.60000002384186,
+      "load_event_ms": 347.60000002384186,
+      "dom_nodes": 748
+    },
+    {
+      "language": "en",
+      "theme": "light",
+      "viewport": "390x844",
+      "dom_content_loaded_ms": 329.10000002384186,
+      "load_event_ms": 329.10000002384186,
+      "dom_nodes": 748
+    },
+    {
+      "language": "en",
+      "theme": "light",
+      "viewport": "1024x1366",
+      "dom_content_loaded_ms": 289.39999997615814,
+      "load_event_ms": 289.5,
+      "dom_nodes": 748
+    },
+    {
+      "language": "en",
+      "theme": "light",
+      "viewport": "1440x900",
+      "dom_content_loaded_ms": 363.8000000715256,
+      "load_event_ms": 364,
+      "dom_nodes": 748
+    }
+  ]
+}

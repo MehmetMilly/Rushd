@@ -1,0 +1,21 @@
+{
+  "schema": "rushd.p00-final-reproduction-evidence.v1",
+  "issue_id": "P1-11",
+  "final_evidence_path": "docs/baseline/p0-p1/P1-11.json",
+  "captured_at": "2026-08-11T15:04:36.499Z",
+  "source_sha": "b56c80bc2e2eb103ebe5bc258bfeeea60accf53c",
+  "reproduction_type": "automated",
+  "sanitized_fixture": "tests/fixtures/v1/populated.json",
+  "preconditions": [
+    "Compare two materially different fake histories."
+  ],
+  "steps": [
+    "Run npm test.",
+    "Inspect the current profile trend seed and activity-dot predicate."
+  ],
+  "expected_current_result": "Trend input remains hard-coded and activity dots remain disabled.",
+  "captured_current_result": "Automated source characterization finds the mock trend array and always-false activity indicator.",
+  "p01_action": "Contain misleading analytics and assign final ownership to later Insights work.",
+  "regression_owner": "P01",
+  "result": "reproduced"
+}

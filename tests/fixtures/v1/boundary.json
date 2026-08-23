@@ -1,0 +1,342 @@
+{
+  "schema": "rushd.v1-fixture.v1",
+  "case_id": "boundary",
+  "description": "Timezone, short-month, precision, sign, size, and Arabic/Western numeral boundaries.",
+  "sanitization": {
+    "marker": "SYNTHETIC_P00_ONLY",
+    "contains_real_financial_data": false,
+    "generated_at": "2026-08-10T09:00:00.000Z"
+  },
+  "frozen_clock_utc": "2026-08-10T09:00:00.000Z",
+  "local_storage": {
+    "rushd_lang": "ar",
+    "rushd_theme": "dark",
+    "rushd_motion": "full",
+    "rushd_calendar": "gregorian"
+  },
+  "indexed_db": {
+    "name": "MicroSaveOS_DB",
+    "version": 1,
+    "stores": {
+      "settings": [
+        {
+          "key": "baseAllowance",
+          "value": 0.30000000000000004
+        },
+        {
+          "key": "safeToSpendMode",
+          "value": "monthly"
+        },
+        {
+          "key": "motionLevel",
+          "value": "full"
+        },
+        {
+          "key": "theme",
+          "value": "dark"
+        },
+        {
+          "key": "templateProfiles",
+          "value": [
+            {
+              "id": "legacy",
+              "name": "FAKE Default",
+              "offdays": [
+                5,
+                6
+              ]
+            }
+          ]
+        },
+        {
+          "key": "activeTemplateProfileId",
+          "value": "legacy"
+        },
+        {
+          "key": "monthlyTemplateAssignments",
+          "value": [
+            {
+              "monthKey": "2026-08",
+              "assignedProfileId": "legacy",
+              "effectiveDate": "2026-08-01"
+            }
+          ]
+        },
+        {
+          "key": "vault",
+          "value": {
+            "balance": 0,
+            "transactions": [],
+            "goals": []
+          }
+        },
+        {
+          "key": "monthEndSettlements",
+          "value": []
+        },
+        {
+          "key": "onboardingState",
+          "value": {
+            "status": "skipped",
+            "updatedAt": "2026-08-10T09:00:00.000Z",
+            "source": "p00-fixture"
+          }
+        }
+      ],
+      "templates": [
+        {
+          "id": "fake-month-end",
+          "name": "FAKE Template fake-month-end",
+          "expectedCost": 30,
+          "defaultAmount": 30,
+          "monthlyBudget": 0,
+          "maxUsesPerMonth": 0,
+          "category": "other",
+          "classification": "essential",
+          "source": "template",
+          "recurrence": "monthly",
+          "applicability": "everyday",
+          "profileId": "legacy",
+          "days": [
+            29,
+            30,
+            31
+          ]
+        }
+      ],
+      "expenses": [
+        {
+          "id": "fake-utc-boundary-before",
+          "name": "FAKE Expense fake-utc-boundary-before",
+          "expectedCost": 0.1,
+          "actualPaid": 0.1,
+          "isPaid": true,
+          "category": "other",
+          "classification": "essential",
+          "source": "manual",
+          "flexibleDefinitionId": null,
+          "templateOriginId": null,
+          "templateProtected": true,
+          "date": "2026-01-01",
+          "timestamp": 1767258000000
+        },
+        {
+          "id": "fake-utc-boundary-after",
+          "name": "FAKE Expense fake-utc-boundary-after",
+          "expectedCost": 0.2,
+          "actualPaid": 0.2,
+          "isPaid": true,
+          "category": "other",
+          "classification": "essential",
+          "source": "manual",
+          "flexibleDefinitionId": null,
+          "templateOriginId": null,
+          "templateProtected": true,
+          "date": "2026-01-02",
+          "timestamp": 1767344400000
+        },
+        {
+          "id": "fake-negative",
+          "name": "FAKE Expense fake-negative",
+          "expectedCost": -1,
+          "actualPaid": 0,
+          "isPaid": false,
+          "category": "other",
+          "classification": "essential",
+          "source": "manual",
+          "flexibleDefinitionId": null,
+          "templateOriginId": null,
+          "templateProtected": true,
+          "date": "2026-02-28",
+          "timestamp": 1772269200000
+        },
+        {
+          "id": "fake-excess-precision",
+          "name": "FAKE Expense fake-excess-precision",
+          "expectedCost": 1.234,
+          "actualPaid": 0,
+          "isPaid": false,
+          "category": "other",
+          "classification": "essential",
+          "source": "manual",
+          "flexibleDefinitionId": null,
+          "templateOriginId": null,
+          "templateProtected": true,
+          "date": "2026-02-28",
+          "timestamp": 1772269200000
+        },
+        {
+          "id": "fake-large-money",
+          "name": "FAKE Expense fake-large-money",
+          "expectedCost": 999999999.999,
+          "actualPaid": 0,
+          "isPaid": false,
+          "category": "other",
+          "classification": "essential",
+          "source": "manual",
+          "flexibleDefinitionId": null,
+          "templateOriginId": null,
+          "templateProtected": true,
+          "date": "2026-02-28",
+          "timestamp": 1772269200000
+        }
+      ]
+    }
+  },
+  "backup": {
+    "version": "3.1",
+    "exportedAt": "2026-08-10T09:00:00.000Z",
+    "settings": {
+      "baseAllowance": 0.30000000000000004,
+      "safeToSpendMode": "monthly",
+      "motionLevel": "full",
+      "theme": "dark",
+      "templateProfiles": [
+        {
+          "id": "legacy",
+          "name": "FAKE Default",
+          "offdays": [
+            5,
+            6
+          ]
+        }
+      ],
+      "activeTemplateProfileId": "legacy",
+      "monthlyTemplateAssignments": [
+        {
+          "monthKey": "2026-08",
+          "assignedProfileId": "legacy",
+          "effectiveDate": "2026-08-01"
+        }
+      ],
+      "vault": {
+        "balance": 0,
+        "transactions": [],
+        "goals": []
+      },
+      "monthEndSettlements": [],
+      "onboardingState": {
+        "status": "skipped",
+        "updatedAt": "2026-08-10T09:00:00.000Z",
+        "source": "p00-fixture"
+      }
+    },
+    "templates": [
+      {
+        "id": "fake-month-end",
+        "name": "FAKE Template fake-month-end",
+        "expectedCost": 30,
+        "defaultAmount": 30,
+        "monthlyBudget": 0,
+        "maxUsesPerMonth": 0,
+        "category": "other",
+        "classification": "essential",
+        "source": "template",
+        "recurrence": "monthly",
+        "applicability": "everyday",
+        "profileId": "legacy",
+        "days": [
+          29,
+          30,
+          31
+        ]
+      }
+    ],
+    "expenses": [
+      {
+        "id": "fake-utc-boundary-before",
+        "name": "FAKE Expense fake-utc-boundary-before",
+        "expectedCost": 0.1,
+        "actualPaid": 0.1,
+        "isPaid": true,
+        "category": "other",
+        "classification": "essential",
+        "source": "manual",
+        "flexibleDefinitionId": null,
+        "templateOriginId": null,
+        "templateProtected": true,
+        "date": "2026-01-01",
+        "timestamp": 1767258000000
+      },
+      {
+        "id": "fake-utc-boundary-after",
+        "name": "FAKE Expense fake-utc-boundary-after",
+        "expectedCost": 0.2,
+        "actualPaid": 0.2,
+        "isPaid": true,
+        "category": "other",
+        "classification": "essential",
+        "source": "manual",
+        "flexibleDefinitionId": null,
+        "templateOriginId": null,
+        "templateProtected": true,
+        "date": "2026-01-02",
+        "timestamp": 1767344400000
+      },
+      {
+        "id": "fake-negative",
+        "name": "FAKE Expense fake-negative",
+        "expectedCost": -1,
+        "actualPaid": 0,
+        "isPaid": false,
+        "category": "other",
+        "classification": "essential",
+        "source": "manual",
+        "flexibleDefinitionId": null,
+        "templateOriginId": null,
+        "templateProtected": true,
+        "date": "2026-02-28",
+        "timestamp": 1772269200000
+      },
+      {
+        "id": "fake-excess-precision",
+        "name": "FAKE Expense fake-excess-precision",
+        "expectedCost": 1.234,
+        "actualPaid": 0,
+        "isPaid": false,
+        "category": "other",
+        "classification": "essential",
+        "source": "manual",
+        "flexibleDefinitionId": null,
+        "templateOriginId": null,
+        "templateProtected": true,
+        "date": "2026-02-28",
+        "timestamp": 1772269200000
+      },
+      {
+        "id": "fake-large-money",
+        "name": "FAKE Expense fake-large-money",
+        "expectedCost": 999999999.999,
+        "actualPaid": 0,
+        "isPaid": false,
+        "category": "other",
+        "classification": "essential",
+        "source": "manual",
+        "flexibleDefinitionId": null,
+        "templateOriginId": null,
+        "templateProtected": true,
+        "date": "2026-02-28",
+        "timestamp": 1772269200000
+      }
+    ]
+  },
+  "boundary_inputs": [
+    "0",
+    "-1",
+    "0.1",
+    "0.2",
+    "0.30000000000000004",
+    "1.234",
+    "Infinity",
+    "NaN",
+    "١٢٫٥٠",
+    "12.50"
+  ],
+  "timezone_cases": [
+    {
+      "zone": "Asia/Riyadh",
+      "instant": "2026-01-01T21:30:00.000Z",
+      "expected_local_date": "2026-01-02"
+    }
+  ]
+}

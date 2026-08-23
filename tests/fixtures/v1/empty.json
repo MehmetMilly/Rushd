@@ -1,0 +1,131 @@
+{
+  "schema": "rushd.v1-fixture.v1",
+  "case_id": "empty",
+  "description": "Empty initialized v1 database and valid empty 3.1 backup.",
+  "sanitization": {
+    "marker": "SYNTHETIC_P00_ONLY",
+    "contains_real_financial_data": false,
+    "generated_at": "2026-08-10T09:00:00.000Z"
+  },
+  "frozen_clock_utc": "2026-08-10T09:00:00.000Z",
+  "local_storage": {
+    "rushd_lang": "ar",
+    "rushd_theme": "dark",
+    "rushd_motion": "full",
+    "rushd_calendar": "gregorian"
+  },
+  "indexed_db": {
+    "name": "MicroSaveOS_DB",
+    "version": 1,
+    "stores": {
+      "settings": [
+        {
+          "key": "baseAllowance",
+          "value": 1000
+        },
+        {
+          "key": "safeToSpendMode",
+          "value": "monthly"
+        },
+        {
+          "key": "motionLevel",
+          "value": "full"
+        },
+        {
+          "key": "theme",
+          "value": "dark"
+        },
+        {
+          "key": "templateProfiles",
+          "value": [
+            {
+              "id": "legacy",
+              "name": "FAKE Default",
+              "offdays": [
+                5,
+                6
+              ]
+            }
+          ]
+        },
+        {
+          "key": "activeTemplateProfileId",
+          "value": "legacy"
+        },
+        {
+          "key": "monthlyTemplateAssignments",
+          "value": [
+            {
+              "monthKey": "2026-08",
+              "assignedProfileId": "legacy",
+              "effectiveDate": "2026-08-01"
+            }
+          ]
+        },
+        {
+          "key": "vault",
+          "value": {
+            "balance": 0,
+            "transactions": [],
+            "goals": []
+          }
+        },
+        {
+          "key": "monthEndSettlements",
+          "value": []
+        },
+        {
+          "key": "onboardingState",
+          "value": {
+            "status": "skipped",
+            "updatedAt": "2026-08-10T09:00:00.000Z",
+            "source": "p00-fixture"
+          }
+        }
+      ],
+      "templates": [],
+      "expenses": []
+    }
+  },
+  "backup": {
+    "version": "3.1",
+    "exportedAt": "2026-08-10T09:00:00.000Z",
+    "settings": {
+      "baseAllowance": 1000,
+      "safeToSpendMode": "monthly",
+      "motionLevel": "full",
+      "theme": "dark",
+      "templateProfiles": [
+        {
+          "id": "legacy",
+          "name": "FAKE Default",
+          "offdays": [
+            5,
+            6
+          ]
+        }
+      ],
+      "activeTemplateProfileId": "legacy",
+      "monthlyTemplateAssignments": [
+        {
+          "monthKey": "2026-08",
+          "assignedProfileId": "legacy",
+          "effectiveDate": "2026-08-01"
+        }
+      ],
+      "vault": {
+        "balance": 0,
+        "transactions": [],
+        "goals": []
+      },
+      "monthEndSettlements": [],
+      "onboardingState": {
+        "status": "skipped",
+        "updatedAt": "2026-08-10T09:00:00.000Z",
+        "source": "p00-fixture"
+      }
+    },
+    "templates": [],
+    "expenses": []
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "schema": "rushd.p00-final-reproduction-evidence.v1",
+  "issue_id": "P1-06",
+  "final_evidence_path": "docs/baseline/p0-p1/P1-06.json",
+  "captured_at": "2026-08-11T15:04:36.499Z",
+  "source_sha": "b56c80bc2e2eb103ebe5bc258bfeeea60accf53c",
+  "reproduction_type": "automated",
+  "sanitized_fixture": "tests/fixtures/v1/plan-edit.json",
+  "preconditions": [
+    "A monthly template is created through the normal template form with no days array."
+  ],
+  "steps": [
+    "Run npm test.",
+    "Evaluate monthly occurrence days for an empty days array."
+  ],
+  "expected_current_result": "The template has no occurrence on any date.",
+  "captured_current_result": "Automated characterization records zero normalized days and zero occurrences.",
+  "p01_action": "Require a schedule day or visibly block monthly creation.",
+  "regression_owner": "P01",
+  "result": "reproduced"
+}

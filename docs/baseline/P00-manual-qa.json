@@ -1,0 +1,38 @@
+{
+  "schema": "rushd.human-attestation.v1",
+  "run_id": "rushd-20260810-rebuild",
+  "phase_id": "P00",
+  "gate_id": "P00-M1",
+  "gate_kind": "manual_qa",
+  "gate_request_sha256": "60b9f67eba38e16bb22dc517bd8f01bbd39f49f7acb8345259aaa64f43a52a0a",
+  "actor": "phase_implementer",
+  "actor_task_id": "019fe9fd-eb9b-7183-818d-519e1466808c",
+  "performed_at": "2026-08-11T15:04:36.499Z",
+  "performed_local_at": "2026-08-11T18:04:36.499+03:00",
+  "timezone": "Asia/Riyadh",
+  "utc_offset": "+03:00",
+  "subject_sha": "b56c80bc2e2eb103ebe5bc258bfeeea60accf53c",
+  "period_started_at": null,
+  "period_ended_at": null,
+  "evidence_root": ".codex/runs/rushd-20260810-rebuild/evidence/human/P00-M1",
+  "evidence_hashes": {
+    ".codex/runs/rushd-20260810-rebuild/evidence/human/P00-M1/manual-evidence-index.json": "a3f2b52f781b8d3be07f2099fb9b9262553f1760dedb32fafc2d62a0c726f124"
+  },
+  "environment": {
+    "device": "Apple Silicon Mac with manager-owned external Chromium over localhost CDP",
+    "os": "macOS 26.5.1 (25F80)",
+    "browser": "Playwright Chromium",
+    "browser_version": "151.0.7922.34",
+    "locale": "ar-SA RTL and en-US LTR; Asia/Riyadh +03:00"
+  },
+  "requirement": "P00-M1: Complete docs/baseline/P00-manual-qa.json from the human-attestation template for the exact matrix in P0-P1-INVENTORY.md using only fake/sanitized financial data.",
+  "result": "pass",
+  "evidence_paths": [
+    ".codex/runs/rushd-20260810-rebuild/evidence/human/P00-M1/manual-evidence-index.json"
+  ],
+  "limitations": [
+    "P00 is a baseline capture, not a claim that known accessibility, performance, financial, or P0/P1 defects are fixed.",
+    "Under the founder-attested EXTERNAL-P00-PINNED-CHROMIUM gate, the manager launched the exact pinned Chromium outside the phase sandbox and the worker connected only through the localhost CDP endpoint; the capture manifest records the package, executable, browser version, native dimensions, and absence of post-processing.",
+    "Physical iOS, iPadOS, Android, installed-PWA, VoiceOver, and TalkBack release claims remain assigned to later phase gates."
+  ]
+}
