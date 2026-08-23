@@ -359,6 +359,20 @@ This rule is authorized by `RUSHD-20260823-RECONCILIATION-MANIFEST-SCOPE` under 
 standing delegation to the Development Master for non-product workflow and technical-safety
 decisions, and it weakens no product gate.
 
+The reconciliation record's recorded head is an ancestry bound, not a live-equality bound.
+A preserved `rushd.precommit-reconciliation.v1` validates when its `current_head_sha` equals
+the current HEAD or is an ancestor of it, provided every commit after the recorded head is
+single-parented, non-empty, changes only authority paths, and is itself an allowlisted sealed
+authority amendment for the run — exact amendment scope, founder approval, plan-version
+binding, and byte-exact approved candidate manifest all validated. Head drift is rejected
+when the recorded head is unrelated to or newer than HEAD, does not exist, or when any later
+commit is a merge, is empty, changes a non-authority path, or is an unsealed or unreviewed
+authority change. Sealed authority-only commits may therefore continue to land between the
+sealed reopen and the replacement checkpoint without invalidating the preserved record.
+This rule is authorized by `RUSHD-20260823-RECONCILIATION-HEAD-DRIFT` under the founder's
+standing delegation to the Development Master for non-product workflow and technical-safety
+decisions, and it weakens no product gate.
+
 ### Runtime-neutral lifecycle adapter
 
 The controller may use Codex App Server or an equivalent local coding runtime such as

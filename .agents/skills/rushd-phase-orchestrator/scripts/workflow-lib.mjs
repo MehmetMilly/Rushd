@@ -337,6 +337,18 @@ export const sealedAuthorityRule = (amendmentId, runId) => ({
       'docs/implementation/PLAN_AMENDMENT_2026-08-23_RECONCILIATION_MANIFEST_SCOPE.json'
     ],
     planChange: 'none'
+  },
+  'RUSHD-20260823-RECONCILIATION-HEAD-DRIFT': {
+    path: 'docs/implementation/PLAN_AMENDMENT_2026-08-23_RECONCILIATION_HEAD_DRIFT.json',
+    approval: `.codex/runs/${runId}/controller/authority-amendment-reconciliation-head-drift-approval.json`,
+    paths: [
+      '.agents/skills/rushd-phase-orchestrator/scripts/workflow-lib.mjs',
+      '.agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs',
+      '.agents/skills/rushd-phase-orchestrator/scripts/self-test.mjs',
+      'docs/RUSHD_EXECUTION_PROTOCOL.md',
+      'docs/implementation/PLAN_AMENDMENT_2026-08-23_RECONCILIATION_HEAD_DRIFT.json'
+    ],
+    planChange: 'none'
   }
 }[amendmentId]);
 

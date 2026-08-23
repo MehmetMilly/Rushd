@@ -1,0 +1,39 @@
+{
+  "schema": "rushd.plan-amendment.v1",
+  "amendment_id": "RUSHD-20260823-RECONCILIATION-HEAD-DRIFT",
+  "from_plan_version": "2026-08-10-final",
+  "to_plan_version": "2026-08-10-final",
+  "requested_at": "2026-08-23T04:10:00.000Z",
+  "requested_by_task_id": "zcode-rushd-worker-current",
+  "rationale": "Repair one workflow-validator defect discovered while resuming P00 attempt 3. A preserved pre-commit reconciliation record binds the authority head that existed when the reopen was sealed, but the validator rejects the record unless that recorded head is byte-equal to the current HEAD. Sealed authority-only amendments may legitimately land after the reopen and before the replacement checkpoint is accepted, so the equality requirement turns every such legitimate authority commit into a false resume blocker. The corrected rule is an ancestry bound: the recorded head must still be an ancestor of the current HEAD, and every commit after the recorded head must be single-parented, non-empty, authority-only, and a valid allowlisted sealed authority amendment for the run. Any later merge commit, empty commit, non-authority path change, unsealed amendment, or unreviewed candidate must be rejected, and an unrelated or nonexistent recorded head must still be rejected.",
+  "affected_phases": [
+    "P00",
+    "P01",
+    "P02",
+    "P03",
+    "P04",
+    "P05",
+    "P06",
+    "P07",
+    "P08",
+    "P09",
+    "P10",
+    "P11",
+    "P12",
+    "P13"
+  ],
+  "protected_paths_to_change": [
+    ".agents/skills/rushd-phase-orchestrator/scripts/workflow-lib.mjs",
+    ".agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs",
+    ".agents/skills/rushd-phase-orchestrator/scripts/self-test.mjs",
+    "docs/RUSHD_EXECUTION_PROTOCOL.md",
+    "docs/implementation/PLAN_AMENDMENT_2026-08-23_RECONCILIATION_HEAD_DRIFT.json"
+  ],
+  "safe_work_while_waiting": "Preserve the blocked P00 attempt-3 evidence, the sealed reconciliation record, prepared checkpoint/review artifacts, and the uncommitted reviewed P00 product patch exactly as they are. Do not stage, commit, push, or edit any P00 product file until this authority amendment is independently reviewed, approved, and sealed.",
+  "founder_decision": {
+    "status": "approved",
+    "actor": "founder",
+    "approved_at": "2026-08-23T04:12:00.000Z",
+    "exact_scope": "Under the founder's standing delegation authorizing the Development Master to handle non-product workflow and technical-safety decisions, repair only the pre-commit reconciliation recorded-head validation: replace the strict HEAD-equality requirement with an ancestry requirement, allow the recorded head to be an ancestor of the current HEAD only when every later commit is single-parented, non-empty, authority-only, and a valid allowlisted sealed authority amendment whose exact five-file scope, founder approval, plan-version binding, and byte-exact approved candidate manifest all validate for the run; reject any later merge commit, empty commit, non-authority path change, unsealed amendment, or substituted candidate; continue rejecting unrelated or nonexistent recorded heads; retain the hash-bound prior PASS artifacts, failing-log, failure-signature, and affected-path validation unchanged; add regression coverage for a sealed authority-only descendant passing, a non-authority descendant failing, a merge descendant failing, unrelated and nonexistent recorded heads failing, and equality still passing; and document the ancestry rule in the execution protocol. This amendment touches only workflow authority files, never product files, and does not weaken finance, migration, sync, AI, bilingual, accessibility, motion, security, beta-duration, publication, final-audit, review-independence, or full-gate requirements."
+  }
+}

@@ -975,7 +975,21 @@ switch (value.schema) {
     if (template) break;
     const phase = phaseFor(plan, value.phase_id);
     if (!phase || !validRunId(value.run_id) || value.amendment_id !== 'RUSHD-20260822-PORTABLE-PRECOMMIT-RECONCILIATION') fail('Reconciliation run/phase/amendment is invalid');
-    if (!gitCommitExists(value.current_head_sha) || value.current_head_sha !== gitHead()) fail('Reconciliation head is invalid');
+    if (!gitCommitExists(value.current_head_sha)) fail('Reconciliation head is invalid');
+    else try {
+      const currentHead = gitHead();
+      if (value.current_head_sha !== currentHead) {
+        if (!isAncestor(value.current_head_sha, currentHead)) throw new Error('recorded head is not an ancestor of the current HEAD');
+        for (const commit of git('rev-list', '--reverse', `${value.current_head_sha}..${currentHead}`).split('\n').filter(Boolean)) {
+          const parents = git('rev-list', '--parents', '-n', '1', commit).trim().split(/\s+/);
+          const changed = git('diff-tree', '--no-commit-id', '--name-only', '-r', commit).split('\n').filter(Boolean);
+          if (parents.length !== 2 || changed.length === 0 || changed.some((path) => !matchesAny(path, AUTHORITY_PATHS))) {
+            throw new Error(`commit after the recorded head must be single-parented and authority-only: ${commit}`);
+          }
+          requireSealedAuthorityCommit(commit, value.run_id, plan.plan_version);
+        }
+      }
+    } catch (error) { fail(`Reconciliation head drift is not a sealed authority-only chain: ${error.message}`); }
     if (value.prior_checkpoint_sha256 !== sha256File(value.prior_checkpoint_path) || value.prior_review_sha256 !== sha256File(value.prior_review_path)) fail('Preserved PASS artifact hash mismatch');
     process.env.RUSHD_SEALED_ARTIFACT = '1';
     const checkpoint = validateNested(value.prior_checkpoint_path, 'rushd.phase-checkpoint.v1', null, true);

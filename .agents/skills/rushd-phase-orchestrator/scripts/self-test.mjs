@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import {
@@ -189,6 +189,29 @@ try {
     || !sameJson([...manifestScopeAmendment.protected_paths_to_change].sort(), [...manifestScopeAmendmentScope].sort())) throw new Error('Reconciliation manifest scope amendment does not match the allowlisted five-file scope');
   for (const path of manifestScopeAmendmentScope) if (!matchesAny(path, plan.protected_paths)) throw new Error(`Reconciliation manifest scope path is not protected: ${path}`);
   console.log('PASS sealed-authority allowlist binds the reconciliation manifest scope amendment');
+
+  const headDriftAmendmentScope = [
+    '.agents/skills/rushd-phase-orchestrator/scripts/workflow-lib.mjs',
+    '.agents/skills/rushd-phase-orchestrator/scripts/validate-artifact.mjs',
+    '.agents/skills/rushd-phase-orchestrator/scripts/self-test.mjs',
+    'docs/RUSHD_EXECUTION_PROTOCOL.md',
+    'docs/implementation/PLAN_AMENDMENT_2026-08-23_RECONCILIATION_HEAD_DRIFT.json'
+  ];
+  const headDriftRule = sealedAuthorityRule('RUSHD-20260823-RECONCILIATION-HEAD-DRIFT', runId);
+  if (!headDriftRule) throw new Error('RUSHD-20260823-RECONCILIATION-HEAD-DRIFT is absent from the sealed-authority allowlist');
+  if (headDriftRule.path !== 'docs/implementation/PLAN_AMENDMENT_2026-08-23_RECONCILIATION_HEAD_DRIFT.json'
+    || headDriftRule.approval !== `${runRelative}/controller/authority-amendment-reconciliation-head-drift-approval.json`
+    || headDriftRule.correctionApproval !== undefined
+    || !sameJson([...headDriftRule.paths].sort(), [...headDriftAmendmentScope].sort())) throw new Error('Sealed-authority allowlist entry does not bind the exact five-file reconciliation head-drift scope');
+  const headDriftAmendment = loadJson(headDriftRule.path);
+  if (headDriftAmendment.amendment_id !== 'RUSHD-20260823-RECONCILIATION-HEAD-DRIFT'
+    || headDriftAmendment.correction_revision !== undefined
+    || headDriftAmendment.founder_decision.actor !== 'founder'
+    || headDriftAmendment.founder_decision.status !== 'approved'
+    || !headDriftAmendment.founder_decision.exact_scope.includes('Development Master')
+    || !sameJson([...headDriftAmendment.protected_paths_to_change].sort(), [...headDriftAmendmentScope].sort())) throw new Error('Reconciliation head-drift amendment does not match the allowlisted five-file scope');
+  for (const path of headDriftAmendmentScope) if (!matchesAny(path, plan.protected_paths)) throw new Error(`Reconciliation head-drift path is not protected: ${path}`);
+  console.log('PASS sealed-authority allowlist binds the reconciliation head-drift amendment');
 
   const scopeAffectedPaths = ['scripts/verify-manifest-scope-fixture.mjs'];
   const scopeCarriedEntry = { path: 'docs/baseline/manifest-scope-carried.txt', state: 'present', kind: 'file', executable: false, size: 32, sha256: 'a'.repeat(64) };
@@ -602,7 +625,7 @@ try {
   staleHeadRequest.evidence_hashes[reconciliationPath] = sha256File(reconciliationPath);
   staleHeadRequest.changes.precommit_reconciliation.record_sha256 = sha256File(reconciliationPath);
   writeJson(resolve(root, staleHeadPath), staleHeadRequest);
-  expectRejected('precommit stale HEAD', run([transition, pausedStatePath, staleHeadPath]), /Reconciliation head is invalid|does not match the paused phase\/head/);
+  expectRejected('precommit head drift unsealed for the record run', run([transition, pausedStatePath, staleHeadPath]), /Reconciliation head drift is not a sealed authority-only chain|does not match the paused phase\/head/);
   writeJson(resolve(root, reconciliationPath), reconciliationFields);
   const wrongWorkerRequest = structuredClone(reconciliationTransitionBase);
   wrongWorkerRequest.event_id = 'SELFTEST-PRECOMMIT-WORKER';
@@ -754,6 +777,9 @@ try {
       mkdirSync(dirname(scopePath(relative)), { recursive: true });
       cpSync(resolve(root, relative), scopePath(relative), { recursive: true });
     }
+    const scopeDriftAmendmentPath = 'docs/implementation/PLAN_AMENDMENT_2026-08-23_RECONCILIATION_HEAD_DRIFT.json';
+    const scopeDriftAmendmentBytes = readFileSync(scopePath(scopeDriftAmendmentPath));
+    rmSync(scopePath(scopeDriftAmendmentPath));
     scopeGit('add', 'docs', '.agents', '.codex');
     scopeGit('commit', '--quiet', '-m', 'Rushd workflow authority');
     const scopeBase = scopeGit('rev-parse', 'HEAD');
@@ -998,6 +1024,103 @@ try {
     const scopeFinalStateCheck = scopeNode([validator, scopeStatePath]);
     if (scopeFinalStateCheck.status !== 0) throw new Error(`Accepted manifest-scope state failed full validation:\n${scopeFinalStateCheck.stdout}\n${scopeFinalStateCheck.stderr}`);
     console.log('PASS manifest-scope reconciliation accepts carried patch end to end');
+
+    const scopeDriftRule = sealedAuthorityRule('RUSHD-20260823-RECONCILIATION-HEAD-DRIFT', scopeScratchRunId);
+    if (!scopeDriftRule) throw new Error('Scratch head-drift amendment is not allowlisted');
+    const scopeEqualityCheck = scopeNode([validator, scopeReconciliationPath]);
+    if (scopeEqualityCheck.status !== 0) throw new Error(`Scratch reconciliation record failed equality validation:\n${scopeEqualityCheck.stdout}\n${scopeEqualityCheck.stderr}`);
+    console.log('PASS reconciliation recorded head equal to HEAD still validates');
+
+    for (const path of scopeDriftRule.paths) {
+      if (path === scopeDriftAmendmentPath) writeFileSync(scopePath(path), scopeDriftAmendmentBytes);
+      else appendFileSync(scopePath(path), '\n// synthetic sealed head-drift authority fixture\n');
+    }
+    const scopeDriftCandidateAll = JSON.parse(spawnSync(process.execPath, [resolve(root, '.agents/skills/rushd-phase-orchestrator/scripts/compute-patch-hash.mjs'), scopeBase], { cwd: scopeTestRoot, encoding: 'utf8' }).stdout);
+    const scopeDriftRuleSet = new Set(scopeDriftRule.paths);
+    const scopeDriftCore = { schema: 'rushd.patch-manifest.v1', base_sha: scopeBase, files: scopeDriftCandidateAll.files.filter((file) => scopeDriftRuleSet.has(file.path)) };
+    const scopeDriftManifest = { ...scopeDriftCore, patch_sha256: sha256Bytes(Buffer.from(JSON.stringify(scopeDriftCore))) };
+    if (scopeDriftManifest.files.length !== scopeDriftRule.paths.length) throw new Error('Scratch head-drift candidate manifest does not cover exactly the allowlisted five-file scope');
+    const scopeDriftManifestPath = `${scopeRelative}/controller/authority-amendment-reconciliation-head-drift-candidate-manifest.json`;
+    scopeWriteJson(scopeDriftManifestPath, scopeDriftManifest);
+    scopeGit('add', ...scopeDriftRule.paths);
+    scopeGit('commit', '--quiet', '-m', 'Rushd authority: allow sealed reconciliation head drift');
+    const scopeDriftSha = scopeGit('rev-parse', 'HEAD');
+
+    const scopeDriftReviewerTaskRoot = `${scopeRelative}/tasks/head-drift-reviewer`;
+    const scopeDriftReviewerPrompt = [{ type: 'text', text: 'Independently review the sealed reconciliation head-drift amendment candidate.' }];
+    const scopeDriftReviewerWorktree = '/private/tmp/rushd-head-drift-review';
+    const scopeDriftReviewerFiles = {
+      sessionRequest: { method: 'session/start', id: 50, params: { model: 'glm-5.3', cwd: scopeDriftReviewerWorktree, approvalPolicy: 'never', sandbox: 'workspace-write' } },
+      sessionResponse: { id: 50, result: { session: { id: 'head-drift-reviewer', sessionId: 'head-drift-reviewer-session' } } },
+      turnRequest: { method: 'turn/start', id: 51, params: { sessionId: 'head-drift-reviewer', input: scopeDriftReviewerPrompt, model: 'glm-5.3', effort: 'high', cwd: scopeDriftReviewerWorktree, approvalPolicy: 'never', sandboxPolicy: { type: 'workspaceWrite' } } },
+      turnResponse: { id: 51, result: { turn: { id: 'head-drift-reviewer-turn', status: 'inProgress', items: [], error: null } } }
+    };
+    for (const [name, body] of Object.entries(scopeDriftReviewerFiles)) scopeWriteJson(`${scopeDriftReviewerTaskRoot}/${name}.json`, body);
+    const scopeDriftReviewerBase = {
+      schema: 'rushd.task-receipt.v1', run_id: scopeScratchRunId, role: 'phase_reviewer', phase_id: 'P00', audit_id: null, attempt: 1,
+      thread_id: 'head-drift-reviewer', session_id: 'head-drift-reviewer-session', turn_id: 'head-drift-reviewer-turn', model: 'glm-5.3', thinking: 'high',
+      environment: 'worktree', adapter: 'zcode_glm', thread_create_method: 'session/start', source_sha: scopeBase,
+      snapshot_patch_sha256: scopeDriftManifest.patch_sha256, snapshot_manifest_path: scopeDriftManifestPath, worktree_path: scopeDriftReviewerWorktree,
+      prompt_sha256: sha256Bytes(Buffer.from(JSON.stringify(scopeDriftReviewerPrompt))),
+      thread_request_path: `${scopeDriftReviewerTaskRoot}/sessionRequest.json`, thread_response_path: `${scopeDriftReviewerTaskRoot}/sessionResponse.json`,
+      turn_request_path: `${scopeDriftReviewerTaskRoot}/turnRequest.json`, turn_response_path: `${scopeDriftReviewerTaskRoot}/turnResponse.json`,
+      thread_request_sha256: sha256File(scopePath(`${scopeDriftReviewerTaskRoot}/sessionRequest.json`)), thread_response_sha256: sha256File(scopePath(`${scopeDriftReviewerTaskRoot}/sessionResponse.json`)),
+      turn_request_sha256: sha256File(scopePath(`${scopeDriftReviewerTaskRoot}/turnRequest.json`)), turn_response_sha256: sha256File(scopePath(`${scopeDriftReviewerTaskRoot}/turnResponse.json`))
+    };
+    const scopeDriftReviewerCreatedPath = `${scopeDriftReviewerTaskRoot}/created.json`;
+    scopeWriteJson(scopeDriftReviewerCreatedPath, { ...scopeDriftReviewerBase, status: 'created', created_at: '2099-01-01T00:07:00Z', completed_at: null, source_diff_status: 'pending', lifecycle_parent_path: null, lifecycle_parent_sha256: null, turn_completed_path: null, turn_completed_sha256: null });
+    const scopeDriftReview = {
+      schema: 'rushd.authority-amendment-review.v1', run_id: scopeScratchRunId, amendment_id: 'RUSHD-20260823-RECONCILIATION-HEAD-DRIFT', candidate_patch_sha256: scopeDriftManifest.patch_sha256,
+      verdict: 'pass', confidence: 'high', reviewer_source_diff: 'clean_against_snapshot',
+      checks: [{ id: 'exact-five-file-candidate', status: 'pass', evidence: 'synthetic scratch head-drift seal' }], commands: [], findings: [], risks: [],
+      reviewed_at: '2099-01-01T00:08:00Z', reviewer_receipt_path: `${scopeDriftReviewerTaskRoot}/completed.json`
+    };
+    const scopeDriftReviewPath = `${scopeRelative}/controller/authority-amendment-reconciliation-head-drift-review.json`;
+    scopeWriteJson(scopeDriftReviewPath, scopeDriftReview);
+    scopeWriteJson(`${scopeDriftReviewerTaskRoot}/turn-completed.json`, { method: 'turn/completed', params: { sessionId: 'head-drift-reviewer', turn: { id: 'head-drift-reviewer-turn', status: 'completed', items: [{ type: 'agentMessage', text: JSON.stringify(scopeDriftReview) }] } } });
+    const scopeDriftReviewerCompletedPath = `${scopeDriftReviewerTaskRoot}/completed.json`;
+    scopeWriteJson(scopeDriftReviewerCompletedPath, {
+      ...scopeDriftReviewerBase, status: 'completed', created_at: '2099-01-01T00:07:00Z', completed_at: '2099-01-01T00:08:00Z', source_diff_status: 'clean',
+      lifecycle_parent_path: scopeDriftReviewerCreatedPath, lifecycle_parent_sha256: sha256File(scopePath(scopeDriftReviewerCreatedPath)),
+      turn_completed_path: `${scopeDriftReviewerTaskRoot}/turn-completed.json`, turn_completed_sha256: sha256File(scopePath(`${scopeDriftReviewerTaskRoot}/turn-completed.json`))
+    });
+    const scopeDriftApprovalPath = `${scopeRelative}/controller/authority-amendment-reconciliation-head-drift-approval.json`;
+    if (scopeDriftApprovalPath !== scopeDriftRule.approval) throw new Error('Scratch head-drift approval path is not the canonical allowlisted path');
+    scopeWriteJson(scopeDriftApprovalPath, {
+      schema: 'rushd.authority-amendment-approval.v1', run_id: scopeScratchRunId, amendment_id: 'RUSHD-20260823-RECONCILIATION-HEAD-DRIFT',
+      candidate_manifest_path: scopeDriftManifestPath, candidate_manifest_sha256: sha256File(scopePath(scopeDriftManifestPath)), candidate_patch_sha256: scopeDriftManifest.patch_sha256,
+      review_path: scopeDriftReviewPath, review_sha256: sha256File(scopePath(scopeDriftReviewPath)),
+      reviewer_receipt_path: scopeDriftReviewerCompletedPath, reviewer_receipt_sha256: sha256File(scopePath(scopeDriftReviewerCompletedPath)), approved_at: '2099-01-01T00:09:00Z'
+    });
+    const scopeDriftApprovalCheck = scopeNode([validator, scopeDriftApprovalPath]);
+    if (scopeDriftApprovalCheck.status !== 0) throw new Error(`Scratch head-drift approval fixture is invalid:\n${scopeDriftApprovalCheck.stdout}\n${scopeDriftApprovalCheck.stderr}`);
+    const scopeDriftRecordCheck = scopeNode([validator, scopeReconciliationPath]);
+    if (scopeDriftRecordCheck.status !== 0) throw new Error(`Scratch reconciliation record failed sealed authority-only head-drift validation:\n${scopeDriftRecordCheck.stdout}\n${scopeDriftRecordCheck.stderr}`);
+    console.log('PASS reconciliation recorded head with sealed authority-only descendant validates');
+
+    scopeWriteFile('rogue-head-drift.txt', 'unreviewed product overlay\n');
+    scopeGit('add', 'rogue-head-drift.txt');
+    scopeGit('commit', '--quiet', '-m', 'synthetic non-authority reconciliation drift');
+    expectRejected('reconciliation non-authority head drift', scopeNode([validator, scopeReconciliationPath]), /single-parented and authority-only/);
+    scopeGit('reset', '--hard', scopeDriftSha);
+
+    scopeGit('checkout', '--quiet', '-b', 'head-drift-side');
+    scopeWriteFile('docs/implementation/merge-side-marker.txt', 'synthetic merge-side fixture\n');
+    scopeGit('add', 'docs/implementation/merge-side-marker.txt');
+    scopeGit('commit', '--quiet', '-m', 'synthetic merge-side commit');
+    const scopeSideSha = scopeGit('rev-parse', 'HEAD');
+    scopeGit('checkout', '--quiet', '--detach', scopeDriftSha);
+    scopeGit('merge', '--quiet', '--no-ff', scopeSideSha, '-m', 'synthetic merge above the recorded head');
+    expectRejected('reconciliation merge head drift', scopeNode([validator, scopeReconciliationPath]), /single-parented and authority-only/);
+    scopeGit('reset', '--hard', scopeDriftSha);
+
+    const scopeUnrelatedRecordPath = `${scopeRelative}/controller/precommit-reconciliation-unrelated-head.json`;
+    scopeWriteJson(scopeUnrelatedRecordPath, { ...structuredClone(loadJson(scopePath(scopeReconciliationPath))), current_head_sha: scopeSideSha });
+    expectRejected('reconciliation unrelated recorded head', scopeNode([validator, scopeUnrelatedRecordPath]), /not an ancestor of the current HEAD/);
+    const scopeMissingRecordPath = `${scopeRelative}/controller/precommit-reconciliation-nonexistent-head.json`;
+    scopeWriteJson(scopeMissingRecordPath, { ...structuredClone(loadJson(scopePath(scopeReconciliationPath))), current_head_sha: '0'.repeat(40) });
+    expectRejected('reconciliation nonexistent recorded head', scopeNode([validator, scopeMissingRecordPath]), /Reconciliation head is invalid/);
+    console.log('PASS reconciliation head-drift ancestry gate regression cases');
   } finally {
     rmSync(scopeTestRoot, { recursive: true, force: true });
   }
