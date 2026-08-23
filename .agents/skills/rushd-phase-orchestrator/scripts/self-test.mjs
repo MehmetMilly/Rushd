@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import {
   AUTHORITY_PATHS,
   COMMIT_SANDBOX_ALLOWED_ACTIONS,
@@ -14,6 +15,7 @@ import {
   commitSandboxCompletionMismatch,
   commitSandboxContinuationMismatch,
   isStrictlyAfterIso,
+  manifestScopeMismatch,
   matchesAny,
   readPlan,
   remediationAfterRegressionFailure,
@@ -164,6 +166,47 @@ try {
     || !sameJson([...portablePrecommitAmendment.protected_paths_to_change].sort(), [...portablePrecommitScope].sort())) throw new Error('Portable precommit correction amendment does not match the allowlisted seven-file scope');
   for (const path of portablePrecommitScope) if (!matchesAny(path, plan.protected_paths)) throw new Error(`Portable precommit correction path is not protected: ${path}`);
   console.log('PASS sealed-authority allowlist binds the portable precommit correction scope');
+
+  const manifestScopeAmendmentScope = [
+    '.agents/skills/rushd-phase-orchestrator/scripts/workflow-lib.mjs',
+    '.agents/skills/rushd-phase-orchestrator/scripts/transition-state.mjs',
+    '.agents/skills/rushd-phase-orchestrator/scripts/self-test.mjs',
+    'docs/RUSHD_EXECUTION_PROTOCOL.md',
+    'docs/implementation/PLAN_AMENDMENT_2026-08-23_RECONCILIATION_MANIFEST_SCOPE.json'
+  ];
+  const manifestScopeRule = sealedAuthorityRule('RUSHD-20260823-RECONCILIATION-MANIFEST-SCOPE', runId);
+  if (!manifestScopeRule) throw new Error('RUSHD-20260823-RECONCILIATION-MANIFEST-SCOPE is absent from the sealed-authority allowlist');
+  if (manifestScopeRule.path !== 'docs/implementation/PLAN_AMENDMENT_2026-08-23_RECONCILIATION_MANIFEST_SCOPE.json'
+    || manifestScopeRule.approval !== `${runRelative}/controller/authority-amendment-reconciliation-manifest-scope-approval.json`
+    || manifestScopeRule.correctionApproval !== undefined
+    || !sameJson([...manifestScopeRule.paths].sort(), [...manifestScopeAmendmentScope].sort())) throw new Error('Sealed-authority allowlist entry does not bind the exact five-file reconciliation manifest scope');
+  const manifestScopeAmendment = loadJson(manifestScopeRule.path);
+  if (manifestScopeAmendment.amendment_id !== 'RUSHD-20260823-RECONCILIATION-MANIFEST-SCOPE'
+    || manifestScopeAmendment.correction_revision !== undefined
+    || manifestScopeAmendment.founder_decision.actor !== 'founder'
+    || manifestScopeAmendment.founder_decision.status !== 'approved'
+    || !manifestScopeAmendment.founder_decision.exact_scope.includes('Development Master')
+    || !sameJson([...manifestScopeAmendment.protected_paths_to_change].sort(), [...manifestScopeAmendmentScope].sort())) throw new Error('Reconciliation manifest scope amendment does not match the allowlisted five-file scope');
+  for (const path of manifestScopeAmendmentScope) if (!matchesAny(path, plan.protected_paths)) throw new Error(`Reconciliation manifest scope path is not protected: ${path}`);
+  console.log('PASS sealed-authority allowlist binds the reconciliation manifest scope amendment');
+
+  const scopeAffectedPaths = ['scripts/verify-manifest-scope-fixture.mjs'];
+  const scopeCarriedEntry = { path: 'docs/baseline/manifest-scope-carried.txt', state: 'present', kind: 'file', executable: false, size: 32, sha256: 'a'.repeat(64) };
+  const scopeAffectedPrior = { path: scopeAffectedPaths[0], state: 'present', kind: 'file', executable: false, size: 24, sha256: 'b'.repeat(64) };
+  const scopeAffectedReplacement = { ...scopeAffectedPrior, size: 40, sha256: 'c'.repeat(64) };
+  const scopeExpectMismatch = (name, result, pattern) => {
+    if (result === null) throw new Error(`${name}: out-of-scope manifest drift was accepted`);
+    if (!pattern.test(result)) throw new Error(`${name}: wrong mismatch description: ${result}`);
+  };
+  if (manifestScopeMismatch([scopeCarriedEntry, scopeAffectedPrior], [scopeCarriedEntry, scopeAffectedReplacement], scopeAffectedPaths) !== null) throw new Error('Unchanged carried files plus an approved affected-path change were rejected');
+  scopeExpectMismatch('outside-path addition', manifestScopeMismatch([scopeCarriedEntry, scopeAffectedPrior], [scopeCarriedEntry, scopeAffectedReplacement, { path: 'docs/baseline/rogue.txt', state: 'present', kind: 'file', executable: false, size: 8, sha256: 'd'.repeat(64) }], scopeAffectedPaths), /adds a path outside affected_paths/);
+  scopeExpectMismatch('outside-path byte change', manifestScopeMismatch([scopeCarriedEntry, scopeAffectedPrior], [{ ...scopeCarriedEntry, sha256: 'e'.repeat(64) }, scopeAffectedReplacement], scopeAffectedPaths), /changes a reviewed path outside affected_paths/);
+  scopeExpectMismatch('outside-path size change', manifestScopeMismatch([scopeCarriedEntry, scopeAffectedPrior], [{ ...scopeCarriedEntry, size: 33 }, scopeAffectedReplacement], scopeAffectedPaths), /changes a reviewed path outside affected_paths/);
+  scopeExpectMismatch('outside-path permission change', manifestScopeMismatch([scopeCarriedEntry, scopeAffectedPrior], [{ ...scopeCarriedEntry, executable: true }, scopeAffectedReplacement], scopeAffectedPaths), /changes a reviewed path outside affected_paths/);
+  scopeExpectMismatch('outside-path metadata drift', manifestScopeMismatch([scopeCarriedEntry, scopeAffectedPrior], [{ ...scopeCarriedEntry, kind: 'symlink' }, scopeAffectedReplacement], scopeAffectedPaths), /changes a reviewed path outside affected_paths/);
+  scopeExpectMismatch('missing expected reviewed file', manifestScopeMismatch([scopeCarriedEntry, scopeAffectedPrior], [scopeAffectedReplacement], scopeAffectedPaths), /drops a reviewed path outside affected_paths/);
+  scopeExpectMismatch('empty affected paths', manifestScopeMismatch([scopeCarriedEntry], [scopeAffectedReplacement], []), /affected_paths is empty/);
+  console.log('PASS reconciliation manifest-scope comparison regression cases');
 
   const priorRemediation = {
     status: 'regression_checking', remediation_round: 1, remediation_commit_sha: 'a'.repeat(40), remediation_commit_artifact_path: 'round-1.json', round_base_sha: 'b'.repeat(40), owner_commit_count_before: 1,
@@ -335,16 +378,28 @@ try {
   let portableWorkerCreatedPath;
   let portableRoot;
   let patchedBytes;
+  let carriedPath;
+  let affectedPath;
+  let affectedPriorBytes;
+  let affectedReplacementBytes;
+  let manifestEntryFor;
   {
   portableRunId = `rushd-20990101-portable-${process.pid}`;
   portableRoot = `.codex/runs/${portableRunId}`;
   mkdirSync(resolve(root, portableRoot), { recursive: true });
   mkdirSync(resolve(root, `${portableRoot}/phases/P00`), { recursive: true });
-  const patchedPath = `scripts/.verify-p00-baseline-selftest-${process.pid}.mjs`;
+  carriedPath = `scripts/.verify-p00-baseline-selftest-${process.pid}.mjs`;
   patchedBytes = Buffer.from('self-contained P00 reconciliation fixture\n');
+  affectedPath = 'scripts/verify-p00-baseline.mjs';
+  affectedPriorBytes = Buffer.from('prior reviewed authority-chain assertion\n');
+  affectedReplacementBytes = Buffer.from('reconciled authority-chain assertion v2\n');
+  manifestEntryFor = (path, bytes) => ({ path, state: 'present', kind: 'file', executable: false, size: bytes.length, sha256: sha256Bytes(bytes) });
   const portableManifestCore = {
     schema: 'rushd.patch-manifest.v1', base_sha: head,
-    files: [{ path: patchedPath, state: 'present', kind: 'file', executable: false, size: patchedBytes.length, sha256: sha256Bytes(patchedBytes) }]
+    files: [
+      manifestEntryFor(carriedPath, patchedBytes),
+      manifestEntryFor(affectedPath, affectedPriorBytes)
+    ].sort((a, b) => Buffer.from(a.path).compare(Buffer.from(b.path)))
   };
   const portablePatchSha = sha256Bytes(Buffer.from(JSON.stringify(portableManifestCore)));
   const portableManifestPath = `${portableRoot}/patch.json`;
@@ -409,7 +464,10 @@ try {
     schema: 'rushd.phase-checkpoint.v1', run_id: portableRunId, phase_id: 'P00', attempt: 1, status: 'ready_for_review', base_sha: head,
     patch_sha256: portablePatchSha, patch_manifest_path: portableManifestPath, worker_receipt_path: workerCompletedPath, evidence_root: workerEvidenceRoot,
     evidence_hashes: { [workerProtocolEvidence]: sha256File(workerProtocolEvidence) },
-    changed_files: [{ path: patchedPath, change: 'modified', purpose: 'Reconcile the sealed authority chain assertion.' }],
+    changed_files: [
+      { path: carriedPath, change: 'modified', purpose: 'Carried reviewed reconciliation fixture.' },
+      { path: affectedPath, change: 'modified', purpose: 'Prior reviewed authority-chain assertion.' }
+    ],
     acceptance: acceptanceIds.map((id) => ({ id, status: 'pass', evidence: [workerProtocolEvidence] })),
     commands: [{ command: 'npm test', exit_code: 0, summary: 'Synthetic complete gate passed.', log_path: workerCommandLog, log_sha256: sha256File(workerCommandLog), started_at: '2099-01-01T00:00:30Z', finished_at: '2099-01-01T00:00:40Z', cwd: root, runner_task_id: 'fixture-worker' }],
     manual_qa: [{ requirement: manualRequirement, status: 'pass', attestation_path: attestationPath, attestation_sha256: sha256File(attestationPath) }],
@@ -575,17 +633,22 @@ try {
     lifecycle_parent_path: followupCreatedPath, lifecycle_parent_sha256: sha256File(followupCreatedPath),
     turn_completed_path: followupCompletionPath, turn_completed_sha256: sha256File(followupCompletionPath)
   });
-  const replacementManifestFor = (includeIndex) => {
-    const extraBytes = Buffer.from('unapproved phase-owned expansion fixture\n');
-    const files = includeIndex ? [{ path: 'docs/baseline/selftest-extra.txt', state: 'present', kind: 'file', executable: false, size: extraBytes.length, sha256: sha256Bytes(extraBytes) }] : [];
-    files.push({ path: reconciliationFields.affected_paths[0], state: 'present', kind: 'file', executable: false, size: patchedBytes.length, sha256: sha256Bytes(patchedBytes) });
+  const carriedReplacementEntry = () => manifestEntryFor(carriedPath, patchedBytes);
+  const rogueEntry = manifestEntryFor('docs/baseline/selftest-extra.txt', Buffer.from('unapproved phase-owned expansion fixture\n'));
+  const replacementManifestFor = (variant) => {
+    const files = [];
+    if (variant !== 'drop-carried') {
+      files.push(variant === 'carried-drift' ? { ...carriedReplacementEntry(), sha256: 'f'.repeat(64), size: 999 } : carriedReplacementEntry());
+    }
+    files.push(manifestEntryFor(affectedPath, affectedReplacementBytes));
+    if (variant === 'rogue-add') files.push(rogueEntry);
+    files.sort((a, b) => Buffer.from(a.path).compare(Buffer.from(b.path)));
     return { schema: 'rushd.patch-manifest.v1', base_sha: head, files };
   };
-  const replacementCheckpointFor = (includeIndex) => {
-    const core = replacementManifestFor(includeIndex);
+  const replacementCheckpointFor = (variant) => {
+    const core = replacementManifestFor(variant);
     const patchSha = sha256Bytes(Buffer.from(JSON.stringify(core)));
-    const suffix = includeIndex ? 'bad' : 'good';
-    const manifestPath = `${portableRoot}/phases/P00/patch-attempt-02-${suffix}.json`;
+    const manifestPath = `${portableRoot}/phases/P00/patch-attempt-02-${variant}.json`;
     writeJson(resolve(root, manifestPath), { ...core, patch_sha256: patchSha });
     const checkpoint = structuredClone(loadJson(priorCheckpointPath));
     const replacementEvidenceRoot = `${portableRoot}/evidence/P00/worker-attempt-02`;
@@ -607,29 +670,337 @@ try {
     checkpoint.patch_sha256 = patchSha;
     checkpoint.patch_manifest_path = manifestPath;
     checkpoint.worker_receipt_path = followupCompletedPath;
-    checkpoint.changed_files = includeIndex
-      ? [{ path: 'docs/baseline/selftest-extra.txt', change: 'modified', purpose: 'Unapproved phase-owned expansion.' }, { path: reconciliationFields.affected_paths[0], change: 'modified', purpose: 'Approved reconciliation.' }]
-      : [{ path: reconciliationFields.affected_paths[0], change: 'modified', purpose: 'Approved reconciliation.' }];
-    const path = `${portableRoot}/phases/P00/checkpoint-attempt-02-${suffix}.json`;
+    checkpoint.changed_files = core.files.map((file) => ({
+      path: file.path,
+      change: file.path === affectedPath ? 'modified' : 'modified',
+      purpose: file.path === affectedPath
+        ? 'Approved reconciliation of the authority-chain assertion.'
+        : `Carried reviewed patch file ${file.path}.`
+    }));
+    const path = `${portableRoot}/phases/P00/checkpoint-attempt-02-${variant}.json`;
     writeJson(resolve(root, path), checkpoint);
     return path;
   };
-  const readyTransitionFor = (checkpointPath, eventId) => ({
-    schema: 'rushd.state-transition.v1', event_id: eventId, from: 'worker_running', to: 'ready_for_review',
-    transition_kind: 'checkpoint_ready', note: 'bind replacement checkpoint scope',
-    evidence: [checkpointPath, loadJson(checkpointPath).patch_manifest_path, followupCompletedPath, followupCreatedPath, followupCompletionPath],
-    evidence_hashes: Object.fromEntries([checkpointPath, loadJson(checkpointPath).patch_manifest_path, followupCompletedPath, followupCreatedPath, followupCompletionPath].map((path) => [path, sha256File(path)])),
-    changes: { checkpoint_path: checkpointPath, active_worker_receipt_path: followupCompletedPath }
-  });
-  const badCheckpointPath = replacementCheckpointFor(true);
-  const badReadyPath = `${portableRoot}/phases/P00/ready-bad.json`;
-  writeJson(resolve(root, badReadyPath), readyTransitionFor(badCheckpointPath, 'SELFTEST-PRECOMMIT-BAD-READY'));
-  expectRejected('reconciliation checkpoint scope expansion', run([transition, pausedStatePath, badReadyPath]), /unapproved path|outside affected_paths/);
-  const goodCheckpointPath = replacementCheckpointFor(false);
-  const goodChanges = loadJson(goodCheckpointPath).changed_files.map((change) => change.path);
-  if (!goodChanges.every((path) => matchesAny(path, reconciliationFields.affected_paths))) throw new Error('Scoped reconciliation checkpoint fixture is invalid');
-  if (!loadJson(reconciliationPath).affected_paths.some((pattern) => matchesAny(goodChanges[0], [pattern]))) throw new Error('Reconciliation allowlist did not match scoped checkpoint');
-  console.log('PASS reconciliation checkpoint affected-path binding');
+  const readyTransitionFor = (checkpointPath, eventId, clearLink = true) => {
+    const changes = { checkpoint_path: checkpointPath, active_worker_receipt_path: followupCompletedPath };
+    if (clearLink) changes.precommit_reconciliation = null;
+    const followupReceipt = loadJson(followupCompletedPath);
+    const evidence = [
+      checkpointPath, loadJson(checkpointPath).patch_manifest_path, followupCompletedPath,
+      followupReceipt.thread_request_path, followupReceipt.thread_response_path,
+      followupReceipt.turn_request_path, followupReceipt.turn_response_path,
+      followupCreatedPath, followupCompletionPath
+    ];
+    return {
+      schema: 'rushd.state-transition.v1', event_id: eventId, from: 'worker_running', to: 'ready_for_review',
+      transition_kind: 'checkpoint_ready', note: 'bind replacement checkpoint manifest scope',
+      evidence, evidence_hashes: Object.fromEntries(evidence.map((path) => [path, sha256File(path)])),
+      changes
+    };
+  };
+  const rejectReady = (name, variant, pattern, eventId, clearLink = true) => {
+    const checkpointPath = replacementCheckpointFor(variant);
+    const requestPath = `${portableRoot}/phases/P00/ready-${variant}${clearLink ? '' : '-uncleared'}.json`;
+    writeJson(resolve(root, requestPath), readyTransitionFor(checkpointPath, eventId, clearLink));
+    expectRejected(name, run([transition, pausedStatePath, requestPath]), pattern);
+  };
+  rejectReady('reconciliation outside-path manifest addition', 'rogue-add', /adds a path outside affected_paths/, 'SELFTEST-PRECOMMIT-ROGUE-ADD');
+  rejectReady('reconciliation carried-file byte drift', 'carried-drift', /changes a reviewed path outside affected_paths/, 'SELFTEST-PRECOMMIT-CARRIED-DRIFT');
+  rejectReady('reconciliation missing reviewed carried file', 'drop-carried', /drops a reviewed path outside affected_paths/, 'SELFTEST-PRECOMMIT-DROP-CARRIED');
+  rejectReady('reconciliation acceptance without clearing the state link', 'good', /must clear the hash-bound state link/, 'SELFTEST-PRECOMMIT-UNCLEARED', false);
+  const carriedScopeCheckpointPath = replacementCheckpointFor('good');
+  const carriedScopeRequestPath = `${portableRoot}/phases/P00/ready-carried-scope.json`;
+  writeJson(resolve(root, carriedScopeRequestPath), readyTransitionFor(carriedScopeCheckpointPath, 'SELFTEST-PRECOMMIT-CARRIED-SCOPE'));
+  const carriedScopeResult = run([transition, pausedStatePath, carriedScopeRequestPath]);
+  if (carriedScopeResult.status === 0) throw new Error('Carried-patch checkpoint unexpectedly completed full validation in the shared checkout');
+  if (/outside affected_paths|unapproved path/.test(`${carriedScopeResult.stdout}\n${carriedScopeResult.stderr}`)) throw new Error(`Carried reviewed files were rejected at the scope gate:\n${carriedScopeResult.stdout}\n${carriedScopeResult.stderr}`);
+  console.log('PASS carried reviewed patch passes the manifest-scope gate');
+
+  const scopeScratchRunId = `rushd-20990101-manifest-scope-${process.pid}`;
+  const scopeTestRoot = mkdtempSync(join(tmpdir(), 'rushd-manifest-scope-'));
+  try {
+    const scopeRelative = `.codex/runs/${scopeScratchRunId}`;
+    const scopeGit = (...args) => execFileSync('git', args, { cwd: scopeTestRoot, encoding: 'utf8' }).trim();
+    const scopeNode = (args) => spawnSync(process.execPath, args, { cwd: scopeTestRoot, encoding: 'utf8' });
+    const scopePath = (relative) => resolve(scopeTestRoot, relative);
+    const scopeWriteFile = (relative, bytes) => {
+      mkdirSync(dirname(scopePath(relative)), { recursive: true });
+      writeFileSync(scopePath(relative), bytes);
+    };
+    const scopeWriteJson = (relative, value) => {
+      mkdirSync(dirname(scopePath(relative)), { recursive: true });
+      writeJson(scopePath(relative), value);
+    };
+    scopeGit('init', '--quiet');
+    scopeGit('config', 'user.name', 'Rushd Workflow Self Test');
+    scopeGit('config', 'user.email', 'workflow-selftest@example.invalid');
+    scopeWriteFile('baseline.txt', 'baseline\n');
+    scopeWriteFile('.gitignore', '.codex/runs/\n.DS_Store\n');
+    scopeGit('add', 'baseline.txt', '.gitignore');
+    scopeGit('commit', '--quiet', '-m', 'baseline');
+    const scopeSourceBaseline = scopeGit('rev-parse', 'HEAD');
+    const scopeAuthorityCopies = [
+      'docs/RUSHD_MASTER_PLAN_FINAL.md',
+      'docs/RUSHD_EXECUTION_PROTOCOL.md',
+      'docs/RUSHD_PHASE_PROMPTS.md',
+      'docs/implementation/phase-plan.json',
+      '.agents/skills/rushd-phase-orchestrator',
+      '.codex/agents'
+    ];
+    for (const entry of readdirSync(resolve(root, 'docs/implementation'))) {
+      if (/^PLAN_AMENDMENT_.*\.json$/.test(entry)) scopeAuthorityCopies.push(`docs/implementation/${entry}`);
+    }
+    for (const relative of scopeAuthorityCopies) {
+      mkdirSync(dirname(scopePath(relative)), { recursive: true });
+      cpSync(resolve(root, relative), scopePath(relative), { recursive: true });
+    }
+    scopeGit('add', 'docs', '.agents', '.codex');
+    scopeGit('commit', '--quiet', '-m', 'Rushd workflow authority');
+    const scopeBase = scopeGit('rev-parse', 'HEAD');
+    const scopeCanonicalRoot = scopeGit('rev-parse', '--show-toplevel');
+    const scopeCarriedPath = 'docs/baseline/manifest-scope-carried.txt';
+    const scopeAffectedPath = 'scripts/verify-manifest-scope-fixture.mjs';
+    const scopeCarriedBytes = Buffer.from('carried reviewed manifest-scope fixture\n');
+    const scopeAffectedPriorBytes = Buffer.from('affected fixture v1\n');
+    const scopeAffectedReplacementBytes = Buffer.from('affected fixture v2 reconciled\n');
+    mkdirSync(dirname(scopePath(scopeCarriedPath)), { recursive: true });
+    mkdirSync(dirname(scopePath(scopeAffectedPath)), { recursive: true });
+    scopeWriteFile(scopeCarriedPath, scopeCarriedBytes);
+    scopeWriteFile(scopeAffectedPath, scopeAffectedPriorBytes);
+    const scopePatchManifestPath = `${scopeRelative}/phases/P00/patch-attempt-01.json`;
+    mkdirSync(dirname(scopePath(scopePatchManifestPath)), { recursive: true });
+    const scopePriorManifest = JSON.parse(spawnSync(process.execPath, [resolve(root, '.agents/skills/rushd-phase-orchestrator/scripts/compute-patch-hash.mjs'), scopeBase, scopePatchManifestPath], { cwd: scopeTestRoot, encoding: 'utf8' }).stdout);
+    const scopeEvidenceRoot = `${scopeRelative}/evidence/P00/worker-attempt-01`;
+    scopeWriteFile(`${scopeEvidenceRoot}/gate-evidence.txt`, 'synthetic manifest-scope gate evidence\n');
+    scopeWriteFile(`${scopeEvidenceRoot}/npm-test.log`, 'synthetic passing manifest-scope gate log\n');
+    const scopeTaskRoot = `${scopeRelative}/tasks/manifest-scope-worker`;
+    const scopeWorkerProtocol = (idBase, threadId, prompt) => {
+      const files = {
+        sessionRequest: { method: 'session/start', id: idBase, params: { model: 'glm-5.3', cwd: scopeCanonicalRoot, approvalPolicy: 'never', sandbox: 'workspace-write' } },
+        sessionResponse: { id: idBase, result: { session: { id: threadId, sessionId: `${threadId}-session` } } },
+        turnRequest: { method: 'turn/start', id: idBase + 1, params: { sessionId: threadId, input: prompt, model: 'glm-5.3', effort: 'high', cwd: scopeCanonicalRoot, approvalPolicy: 'never', sandboxPolicy: { type: 'workspaceWrite' } } },
+        turnResponse: { id: idBase + 1, result: { turn: { id: `${threadId}-turn`, status: 'inProgress', items: [], error: null } } }
+      };
+      for (const [name, body] of Object.entries(files)) scopeWriteJson(`${scopeTaskRoot}/${name}.json`, body);
+      return files;
+    };
+    const scopeWorkerPrompt = [{ type: 'text', text: 'Implement the manifest-scope P00 fixture.' }];
+    scopeWorkerProtocol(40, 'scope-worker', scopeWorkerPrompt);
+    const scopeWorkerBase = {
+      schema: 'rushd.task-receipt.v1', run_id: scopeScratchRunId, role: 'phase_worker', phase_id: 'P00', audit_id: null, attempt: 1,
+      thread_id: 'scope-worker', session_id: 'scope-worker-session', turn_id: 'scope-worker-turn', model: 'glm-5.3', thinking: 'high',
+      environment: 'local', adapter: 'zcode_glm', thread_create_method: 'session/start', source_sha: scopeBase,
+      snapshot_patch_sha256: null, snapshot_manifest_path: null, worktree_path: null,
+      prompt_sha256: sha256Bytes(Buffer.from(JSON.stringify(scopeWorkerPrompt))),
+      thread_request_path: `${scopeTaskRoot}/sessionRequest.json`, thread_response_path: `${scopeTaskRoot}/sessionResponse.json`,
+      turn_request_path: `${scopeTaskRoot}/turnRequest.json`, turn_response_path: `${scopeTaskRoot}/turnResponse.json`,
+      thread_request_sha256: sha256File(scopePath(`${scopeTaskRoot}/sessionRequest.json`)), thread_response_sha256: sha256File(scopePath(`${scopeTaskRoot}/sessionResponse.json`)),
+      turn_request_sha256: sha256File(scopePath(`${scopeTaskRoot}/turnRequest.json`)), turn_response_sha256: sha256File(scopePath(`${scopeTaskRoot}/turnResponse.json`)),
+      capability_scope: 'none', capability_artifact_path: `${scopeTaskRoot}/sessionRequest.json`, capability_artifact_sha256: sha256File(scopePath(`${scopeTaskRoot}/sessionRequest.json`))
+    };
+    const scopeWorkerCreatedPath = `${scopeTaskRoot}/created.json`;
+    scopeWriteJson(scopeWorkerCreatedPath, { ...scopeWorkerBase, status: 'created', created_at: '2099-01-01T00:00:00Z', completed_at: null, source_diff_status: 'pending', lifecycle_parent_path: null, lifecycle_parent_sha256: null, turn_completed_path: null, turn_completed_sha256: null });
+    scopeWriteJson(`${scopeTaskRoot}/completed-event.json`, { method: 'turn/completed', params: { sessionId: 'scope-worker', turn: { id: 'scope-worker-turn', status: 'completed' } } });
+    const scopeWorkerCompletedPath = `${scopeTaskRoot}/completed.json`;
+    scopeWriteJson(scopeWorkerCompletedPath, {
+      ...scopeWorkerBase, status: 'completed', created_at: '2099-01-01T00:00:00Z', completed_at: '2099-01-01T00:01:00Z', source_diff_status: 'explained',
+      lifecycle_parent_path: scopeWorkerCreatedPath, lifecycle_parent_sha256: sha256File(scopePath(scopeWorkerCreatedPath)),
+      turn_completed_path: `${scopeTaskRoot}/completed-event.json`, turn_completed_sha256: sha256File(scopePath(`${scopeTaskRoot}/completed-event.json`))
+    });
+    const scopePlan = readPlan();
+    const scopeManualRequirement = scopePlan.phases.find((phase) => phase.id === 'P00').manual_qa[0];
+    const scopeHumanRoot = `${scopeRelative}/evidence/human/P00-M1`;
+    scopeWriteFile(`${scopeHumanRoot}/proof.txt`, 'synthetic fake-data manifest-scope manual QA proof\n');
+    const scopeAttestationPath = `${scopeHumanRoot}/attestation.json`;
+    scopeWriteJson(scopeAttestationPath, {
+      schema: 'rushd.human-attestation.v1', run_id: scopeScratchRunId, phase_id: 'P00', gate_id: 'P00-M1', gate_kind: 'manual_qa',
+      gate_request_sha256: sha256Bytes(Buffer.from(scopeManualRequirement)), actor: 'founder', actor_task_id: 'fixture-founder',
+      performed_at: '2099-01-01T00:02:00Z', subject_sha: null, period_started_at: null, period_ended_at: null,
+      evidence_root: scopeHumanRoot, evidence_hashes: { [`${scopeHumanRoot}/proof.txt`]: sha256File(scopePath(`${scopeHumanRoot}/proof.txt`)) },
+      environment: { device: 'fixture', os: 'fixture', browser: 'fixture', browser_version: '1', locale: 'en' }, requirement: scopeManualRequirement,
+      result: 'pass', evidence_paths: [`${scopeHumanRoot}/proof.txt`], limitations: []
+    });
+    const scopeAcceptanceIds = scopePlan.phases.find((phase) => phase.id === 'P00').acceptance.map((item) => item.id);
+    const scopePriorCheckpointPath = `${scopeRelative}/phases/P00/checkpoint-attempt-01.json`;
+    scopeWriteJson(scopePriorCheckpointPath, {
+      schema: 'rushd.phase-checkpoint.v1', run_id: scopeScratchRunId, phase_id: 'P00', attempt: 1, status: 'ready_for_review', base_sha: scopeBase,
+      patch_sha256: scopePriorManifest.patch_sha256, patch_manifest_path: scopePatchManifestPath, worker_receipt_path: scopeWorkerCompletedPath, evidence_root: scopeEvidenceRoot,
+      evidence_hashes: { [`${scopeEvidenceRoot}/gate-evidence.txt`]: sha256File(scopePath(`${scopeEvidenceRoot}/gate-evidence.txt`)) },
+      changed_files: scopePriorManifest.files.map((file) => ({ path: file.path, change: 'modified', purpose: `Reviewed manifest-scope fixture ${file.path}.` })),
+      acceptance: scopeAcceptanceIds.map((id) => ({ id, status: 'pass', evidence: [`${scopeEvidenceRoot}/gate-evidence.txt`] })),
+      commands: [{ command: 'npm test', exit_code: 0, summary: 'Synthetic complete gate passed.', log_path: `${scopeEvidenceRoot}/npm-test.log`, log_sha256: sha256File(scopePath(`${scopeEvidenceRoot}/npm-test.log`)), started_at: '2099-01-01T00:00:30Z', finished_at: '2099-01-01T00:00:40Z', cwd: scopeTestRoot, runner_task_id: 'scope-worker' }],
+      manual_qa: [{ requirement: scopeManualRequirement, status: 'pass', attestation_path: scopeAttestationPath, attestation_sha256: sha256File(scopePath(scopeAttestationPath)) }],
+      mandatory_human_gates: [], risks: [], deviations: [], blocking_questions: [], unrelated_changes_observed: []
+    });
+    const scopeReviewEvidenceRoot = `${scopeRelative}/evidence/P00/review-attempt-01`;
+    scopeWriteFile(`${scopeReviewEvidenceRoot}/npm-test.log`, 'independent synthetic manifest-scope review gate passed\n');
+    for (const id of scopeAcceptanceIds) scopeWriteFile(`${scopeReviewEvidenceRoot}/${id}.txt`, `Independent synthetic evidence for ${id}\n`);
+    const scopeReviewerWorktree = '/private/tmp/rushd-manifest-scope-review';
+    const scopeReviewerTaskRoot = `${scopeRelative}/tasks/manifest-scope-reviewer`;
+    const scopeReviewerPrompt = [{ type: 'text', text: 'Independently review the manifest-scope P00 fixture.' }];
+    const scopeReviewerProtocolFiles = {
+      sessionRequest: { method: 'session/start', id: 42, params: { model: 'glm-5.3', cwd: scopeReviewerWorktree, approvalPolicy: 'never', sandbox: 'workspace-write' } },
+      sessionResponse: { id: 42, result: { session: { id: 'scope-reviewer', sessionId: 'scope-reviewer-session' } } },
+      turnRequest: { method: 'turn/start', id: 43, params: { sessionId: 'scope-reviewer', input: scopeReviewerPrompt, model: 'glm-5.3', effort: 'high', cwd: scopeReviewerWorktree, approvalPolicy: 'never', sandboxPolicy: { type: 'workspaceWrite' } } },
+      turnResponse: { id: 43, result: { turn: { id: 'scope-reviewer-turn', status: 'inProgress', items: [], error: null } } }
+    };
+    for (const [name, body] of Object.entries(scopeReviewerProtocolFiles)) scopeWriteJson(`${scopeReviewerTaskRoot}/${name}.json`, body);
+    const scopeReviewerBase = {
+      ...scopeWorkerBase, role: 'phase_reviewer', thread_id: 'scope-reviewer', session_id: 'scope-reviewer-session', turn_id: 'scope-reviewer-turn',
+      environment: 'worktree', snapshot_patch_sha256: scopePriorManifest.patch_sha256, snapshot_manifest_path: scopePatchManifestPath, worktree_path: scopeReviewerWorktree,
+      prompt_sha256: sha256Bytes(Buffer.from(JSON.stringify(scopeReviewerPrompt))),
+      thread_request_path: `${scopeReviewerTaskRoot}/sessionRequest.json`, thread_response_path: `${scopeReviewerTaskRoot}/sessionResponse.json`,
+      turn_request_path: `${scopeReviewerTaskRoot}/turnRequest.json`, turn_response_path: `${scopeReviewerTaskRoot}/turnResponse.json`,
+      thread_request_sha256: sha256File(scopePath(`${scopeReviewerTaskRoot}/sessionRequest.json`)), thread_response_sha256: sha256File(scopePath(`${scopeReviewerTaskRoot}/sessionResponse.json`)),
+      turn_request_sha256: sha256File(scopePath(`${scopeReviewerTaskRoot}/turnRequest.json`)), turn_response_sha256: sha256File(scopePath(`${scopeReviewerTaskRoot}/turnResponse.json`)),
+      capability_artifact_path: `${scopeReviewerTaskRoot}/sessionRequest.json`, capability_artifact_sha256: sha256File(scopePath(`${scopeReviewerTaskRoot}/sessionRequest.json`))
+    };
+    const scopeReviewerCreatedPath = `${scopeReviewerTaskRoot}/created.json`;
+    scopeWriteJson(scopeReviewerCreatedPath, { ...scopeReviewerBase, status: 'created', created_at: '2099-01-01T00:03:00Z', completed_at: null, source_diff_status: 'pending', lifecycle_parent_path: null, lifecycle_parent_sha256: null, turn_completed_path: null, turn_completed_sha256: null });
+    scopeWriteJson(`${scopeReviewerTaskRoot}/completed-event.json`, { method: 'turn/completed', params: { sessionId: 'scope-reviewer', turn: { id: 'scope-reviewer-turn', status: 'completed' } } });
+    const scopeReviewerCompletedPath = `${scopeReviewerTaskRoot}/completed.json`;
+    scopeWriteJson(scopeReviewerCompletedPath, {
+      ...scopeReviewerBase, status: 'completed', created_at: '2099-01-01T00:03:00Z', completed_at: '2099-01-01T00:04:00Z', source_diff_status: 'clean',
+      lifecycle_parent_path: scopeReviewerCreatedPath, lifecycle_parent_sha256: sha256File(scopePath(scopeReviewerCreatedPath)),
+      turn_completed_path: `${scopeReviewerTaskRoot}/completed-event.json`, turn_completed_sha256: sha256File(scopePath(`${scopeReviewerTaskRoot}/completed-event.json`))
+    });
+    const scopePriorReviewPath = `${scopeRelative}/phases/P00/review-attempt-01.json`;
+    scopeWriteJson(scopePriorReviewPath, {
+      schema: 'rushd.phase-review.v1', run_id: scopeScratchRunId, phase_id: 'P00', attempt: 1, checkpoint_patch_sha256: scopePriorManifest.patch_sha256, verdict: 'pass',
+      confidence: 'high', next_action: 'advance', reviewer_source_diff: 'clean', reviewer_receipt_path: scopeReviewerCompletedPath, evidence_root: scopeReviewEvidenceRoot,
+      evidence_hashes: Object.fromEntries(scopeAcceptanceIds.map((id) => [`${scopeReviewEvidenceRoot}/${id}.txt`, sha256File(scopePath(`${scopeReviewEvidenceRoot}/${id}.txt`))])),
+      commands: [{ command: 'npm test', exit_code: 0, summary: 'Independent synthetic gate passed.', log_path: `${scopeReviewEvidenceRoot}/npm-test.log`, log_sha256: sha256File(scopePath(`${scopeReviewEvidenceRoot}/npm-test.log`)), started_at: '2099-01-01T00:03:10Z', finished_at: '2099-01-01T00:03:20Z', cwd: scopeTestRoot, runner_task_id: 'scope-reviewer' }],
+      checks: scopeAcceptanceIds.map((id) => ({ id, status: 'pass', evidence: [`${scopeReviewEvidenceRoot}/${id}.txt`] })),
+      findings: [], non_blocking_suggestions: []
+    });
+    const scopeStatePath = `${scopeRelative}/state.json`;
+    scopeWriteJson(scopeStatePath, {
+      schema: 'rushd.run-state.v1', run_id: scopeScratchRunId, plan_version: plan.plan_version,
+      source_baseline_sha: scopeSourceBaseline, authority_commit_sha: scopeBase,
+      status: 'passed_pending_commit', current_phase: 'P00', current_attempt: 1, active_worker: 'scope-worker',
+      active_worker_receipt_path: scopeWorkerCompletedPath, active_reviewer: null, active_reviewer_receipt_path: null,
+      active_final_audit_id: null, checkpoint_path: scopePriorCheckpointPath, review_path: scopePriorReviewPath, adjudication_path: null,
+      worker_threads: {}, review_attempts: {}, escalations: {}, phase_commits: {}, base_sha: scopeBase, completed_phases: [],
+      remediation: null, release_candidate_sha: null, final_audits: [], full_gate: null, publication_authority: null,
+      post_deployment_verification: null, human_required: null, resume_state: null, paused_tasks: null, failure: null,
+      unexplained_changes: [], state_revision: 0, genesis_state_sha256: null, previous_state_sha256: null,
+      transition_journal_path: `${scopeRelative}/state.journal.jsonl`, updated_at: null
+    });
+    const scopeStateCheck = scopeNode([validator, scopeStatePath]);
+    if (scopeStateCheck.status !== 0) throw new Error(`Scratch passed-pending-commit state invalid:\n${scopeStateCheck.stdout}\n${scopeStateCheck.stderr}`);
+    const scopeFailingLogPath = `${scopeRelative}/evidence/precommit-reconciliation/failing-gate.log`;
+    const scopeFailureSignature = 'HEAD is not the approved external-continuation authority overlay';
+    scopeWriteFile(scopeFailingLogPath, `${scopeFailureSignature}\n`);
+    const scopeReconciliationPath = `${scopeRelative}/controller/precommit-reconciliation.json`;
+    scopeWriteJson(scopeReconciliationPath, {
+      schema: 'rushd.precommit-reconciliation.v1', run_id: scopeScratchRunId, phase_id: 'P00', amendment_id: 'RUSHD-20260822-PORTABLE-PRECOMMIT-RECONCILIATION',
+      prior_attempt: 1, prior_checkpoint_path: scopePriorCheckpointPath, prior_checkpoint_sha256: sha256File(scopePath(scopePriorCheckpointPath)),
+      prior_review_path: scopePriorReviewPath, prior_review_sha256: sha256File(scopePath(scopePriorReviewPath)), failing_log_path: scopeFailingLogPath,
+      failing_log_sha256: sha256File(scopePath(scopeFailingLogPath)), failure_signature: scopeFailureSignature,
+      failing_summary: 'The sealed later authority tip moved after the reviewed verifier froze an older authority chain.',
+      affected_paths: [scopeAffectedPath], current_head_sha: scopeBase, created_at: '2099-01-01T00:05:00Z'
+    });
+    const scopeReopenTaskRoot = `${scopeRelative}/tasks/manifest-scope-reopen`;
+    const scopeReopenCreatedPath = `${scopeReopenTaskRoot}/created.json`;
+    scopeWriteJson(scopeReopenCreatedPath, { ...loadJson(scopePath(scopeWorkerCreatedPath)), attempt: 2 });
+    const scopeReopenReceipt = loadJson(scopePath(scopeReopenCreatedPath));
+    const scopeReopenEvidence = [scopeReconciliationPath, scopeReopenCreatedPath, scopePriorCheckpointPath, scopePriorReviewPath, scopeReopenReceipt.thread_request_path, scopeReopenReceipt.thread_response_path, scopeReopenReceipt.turn_request_path, scopeReopenReceipt.turn_response_path];
+    const scopeReopenRequestPath = `${scopeRelative}/controller/precommit-reconciliation-transition.json`;
+    scopeWriteJson(scopeReopenRequestPath, {
+      schema: 'rushd.state-transition.v1', event_id: 'SELFTEST-MANIFEST-SCOPE-REOPEN', from: 'passed_pending_commit',
+      to: 'worker_running', transition_kind: 'precommit_reconciliation', note: 'reopen for manifest-scope reconciliation',
+      reconciliation_record_path: scopeReconciliationPath,
+      evidence: scopeReopenEvidence, evidence_hashes: Object.fromEntries(scopeReopenEvidence.map((path) => [path, sha256File(scopePath(path))])),
+      changes: {
+        current_attempt: 2, active_worker_receipt_path: scopeReopenCreatedPath, checkpoint_path: null, review_path: null,
+        adjudication_path: null, precommit_reconciliation: { record_path: scopeReconciliationPath, record_sha256: sha256File(scopePath(scopeReconciliationPath)), affected_paths: [scopeAffectedPath] }
+      }
+    });
+    const scopeReopenResult = scopeNode([transition, scopeStatePath, scopeReopenRequestPath]);
+    if (scopeReopenResult.status !== 0) throw new Error(`Scratch precommit reconciliation reopen failed:\n${scopeReopenResult.stdout}\n${scopeReopenResult.stderr}`);
+    const scopeFollowupTaskRoot = `${scopeRelative}/tasks/manifest-scope-worker-attempt-2`;
+    const scopeFollowupCreatedPath = scopeReopenCreatedPath;
+    const scopeFollowupCompletedPath = `${scopeFollowupTaskRoot}/completed.json`;
+    scopeWriteJson(`${scopeFollowupTaskRoot}/completed-event.json`, { method: 'turn/completed', params: { sessionId: 'scope-worker', turn: { id: 'scope-worker-turn', status: 'completed' } } });
+    scopeWriteJson(scopeFollowupCompletedPath, {
+      ...loadJson(scopePath(scopeWorkerCreatedPath)), attempt: 2, status: 'completed', completed_at: '2099-01-01T00:06:00Z', source_diff_status: 'explained',
+      lifecycle_parent_path: scopeFollowupCreatedPath, lifecycle_parent_sha256: sha256File(scopePath(scopeFollowupCreatedPath)),
+      turn_completed_path: `${scopeFollowupTaskRoot}/completed-event.json`, turn_completed_sha256: sha256File(scopePath(`${scopeFollowupTaskRoot}/completed-event.json`))
+    });
+    const scopeReplacementManifestFor = (variant) => {
+      const carriedEntry = scopePriorManifest.files.find((file) => file.path === scopeCarriedPath);
+      const affectedEntry = scopePriorManifest.files.find((file) => file.path === scopeAffectedPath);
+      const replacementAffectedEntry = { ...affectedEntry, size: scopeAffectedReplacementBytes.length, sha256: sha256Bytes(scopeAffectedReplacementBytes) };
+      const files = [];
+      if (variant !== 'drop-carried') files.push(variant === 'carried-drift' ? { ...carriedEntry, sha256: 'e'.repeat(64), size: carriedEntry.size + 1 } : carriedEntry);
+      files.push(replacementAffectedEntry);
+      if (variant === 'rogue-add') files.push({ path: 'docs/baseline/rogue-expansion.txt', state: 'present', kind: 'file', executable: false, size: 12, sha256: 'd'.repeat(64) });
+      files.sort((a, b) => Buffer.from(a.path).compare(Buffer.from(b.path)));
+      return { schema: 'rushd.patch-manifest.v1', base_sha: scopeBase, files };
+    };
+    const scopeReplacementCheckpointFor = (variant) => {
+      const core = scopeReplacementManifestFor(variant);
+      const patchSha = sha256Bytes(Buffer.from(JSON.stringify(core)));
+      const manifestPath = `${scopeRelative}/phases/P00/patch-attempt-02-${variant}.json`;
+      scopeWriteJson(manifestPath, { ...core, patch_sha256: patchSha });
+      const checkpoint = structuredClone(loadJson(scopePath(scopePriorCheckpointPath)));
+      const evidenceRoot = `${scopeRelative}/evidence/P00/worker-attempt-02`;
+      scopeWriteFile(`${evidenceRoot}/gate-evidence.txt`, 'synthetic manifest-scope replacement gate evidence\n');
+      scopeWriteFile(`${evidenceRoot}/npm-test.log`, 'synthetic passing manifest-scope replacement gate log\n');
+      checkpoint.evidence_root = evidenceRoot;
+      checkpoint.evidence_hashes = { [`${evidenceRoot}/gate-evidence.txt`]: sha256File(scopePath(`${evidenceRoot}/gate-evidence.txt`)) };
+      checkpoint.acceptance = scopeAcceptanceIds.map((id) => ({ id, status: 'pass', evidence: [`${evidenceRoot}/gate-evidence.txt`] }));
+      checkpoint.commands = [{ command: 'npm test', exit_code: 0, summary: 'Synthetic complete replacement gate passed.', log_path: `${evidenceRoot}/npm-test.log`, log_sha256: sha256File(scopePath(`${evidenceRoot}/npm-test.log`)), started_at: '2099-01-01T00:05:30Z', finished_at: '2099-01-01T00:05:40Z', cwd: scopeTestRoot, runner_task_id: 'scope-worker' }];
+      checkpoint.attempt = 2;
+      checkpoint.patch_sha256 = patchSha;
+      checkpoint.patch_manifest_path = manifestPath;
+      checkpoint.worker_receipt_path = scopeFollowupCompletedPath;
+      checkpoint.changed_files = core.files.map((file) => ({ path: file.path, change: 'modified', purpose: `Replacement manifest-scope fixture ${file.path}.` }));
+      const checkpointPath = `${scopeRelative}/phases/P00/checkpoint-attempt-02-${variant}.json`;
+      scopeWriteJson(checkpointPath, checkpoint);
+      return checkpointPath;
+    };
+    const scopeReadyRequestFor = (variant, eventId) => {
+      const checkpointPath = scopeReplacementCheckpointFor(variant);
+      const followupReceipt = loadJson(scopePath(scopeFollowupCompletedPath));
+      const evidence = [
+        checkpointPath, loadJson(scopePath(checkpointPath)).patch_manifest_path, scopeFollowupCompletedPath,
+        followupReceipt.thread_request_path, followupReceipt.thread_response_path,
+        followupReceipt.turn_request_path, followupReceipt.turn_response_path,
+        scopeFollowupCreatedPath, followupReceipt.turn_completed_path
+      ];
+      return {
+        path: `${scopeRelative}/controller/ready-${variant}.json`, checkpointPath,
+        request: {
+          schema: 'rushd.state-transition.v1', event_id: eventId, from: 'worker_running', to: 'ready_for_review',
+          transition_kind: 'checkpoint_ready', note: `accept manifest-scope replacement (${variant})`,
+          evidence, evidence_hashes: Object.fromEntries(evidence.map((path) => [path, sha256File(scopePath(path))])),
+          changes: { checkpoint_path: checkpointPath, active_worker_receipt_path: scopeFollowupCompletedPath, precommit_reconciliation: null }
+        }
+      };
+    };
+    const scopeRejectReady = (name, variant, pattern, eventId) => {
+      const ready = scopeReadyRequestFor(variant, eventId);
+      scopeWriteJson(ready.path, ready.request);
+      expectRejected(name, scopeNode([transition, scopeStatePath, ready.path]), pattern);
+    };
+    scopeRejectReady('scratch reconciliation outside-path addition', 'rogue-add', /adds a path outside affected_paths/, 'SELFTEST-SCOPE-ROGUE-ADD');
+    scopeRejectReady('scratch reconciliation carried-file drift', 'carried-drift', /changes a reviewed path outside affected_paths/, 'SELFTEST-SCOPE-CARRIED-DRIFT');
+    scopeRejectReady('scratch reconciliation missing reviewed file', 'drop-carried', /drops a reviewed path outside affected_paths/, 'SELFTEST-SCOPE-DROP-CARRIED');
+    scopeWriteFile(scopeAffectedPath, scopeAffectedReplacementBytes);
+    const scopeGoodReady = scopeReadyRequestFor('good', 'SELFTEST-SCOPE-GOOD-READY');
+    scopeWriteJson(scopeGoodReady.path, scopeGoodReady.request);
+    const scopeGoodResult = scopeNode([transition, scopeStatePath, scopeGoodReady.path]);
+    if (scopeGoodResult.status !== 0) throw new Error(`Manifest-scope carried-patch checkpoint acceptance failed:\n${scopeGoodResult.stdout}\n${scopeGoodResult.stderr}`);
+    const scopeAcceptedState = loadJson(scopePath(scopeStatePath));
+    if (scopeAcceptedState.status !== 'ready_for_review' || scopeAcceptedState.checkpoint_path !== scopeGoodReady.checkpointPath
+      || scopeAcceptedState.current_attempt !== 2 || scopeAcceptedState.precommit_reconciliation !== null) throw new Error('Manifest-scope acceptance did not bind the carried replacement checkpoint and clear the link');
+    const scopeFinalStateCheck = scopeNode([validator, scopeStatePath]);
+    if (scopeFinalStateCheck.status !== 0) throw new Error(`Accepted manifest-scope state failed full validation:\n${scopeFinalStateCheck.stdout}\n${scopeFinalStateCheck.stderr}`);
+    console.log('PASS manifest-scope reconciliation accepts carried patch end to end');
+  } finally {
+    rmSync(scopeTestRoot, { recursive: true, force: true });
+  }
 
   const unsafeManifestPath = `${runRelative}/unsafe-manifest.json`;
   const unsafeManifestBase = { schema: 'rushd.patch-manifest.v1', base_sha: head, files: [{ path: '../escape', state: 'deleted' }] };

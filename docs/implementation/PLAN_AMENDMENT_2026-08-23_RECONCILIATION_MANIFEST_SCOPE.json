@@ -1,0 +1,39 @@
+{
+  "schema": "rushd.plan-amendment.v1",
+  "amendment_id": "RUSHD-20260823-RECONCILIATION-MANIFEST-SCOPE",
+  "from_plan_version": "2026-08-10-final",
+  "to_plan_version": "2026-08-10-final",
+  "requested_at": "2026-08-23T00:00:00.000Z",
+  "requested_by_task_id": "codex-root-current",
+  "rationale": "Repair one workflow-safety defect discovered while committing P00 attempt 3 without weakening any product gate. A pre-commit reconciliation must carry forward the entire previously reviewed phase patch, but the current checkpoint acceptance treats the replacement checkpoint's changed_files list as the scope boundary, so a correct replacement checkpoint that carries every reviewed file unchanged is rejected for listing paths outside the reconciliation record's affected_paths. The scope boundary must instead be enforced by comparing the prior checkpoint's hash-bound patch manifest with the replacement checkpoint's patch manifest: only paths matching the immutable reconciliation record's affected_paths may differ, and any path addition, deletion, byte change, size change, hash change, permission change, or metadata drift outside those paths must be rejected. changed_files may continue to describe the complete reviewed phase patch and is not the scope boundary.",
+  "affected_phases": [
+    "P00",
+    "P01",
+    "P02",
+    "P03",
+    "P04",
+    "P05",
+    "P06",
+    "P07",
+    "P08",
+    "P09",
+    "P10",
+    "P11",
+    "P12",
+    "P13"
+  ],
+  "protected_paths_to_change": [
+    ".agents/skills/rushd-phase-orchestrator/scripts/workflow-lib.mjs",
+    ".agents/skills/rushd-phase-orchestrator/scripts/transition-state.mjs",
+    ".agents/skills/rushd-phase-orchestrator/scripts/self-test.mjs",
+    "docs/RUSHD_EXECUTION_PROTOCOL.md",
+    "docs/implementation/PLAN_AMENDMENT_2026-08-23_RECONCILIATION_MANIFEST_SCOPE.json"
+  ],
+  "safe_work_while_waiting": "Preserve the blocked P00 attempt-3 evidence, prepared checkpoint/review artifacts, and the uncommitted reviewed P00 product patch exactly as they are. Do not stage, commit, push, or edit any P00 product file until this authority amendment is independently reviewed, approved, and sealed.",
+  "founder_decision": {
+    "status": "approved",
+    "actor": "founder",
+    "approved_at": "2026-08-23T00:00:00.000Z",
+    "exact_scope": "Under the founder's standing delegation authorizing the Development Master to handle non-product workflow and technical-safety decisions, repair only the pre-commit reconciliation checkpoint scope checking: compare the prior checkpoint's patch manifest with the replacement checkpoint's patch manifest, allow differences only for paths matching the immutable hash-bound reconciliation record's affected_paths, reject any path addition, deletion, byte change, size change, hash change, permission change, or metadata drift outside those paths, permit changed_files to describe the complete reviewed phase patch, retain the hash-bound reconciliation record and all existing validation, add regression coverage for unchanged carried files passing, approved affected-path changes passing, outside-path manifest drift failing, and missing expected reviewed files failing, and document the manifest-based scope rule in the execution protocol. This amendment touches only workflow authority files, never product files, and does not weaken finance, migration, sync, AI, bilingual, accessibility, motion, security, beta-duration, publication, final-audit, review-independence, or full-gate requirements."
+  }
+}

@@ -338,10 +338,26 @@ authority-only commits invalidate a phase assumption and the preserved full-gate
 that exact compatibility failure. The manager must preserve the prior PASS checkpoint/review
 hashes, failing command log, affected phase-owned paths, current authority head, and founder-
 approved amendment in `rushd.precommit-reconciliation.v1`. The same phase worker then receives
-a new attempt receipt, updates only those named paths, reruns the complete required gate, and
-creates a normal new checkpoint. A fresh isolated reviewer reviews that attempt. This path can
-never broaden product scope, substitute the worker, weaken acceptance criteria, rewrite the old
-PASS artifacts, or reopen committed work.
+a new attempt receipt, carries forward the entire previously reviewed phase patch, changes only
+the recorded affected paths, reruns the complete required gate, and creates a normal new
+checkpoint. A fresh isolated reviewer reviews that attempt. This path can never broaden product
+scope, substitute the worker, weaken acceptance criteria, rewrite the old PASS artifacts, or
+reopen committed work.
+
+The reconciliation scope boundary is manifest-based, not list-based. At checkpoint acceptance
+the transition compares the prior PASS checkpoint's patch manifest with the replacement
+checkpoint's patch manifest and allows differences only for paths matching the immutable
+hash-bound reconciliation record's `affected_paths`. Any path addition, path deletion, byte
+change, size change, content-hash change, executable-bit change, or other manifest metadata
+drift outside those paths is rejected, including dropping a file the prior review had certified.
+The replacement checkpoint's `changed_files` list describes the complete reviewed phase patch —
+carried files plus affected paths — and is not the scope boundary. When the replacement
+checkpoint is accepted, the transition must explicitly clear the run state's reconciliation
+link (`precommit_reconciliation: null`) after manifest-scope enforcement; the hash-bound
+reconciliation record itself remains journaled evidence for the reviewer and the phase commit.
+This rule is authorized by `RUSHD-20260823-RECONCILIATION-MANIFEST-SCOPE` under the founder's
+standing delegation to the Development Master for non-product workflow and technical-safety
+decisions, and it weakens no product gate.
 
 ### Runtime-neutral lifecycle adapter
 

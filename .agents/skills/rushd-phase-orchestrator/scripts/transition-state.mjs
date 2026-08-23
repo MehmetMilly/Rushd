@@ -22,10 +22,10 @@ import {
   git,
   gitHead,
   isObject,
-  matchesAny,
   isSha256,
   loadJson,
   manifestForCommitRange,
+  manifestScopeMismatch,
   phaseFor,
   readPlan,
   remediationAfterRegressionFailure,
@@ -210,22 +210,30 @@ if (state.status === 'worker_running' && request.to === 'worker_running') {
 
 if (state.status === 'worker_running' && request.to === 'ready_for_review') {
   expectedKind = 'checkpoint_ready';
-  requireKeys(changes, ['checkpoint_path', 'active_worker_receipt_path']);
+  const reconciliationLinkKeys = state.precommit_reconciliation ? ['precommit_reconciliation'] : [];
+  requireKeys(changes, ['checkpoint_path', 'active_worker_receipt_path', ...reconciliationLinkKeys], ['checkpoint_path', 'active_worker_receipt_path']);
   if (state.precommit_reconciliation) {
+    const link = state.precommit_reconciliation;
+    if (link.record_sha256 !== sha256File(link.record_path)) throw new Error('Reconciliation record no longer matches its hash-bound state link');
+    const reconciliation = loadJson(link.record_path);
+    if (!sameJson(link.affected_paths, reconciliation.affected_paths)) throw new Error('Reconciliation state/record affected paths drifted');
+    if (sha256File(reconciliation.prior_checkpoint_path) !== reconciliation.prior_checkpoint_sha256) throw new Error('Reconciliation prior PASS checkpoint hash mismatch');
+    const priorCheckpoint = loadJson(reconciliation.prior_checkpoint_path);
     const pendingCheckpoint = loadJson(changes.checkpoint_path);
-    if (pendingCheckpoint.schema === 'rushd.phase-checkpoint.v1' && pendingCheckpoint.phase_id === state.current_phase && pendingCheckpoint.attempt === state.current_attempt) {
-      for (const change of pendingCheckpoint.changed_files ?? []) {
-        if (!state.precommit_reconciliation.affected_paths.some((path) => matchesAny(change.path, [path]))) throw new Error(`Reconciliation checkpoint changes an unapproved path: ${change.path}`);
-      }
+    if (pendingCheckpoint.schema === 'rushd.phase-checkpoint.v1' && pendingCheckpoint.phase_id === state.current_phase && pendingCheckpoint.attempt === state.current_attempt && priorCheckpoint.schema === 'rushd.phase-checkpoint.v1') {
+      if (typeof priorCheckpoint.patch_manifest_path !== 'string' || typeof pendingCheckpoint.patch_manifest_path !== 'string') throw new Error('Reconciliation checkpoints must name their patch manifests');
+      const priorManifest = loadJson(priorCheckpoint.patch_manifest_path);
+      const replacementManifest = loadJson(pendingCheckpoint.patch_manifest_path);
+      if (priorManifest.base_sha !== replacementManifest.base_sha) throw new Error('Reconciliation replacement patch manifest changed the reviewed base SHA');
+      const scopeMismatch = manifestScopeMismatch(priorManifest.files, replacementManifest.files, link.affected_paths);
+      if (scopeMismatch) throw new Error(`Reconciliation replacement patch ${scopeMismatch}`);
     }
+    if (changes.precommit_reconciliation !== null) throw new Error('Reconciliation checkpoint acceptance must clear the hash-bound state link after manifest-scope enforcement');
   }
   const checkpoint = artifact(changes.checkpoint_path, 'rushd.phase-checkpoint.v1');
   if (checkpoint.run_id !== state.run_id || checkpoint.phase_id !== state.current_phase || checkpoint.attempt !== state.current_attempt || checkpoint.base_sha !== state.base_sha || checkpoint.worker_receipt_path !== changes.active_worker_receipt_path) throw new Error('Checkpoint does not match active worker state');
-  if (state.precommit_reconciliation && checkpoint.attempt === state.current_attempt) {
+  if (state.precommit_reconciliation) {
     const reconciliation = artifact(state.precommit_reconciliation.record_path, 'rushd.precommit-reconciliation.v1');
-    for (const change of checkpoint.changed_files ?? []) {
-      if (!state.precommit_reconciliation.affected_paths.some((path) => matchesAny(change.path, [path]))) throw new Error(`Reconciliation checkpoint changes an unapproved path: ${change.path}`);
-    }
     if (!sameJson(state.precommit_reconciliation.affected_paths, reconciliation.affected_paths)) throw new Error('Reconciliation state/record affected paths drifted');
   }
   const worker = receipt(changes.active_worker_receipt_path, state.remediation ? ['remediation_worker'] : ['phase_worker'], 'completed');

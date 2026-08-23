@@ -182,6 +182,24 @@ export const phaseCommitOverlayRange = (reviewedBaseSha, commitSha) => {
   return { parent_sha: parentSha, authority_commits: authorityCommits, authority_manifest: authorityManifest, product_manifest: productManifest };
 };
 
+export const manifestScopeMismatch = (priorFiles, replacementFiles, affectedPaths) => {
+  if (!Array.isArray(priorFiles) || !Array.isArray(replacementFiles)) return 'patch manifests are malformed';
+  if (!Array.isArray(affectedPaths) || affectedPaths.length === 0) return 'affected_paths is empty';
+  const isAffected = (path) => affectedPaths.some((pattern) => matchesAny(path, [pattern]));
+  const priorByPath = new Map(priorFiles.map((file) => [file?.path, file]));
+  for (const replacement of replacementFiles) {
+    if (!isObject(replacement) || typeof replacement.path !== 'string') return 'patch manifest entry is malformed';
+    const prior = priorByPath.get(replacement.path);
+    if (prior === undefined && !isAffected(replacement.path)) return `adds a path outside affected_paths: ${replacement.path}`;
+    if (prior !== undefined && !sameJson(prior, replacement) && !isAffected(replacement.path)) return `changes a reviewed path outside affected_paths: ${replacement.path}`;
+  }
+  const replacementPaths = new Set(replacementFiles.map((file) => file?.path));
+  for (const prior of priorFiles) {
+    if (!replacementPaths.has(prior?.path) && !isAffected(prior?.path)) return `drops a reviewed path outside affected_paths: ${String(prior?.path)}`;
+  }
+  return null;
+};
+
 export const isPathInside = (path, root) => {
   if (typeof path !== 'string' || typeof root !== 'string') return false;
   const rootResolved = resolve(root);
@@ -305,6 +323,18 @@ export const sealedAuthorityRule = (amendmentId, runId) => ({
       '.agents/skills/rushd-phase-orchestrator/scripts/workflow-lib.mjs',
       'docs/RUSHD_EXECUTION_PROTOCOL.md',
       'docs/implementation/PLAN_AMENDMENT_2026-08-22_PORTABLE_PRECOMMIT_RECONCILIATION.json'
+    ],
+    planChange: 'none'
+  },
+  'RUSHD-20260823-RECONCILIATION-MANIFEST-SCOPE': {
+    path: 'docs/implementation/PLAN_AMENDMENT_2026-08-23_RECONCILIATION_MANIFEST_SCOPE.json',
+    approval: `.codex/runs/${runId}/controller/authority-amendment-reconciliation-manifest-scope-approval.json`,
+    paths: [
+      '.agents/skills/rushd-phase-orchestrator/scripts/workflow-lib.mjs',
+      '.agents/skills/rushd-phase-orchestrator/scripts/transition-state.mjs',
+      '.agents/skills/rushd-phase-orchestrator/scripts/self-test.mjs',
+      'docs/RUSHD_EXECUTION_PROTOCOL.md',
+      'docs/implementation/PLAN_AMENDMENT_2026-08-23_RECONCILIATION_MANIFEST_SCOPE.json'
     ],
     planChange: 'none'
   }
