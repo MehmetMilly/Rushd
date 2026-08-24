@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { lstat, readFile } from 'node:fs/promises';
 
 const baseSha = 'b56c80bc2e2eb103ebe5bc258bfeeea60accf53c';
+const p00CommitSha = '33ffce34e73606d4150f07471b70460dccd0b26e';
 const requiredCases = ['empty', 'populated', 'paid-generated', 'plan-edit', 'legacy-vault', 'malformed', 'boundary', 'large-history'];
 const expectedIssueIds = [
   'P0-01', 'P0-02', 'P0-03', 'P0-04', 'P0-05', 'P0-06', 'P0-07', 'P0-08',
@@ -20,36 +21,17 @@ const readJson = async (path) => JSON.parse(await readFile(path, 'utf8'));
 const assert = (condition, message) => {
   if (!condition) throw new Error(message);
 };
-const globRegex = (pattern) => {
-  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*\*/g, '\u0000').replace(/\*/g, '[^/]*').replace(/\u0000/g, '.*');
-  return new RegExp(`^${escaped}$`);
-};
-
 const plan = await readJson('docs/implementation/phase-plan.json');
 const phase = plan.phases.find((item) => item.id === 'P00');
 const headSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-if (headSha !== baseSha) {
-  const sealedAuthorityChain = [
-    { commit: '1094b32a7056dc3cdb21c52ade57a0cea75f00a9', parent: baseSha },
-    { commit: '8e5c4c31aea551920ff0b66785bc2b2c5e36c97d', parent: '1094b32a7056dc3cdb21c52ade57a0cea75f00a9' },
-    { commit: '30191893cd585f25271aa4c0b5211813b0ad5003', parent: '4e898046659864e3b6bb51b1841ad3480224f889' },
-    { commit: 'f0ae4240742f0213d5d68e8d7b878685fd64560c', parent: '30191893cd585f25271aa4c0b5211813b0ad5003' },
-    { commit: '91472d4bd622f29eaf4610eacf2055f2f6a93434', parent: 'f0ae4240742f0213d5d68e8d7b878685fd64560c' },
-    { commit: '3f83568f19cbb773bc3277ea698be35268dc6383', parent: '91472d4bd622f29eaf4610eacf2055f2f6a93434' }
-  ];
-  assert(headSha === sealedAuthorityChain.at(-1).commit, 'HEAD is not the approved external-continuation authority overlay');
-  for (const overlay of sealedAuthorityChain) {
-    const parent = execFileSync('git', ['rev-parse', `${overlay.commit}^`], { encoding: 'utf8' }).trim();
-    const overlayPaths = execFileSync('git', ['diff', '--name-only', '--no-renames', overlay.parent, overlay.commit], { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
-    assert(parent === overlay.parent && overlayPaths.length > 0 && overlayPaths.every((path) => plan.protected_paths.some((pattern) => globRegex(pattern).test(path))), `Invalid sealed authority overlay: ${overlay.commit}`);
-  }
+let p00CommitIsAncestor = false;
+try {
+  execFileSync('git', ['merge-base', '--is-ancestor', p00CommitSha, headSha], { stdio: 'ignore' });
+  p00CommitIsAncestor = true;
+} catch {
+  p00CommitIsAncestor = false;
 }
-const changed = execFileSync('git', ['diff', '--name-only', '--no-renames', 'HEAD', '--', '.'], { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
-const untracked = execFileSync('git', ['ls-files', '--others', '--exclude-standard'], { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
-for (const path of [...new Set([...changed, ...untracked])]) {
-  assert(!plan.protected_paths.some((pattern) => globRegex(pattern).test(path)), `Protected path changed: ${path}`);
-  assert(phase.allowed_paths.some((pattern) => globRegex(pattern).test(path)), `P00 path is outside the allowlist: ${path}`);
-}
+assert(p00CommitIsAncestor, 'HEAD does not descend from the completed P00 commit');
 
 const authority = await readJson('docs/baseline/authority-baseline.json');
 assert(authority.schema === 'rushd.p00-authority-baseline.v1', 'Authority evidence schema mismatch');
@@ -169,4 +151,4 @@ const normalizerSource = await readFile('scripts/normalize-p00-images.sh', 'utf8
 assert(normalizerSource.includes('RUSHD_BASELINE_REPLACE') && normalizerSource.indexOf('RUSHD_BASELINE_REPLACE') < normalizerSource.indexOf('normalize_tree()'), 'Normalizer can reach an existing artifact without explicit replacement authorization');
 assert((await readFile('scripts/browser-smoke.cjs', 'utf8')).includes('test-results/browser-smoke'), 'Browser smoke output is not isolated from source assets');
 
-console.log('P00 immutable baseline verification passed: authority overlay separation, 17 sanitized fixtures, 20 stable reproductions, 260 native Chromium media artifacts, 228 state-level axe records, local attestation, pins, and replacement guards.');
+console.log('P00 immutable baseline verification passed: completed-commit ancestry, 17 sanitized fixtures, 20 stable reproductions, 260 native Chromium media artifacts, 228 state-level axe records, local attestation, pins, and replacement guards.');

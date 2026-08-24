@@ -12,8 +12,11 @@ Product and implementation authority, in order:
 
 1. `docs/RUSHD_MASTER_PLAN_FINAL.md`
 2. `docs/implementation/phase-plan.json`
-3. `docs/RUSHD_EXECUTION_PROTOCOL.md`
+3. `WORKFLOW_LITE.md`
 4. This file
+5. `docs/RUSHD_EXECUTION_PROTOCOL.md` and the P00 phase machinery are historical audit records unless the founder explicitly requests a formal governed run.
+
+Workflow Lite supersedes the old execution protocol's receipts, state transitions, mandatory per-phase reviews, and ordinary authority amendments. The master plan's product invariants and phase acceptance outcomes remain binding.
 
 The July `docs/RUSHD_MASTER_PLAN.md` and August founder discussion/feedback files are preserved decision history. They are superseded wherever the final master plan differs.
 
@@ -90,4 +93,4 @@ Do not commit secrets, API keys, `.env` files, real financial data, personal scr
 
 ## Future Agent Workflow
 
-Read the final plan and exact phase record, inspect the relevant code, run the current baseline, then edit only phase-owned paths. Use the `rushd-phase-orchestrator` skill for implementation phases. Every phase requires a structured checkpoint and fresh independent review; only one write-capable agent works at a time. For substantial changes, update docs and the manual QA checklist in the same phase commit.
+Follow `WORKFLOW_LITE.md`. Read the relevant phase contract and product invariants, inspect only the relevant code, implement a coherent work slice, run logically scoped tests, and return a concise implementation report. The Development Master assigns tasks, verifies outcomes, and decides when independent review is warranted. Preserve financial-safety, migration, bilingual, accessibility, privacy, AI-proposal, and release-quality invariants; do not reintroduce receipt ceremonies, patch manifests, or state-machine transitions for ordinary development.
