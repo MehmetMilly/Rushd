@@ -42,7 +42,7 @@ for (const item of catalog.cases) {
 const paid = paidGenerated.indexed_db.stores.expenses[0];
 assert.equal(paid.isPaid, true);
 assert.equal(paid.source === 'template' && paid.templateProtected === false, true);
-assert.match(source, /filter\(expense => expense\.source === 'template' && expense\.templateProtected === false\)/);
+assert.match(source, /filter\(expense => expense\.source === 'template' && expense\.templateProtected === false && !expense\.isPaid\)/);
 
 const paidOnlySurplus = 1000 - 100;
 const reservationAwareSurplus = 1000 - 100 - 500;
@@ -89,7 +89,13 @@ assert.equal(Number('١٢٫٥٠'), Number.NaN);
 
 const weakCandidate = malformed.malformed_backup_candidates.find((item) => item.id === 'weak-schema-accepted').payload;
 assert.equal(Array.isArray(weakCandidate.expenses), true);
-assert.match(source, /if \(!data\.expenses \|\| !Array\.isArray\(data\.expenses\)\)/);
+assert.match(source, /validateBackupPayload\(data\)/);
+assert.match(source, /DB\.restoreBackupRecords\(/);
+assert.match(source, /resetFailedTitle: 'Reset Failed'/);
+assert.match(source, /resetBackupFailed: 'Backup before delete could not be created/);
+assert.match(source, /resetBlockedError: 'Reset could not complete because Rushd is open in another tab/);
+assert.match(source, /DB\.applyExpenseWritePlan\(/);
+assert.match(source, /DB\.setSettingsEntries\(/);
 
 assert.match(source, /return \[10, 15, 8, 12, 20, 18, 25, this\.store\.globalStats\.netVariance\]/);
 assert.match(source, /Formula: 1 SAR Saved = 10 XP/);

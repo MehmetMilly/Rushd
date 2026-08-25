@@ -2714,7 +2714,12 @@
                 cannotUndo: 'لا يمكن التراجع عن هذا الإجراء.',
                 stopAutoFill: 'سيتوقف الملء التلقائي لهذا العنصر.',
                 factoryResetQ: 'إعادة ضبط المصنع؟',
-                factoryResetMsg: 'سيتم حذف جميع البيانات نهائياً. لا يمكن التراجع.',
+                factoryResetMsg: 'سيتم تنزيل نسخة احتياطية كاملة تلقائياً قبل الحذف، ثم تُحذف جميع البيانات نهائياً. لا يمكن التراجع.',
+                resetFailedTitle: 'تعذّرت إعادة الضبط',
+                resetBackupFailed: 'تعذّر إنشاء النسخة الاحتياطية قبل الحذف، لذلك أُلغيت إعادة الضبط ولم تتغير بياناتك. جرّب التصدير يدوياً ثم أعد المحاولة.',
+                resetBlockedError: 'تعذّر إكمال إعادة الضبط لأن رُشد مفتوح في تبويب أو نافذة أخرى. أغلقها ثم أعد المحاولة. بياناتك لم تتغير.',
+                resetFailed: 'تعذّر حذف البيانات المحلية ولم يتغير شيء. أعد المحاولة.',
+                dialogOk: 'حسنًا',
                 importQ: 'استيراد نسخة احتياطية؟',
                 importMsg: 'سيتم دمج/تحديث بياناتك الحالية. العناصر بنفس المعرّف ستُحدّث.',
                 importBtn: 'استيراد',
@@ -2985,8 +2990,13 @@
                 deleteTemplateQ: 'Delete this template?',
                 cannotUndo: 'This action cannot be undone.',
                 stopAutoFill: 'This will stop future auto-fills for this item.',
+                resetFailedTitle: 'Reset Failed',
+                resetBackupFailed: 'Backup before delete could not be created, so the reset was cancelled and your data is unchanged. Try exporting manually first, then retry.',
+                resetBlockedError: 'Reset could not complete because Rushd is open in another tab or window. Close it and try again. Your data has not changed.',
+                resetFailed: 'Local data could not be deleted and nothing has changed. Please try again.',
+                dialogOk: 'OK',
                 factoryResetQ: 'Factory Reset?',
-                factoryResetMsg: 'All data will be permanently deleted. This cannot be undone.',
+                factoryResetMsg: 'A full backup will be downloaded automatically before deletion, then all data will be permanently deleted. This cannot be undone.',
                 importQ: 'Import Backup?',
                 importMsg: 'This will merge/overwrite your current data. Existing entries with same IDs will be updated.',
                 importBtn: 'Import',
@@ -5415,6 +5425,119 @@
             };
         };
 
+        // P1-10: strict structural gate for imported backups. Runs before any
+        // canonical store is touched so malformed payloads are rejected whole.
+        // Valid Rushd exports, including legacy local backups, still pass.
+        const BACKUP_EXPENSE_MONEY_FIELDS = Object.freeze(['expectedCost', 'actualPaid']);
+        const isPlainObjectRecord = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+        const isNonNegativeFiniteNumber = (value) => typeof value === 'number' && Number.isFinite(value) && value >= 0;
+        const isValidIsoDateString = (value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+
+        const validateBackupPayload = (payload) => {
+            if (!isPlainObjectRecord(payload)) return { ok: false, reason: 'payload' };
+            if (payload.version !== undefined && typeof payload.version !== 'string') return { ok: false, reason: 'version' };
+            if (payload.exportedAt !== undefined
+                && (typeof payload.exportedAt !== 'string' || Number.isNaN(Date.parse(payload.exportedAt)))) {
+                return { ok: false, reason: 'exportedAt' };
+            }
+            if (!Array.isArray(payload.expenses)) return { ok: false, reason: 'expenses' };
+
+            if (payload.settings !== undefined) {
+                const settings = payload.settings;
+                if (!isPlainObjectRecord(settings)) return { ok: false, reason: 'settings' };
+                if (settings.baseAllowance !== undefined && !isNonNegativeFiniteNumber(settings.baseAllowance)) {
+                    return { ok: false, reason: 'settings.baseAllowance' };
+                }
+                if (settings.safeToSpendMode !== undefined && !['weekly', 'monthly'].includes(settings.safeToSpendMode)) {
+                    return { ok: false, reason: 'settings.safeToSpendMode' };
+                }
+                if (settings.theme !== undefined && !['dark', 'light'].includes(settings.theme)) {
+                    return { ok: false, reason: 'settings.theme' };
+                }
+                if (settings.motionLevel !== undefined && !MOTION_LEVEL_VALUES.includes(settings.motionLevel)) {
+                    return { ok: false, reason: 'settings.motionLevel' };
+                }
+                if (settings.activeTemplateProfileId !== undefined && typeof settings.activeTemplateProfileId !== 'string') {
+                    return { ok: false, reason: 'settings.activeTemplateProfileId' };
+                }
+                if (settings.templateProfiles !== undefined) {
+                    if (!Array.isArray(settings.templateProfiles)) return { ok: false, reason: 'settings.templateProfiles' };
+                    for (const profile of settings.templateProfiles) {
+                        if (!isPlainObjectRecord(profile) || typeof profile.id !== 'string' || !profile.id.trim()) {
+                            return { ok: false, reason: 'settings.templateProfiles' };
+                        }
+                    }
+                }
+                if (settings.monthlyTemplateAssignments !== undefined) {
+                    if (!Array.isArray(settings.monthlyTemplateAssignments)) return { ok: false, reason: 'settings.monthlyTemplateAssignments' };
+                    for (const assignment of settings.monthlyTemplateAssignments) {
+                        if (!isPlainObjectRecord(assignment)
+                            || !MONTH_KEY_PATTERN.test(assignment.monthKey || '')
+                            || typeof assignment.assignedProfileId !== 'string'
+                            || !isValidIsoDateString(assignment.effectiveDate)) {
+                            return { ok: false, reason: 'settings.monthlyTemplateAssignments' };
+                        }
+                    }
+                }
+                if (settings.vault !== undefined) {
+                    const vault = settings.vault;
+                    if (!isPlainObjectRecord(vault)
+                        || !Array.isArray(vault.transactions)
+                        || (vault.goals !== undefined && vault.goals !== null && !Array.isArray(vault.goals))
+                        || (vault.balance !== undefined && !isNonNegativeFiniteNumber(vault.balance))) {
+                        return { ok: false, reason: 'settings.vault' };
+                    }
+                    for (const vaultTransaction of vault.transactions) {
+                        if (!isPlainObjectRecord(vaultTransaction)
+                            || !isNonNegativeFiniteNumber(vaultTransaction.amount)
+                            || !isValidIsoDateString(vaultTransaction.date)) {
+                            return { ok: false, reason: 'settings.vault.transactions' };
+                        }
+                    }
+                }
+                if (settings.monthEndSettlements !== undefined) {
+                    if (!Array.isArray(settings.monthEndSettlements)) return { ok: false, reason: 'settings.monthEndSettlements' };
+                    for (const item of settings.monthEndSettlements) {
+                        if (!isPlainObjectRecord(item)
+                            || !MONTH_KEY_PATTERN.test(item.previousMonthKey || '')
+                            || !MONTH_END_SETTLEMENT_DECISIONS.includes(item.decision)) {
+                            return { ok: false, reason: 'settings.monthEndSettlements' };
+                        }
+                    }
+                }
+            }
+
+            if (payload.templates !== undefined) {
+                if (!Array.isArray(payload.templates)) return { ok: false, reason: 'templates' };
+                for (const template of payload.templates) {
+                    if (!isPlainObjectRecord(template)
+                        || typeof template.id !== 'string'
+                        || !template.id.trim()
+                        || typeof template.name !== 'string'
+                        || !template.name.trim()
+                        || (template.expectedCost !== undefined && !isNonNegativeFiniteNumber(template.expectedCost))
+                        || (template.defaultAmount !== undefined && !isNonNegativeFiniteNumber(template.defaultAmount))) {
+                        return { ok: false, reason: 'templates' };
+                    }
+                }
+            }
+
+            for (const expense of payload.expenses) {
+                if (!isPlainObjectRecord(expense)
+                    || typeof expense.id !== 'string'
+                    || !expense.id.trim()
+                    || !isValidIsoDateString(expense.date)
+                    || (expense.name !== undefined && typeof expense.name !== 'string')
+                    || (expense.isPaid !== undefined && typeof expense.isPaid !== 'boolean')
+                    || (expense.source !== undefined && !EXPENSE_SOURCE_VALUES.includes(expense.source))
+                    || BACKUP_EXPENSE_MONEY_FIELDS.some(field => expense[field] !== undefined && !isNonNegativeFiniteNumber(expense[field]))) {
+                    return { ok: false, reason: 'expenses' };
+                }
+            }
+
+            return { ok: true, reason: '' };
+        };
+
         const DB = {
                 dbName: 'MicroSaveOS_DB', // Legacy database name preserved so existing local users do not lose data.
             version: 1,
@@ -5540,14 +5663,118 @@
                 return this.transaction('expenses', 'readwrite', store => store.delete(id));
             },
 
+            // --- ATOMIC MULTI-STORE WRITES ---
+            // Every request issued inside the callback commits together or not at
+            // all. Used by plan apply, cycle settlement, and backup import so a
+            // mid-operation failure can never leave a partial write behind.
+            async multiStoreTransaction(storeNames, mode, callback) {
+                if (!this.db) await this.connect();
+                const attempt = () => new Promise((resolve, reject) => {
+                    const tx = this.db.transaction(storeNames, mode);
+                    const request = callback(tx);
+                    tx.oncomplete = () => resolve(request ? request.result : undefined);
+                    tx.onerror = () => reject(tx.error);
+                    tx.onabort = () => reject(tx.error || new DOMException('IndexedDB transaction aborted', 'AbortError'));
+                });
+                try {
+                    return await attempt();
+                } catch (e) {
+                    // If connection was closed/stale, reconnect and retry once
+                    if (e.name === 'InvalidStateError') {
+                        console.warn('⚠️ DB connection stale, reconnecting...');
+                        this.db = null;
+                        await this.connect();
+                        return attempt();
+                    }
+                    throw e;
+                }
+            },
+
+            // Writes several settings keys inside one atomic transaction.
+            async setSettingsEntries(entries) {
+                return this.multiStoreTransaction(['settings'], 'readwrite', tx => {
+                    const store = tx.objectStore('settings');
+                    let lastRequest = null;
+                    for (const entry of entries) {
+                        lastRequest = store.put({ key: entry.key, value: toSerializableValue(entry.value) });
+                    }
+                    return lastRequest;
+                });
+            },
+
+            // Applies a plan-apply write batch (expense deletes/puts plus optional
+            // settings entries) in one atomic transaction.
+            async applyExpenseWritePlan({ deletes = [], puts = [], settingsEntries = [] } = {}) {
+                const storeNames = settingsEntries.length > 0 ? ['expenses', 'settings'] : ['expenses'];
+                return this.multiStoreTransaction(storeNames, 'readwrite', tx => {
+                    const expenses = tx.objectStore('expenses');
+                    let lastRequest = null;
+                    for (const id of deletes) {
+                        lastRequest = expenses.delete(id);
+                    }
+                    for (const expense of puts) {
+                        lastRequest = expenses.put(toSerializableValue(normalizeExpenseRecord(expense)));
+                    }
+                    if (settingsEntries.length > 0) {
+                        const settings = tx.objectStore('settings');
+                        for (const entry of settingsEntries) {
+                            lastRequest = settings.put({ key: entry.key, value: toSerializableValue(entry.value) });
+                        }
+                    }
+                    return lastRequest;
+                });
+            },
+
+            // Restores a validated backup in one atomic transaction across all
+            // stores: settings keys, templates, and expenses commit together.
+            async restoreBackupRecords({ settingsEntries = [], templates = [], expenses = [] } = {}) {
+                return this.multiStoreTransaction(['settings', 'templates', 'expenses'], 'readwrite', tx => {
+                    const settings = tx.objectStore('settings');
+                    const templateStore = tx.objectStore('templates');
+                    const expenseStore = tx.objectStore('expenses');
+                    let lastRequest = null;
+                    for (const entry of settingsEntries) {
+                        lastRequest = settings.put({ key: entry.key, value: toSerializableValue(entry.value) });
+                    }
+                    for (const template of templates) {
+                        lastRequest = templateStore.put(toSerializableValue(normalizeDefinitionRecord(template)));
+                    }
+                    for (const expense of expenses) {
+                        lastRequest = expenseStore.put(toSerializableValue(normalizeExpenseRecord(expense)));
+                    }
+                    return lastRequest;
+                });
+            },
+
             // --- NUKE OPTION ---
-            async factoryReset() {
+            // Resolves once the database is fully deleted. Rejects with
+            // ResetBlockedError when another tab/window is holding the database
+            // open. If that blocker disappears later and the deletion then
+            // completes, onLateCompletion runs so the visible app state can be
+            // reconciled with the deleted database instead of diverging silently.
+            async factoryReset(onLateCompletion = null) {
                 return new Promise((resolve, reject) => {
                     if (this.db) this.db.close();
                     this.db = null; // Prevent stale connection usage
                     const req = indexedDB.deleteDatabase(this.dbName);
-                    req.onsuccess = () => resolve();
-                    req.onerror = () => reject();
+                    let settled = false;
+                    req.onsuccess = () => {
+                        if (!settled) {
+                            settled = true;
+                            resolve();
+                        } else if (typeof onLateCompletion === 'function') {
+                            onLateCompletion();
+                        }
+                    };
+                    req.onerror = () => reject(req.error || new Error('IndexedDB deleteDatabase failed'));
+                    req.onblocked = () => {
+                        if (settled) return;
+                        settled = true;
+                        reject(Object.assign(
+                            new Error('Factory reset is blocked because Rushd is open in another tab or window.'),
+                            { name: 'ResetBlockedError' }
+                        ));
+                    };
                 });
             }
         };
@@ -5819,11 +6046,12 @@
             async upsertMonthEndSettlement(settlement) {
                 const normalizedSettlement = normalizeMonthEndSettlementRecord(settlement);
                 if (!normalizedSettlement) return null;
-                this.settings.monthEndSettlements = normalizeMonthEndSettlements([
+                const nextSettlements = normalizeMonthEndSettlements([
                     ...this.settings.monthEndSettlements.filter(item => item.previousMonthKey !== normalizedSettlement.previousMonthKey),
                     normalizedSettlement
                 ]);
-                await this.persistMonthEndSettlements();
+                await DB.setSetting('monthEndSettlements', nextSettlements);
+                this.settings.monthEndSettlements = nextSettlements;
                 return normalizedSettlement;
             },
 
@@ -5857,15 +6085,32 @@
                 const targetMonthKey = getMonthKey(referenceDate);
                 const surplus = Math.max(0, toFiniteNumber(summary?.surplus, 0));
                 if (!previousMonthKey || !targetMonthKey || surplus <= 0) return null;
-                const transaction = await this.addVaultTransaction({
-                    id: Core.UUID(),
+
+                // P0-04 retry safety: an existing settlement for this month means
+                // the money already moved; retrying must be a strict no-op.
+                const existingSettlement = this.getMonthEndSettlement(previousMonthKey);
+                if (existingSettlement) {
+                    const existingTransaction = (this.settings.vault?.transactions || [])
+                        .find(item => item.id === existingSettlement.vaultTransactionId) || null;
+                    return { transaction: existingTransaction, settlement: existingSettlement, alreadySettled: true };
+                }
+
+                // Heal a partially failed pre-fix settlement: if the vault credit
+                // already exists without its settlement record, record the
+                // settlement against it instead of moving money a second time.
+                const existingTransfer = (this.settings.vault?.transactions || [])
+                    .find(item => item.type === 'surplus_transfer' && item.sourceMonthKey === previousMonthKey) || null;
+                const transaction = existingTransfer || normalizeVaultTransactionRecord({
+                    id: `vault-settlement-${previousMonthKey}`,
                     amount: surplus,
                     date: referenceDate,
                     monthKey: targetMonthKey,
                     sourceMonthKey: previousMonthKey,
                     createdAt: new Date().toISOString()
                 });
-                const settlement = await this.upsertMonthEndSettlement({
+                if (!transaction) return null;
+
+                const settlement = normalizeMonthEndSettlementRecord({
                     previousMonthKey,
                     decision: 'vault',
                     targetMonthKey,
@@ -5873,8 +6118,31 @@
                     previousMonthBudget: summary.previousMonthBudget,
                     previousMonthSpent: summary.previousMonthSpent,
                     settledAt: new Date().toISOString(),
-                    vaultTransactionId: transaction?.id || ''
+                    vaultTransactionId: transaction.id
                 });
+                if (!settlement) return null;
+
+                const nextVault = existingTransfer
+                    ? this.settings.vault
+                    : normalizeVaultStateRecord({
+                        ...this.settings.vault,
+                        transactions: [transaction, ...((this.settings.vault?.transactions || [])
+                            .filter(item => item.id !== transaction.id))]
+                    });
+                const nextSettlements = normalizeMonthEndSettlements([
+                    ...this.settings.monthEndSettlements.filter(item => item.previousMonthKey !== previousMonthKey),
+                    settlement
+                ]);
+
+                // P0-04 atomicity: the vault credit and the settlement record
+                // commit together in one IndexedDB transaction or not at all.
+                await DB.setSettingsEntries([
+                    { key: 'vault', value: nextVault },
+                    { key: 'monthEndSettlements', value: nextSettlements }
+                ]);
+
+                this.settings.vault = nextVault;
+                this.settings.monthEndSettlements = nextSettlements;
                 return { transaction, settlement };
             },
 
@@ -6311,8 +6579,10 @@
                     lookup.get(expense.date).push(expense);
                     return lookup;
                 }, new Map());
+                // P0-01: generated activity that was already paid is a historical money
+                // fact. Reconciliation must never rebuild, rewrite, or delete it.
                 const mutableExpenseIds = new Set(rangeExpenses
-                    .filter(expense => expense.source === 'template' && expense.templateProtected === false)
+                    .filter(expense => expense.source === 'template' && expense.templateProtected === false && !expense.isPaid)
                     .map(expense => expense.id));
                 const usedExpenseIds = new Set();
                 const toCreate = [];
@@ -6377,19 +6647,29 @@
                     : getDefinitionProfileId({ profileId: this.settings.activeTemplateProfileId });
                 const plan = await this.buildTemplateApplyPlan(normalizedEffectiveDate, { profileId });
 
-                for (const expense of plan.toDelete) {
-                    await DB.deleteExpense(expense.id);
-                }
+                // P0-02: deletes, updates, creates, and the monthly assignment all
+                // commit in one atomic IndexedDB transaction or not at all.
+                const normalizedAssignment = normalizeMonthlyTemplateAssignmentRecord({
+                    monthKey: getMonthKey(normalizedEffectiveDate),
+                    assignedProfileId: profileId,
+                    effectiveDate: normalizedEffectiveDate
+                });
+                const nextAssignments = normalizedAssignment
+                    ? normalizeMonthlyTemplateAssignments([
+                        ...this.settings.monthlyTemplateAssignments.filter(assignment => assignment.monthKey !== normalizedAssignment.monthKey),
+                        normalizedAssignment
+                    ])
+                    : this.settings.monthlyTemplateAssignments;
 
-                for (const expense of plan.toUpdate) {
-                    await DB.saveExpense(expense);
-                }
+                await DB.applyExpenseWritePlan({
+                    deletes: plan.toDelete.map(expense => expense.id),
+                    puts: [...plan.toUpdate, ...plan.toCreate],
+                    settingsEntries: normalizedAssignment
+                        ? [{ key: 'monthlyTemplateAssignments', value: nextAssignments }]
+                        : []
+                });
 
-                for (const expense of plan.toCreate) {
-                    await DB.saveExpense(expense);
-                }
-
-                await this.upsertMonthlyTemplateAssignment(normalizedEffectiveDate, profileId);
+                this.settings.monthlyTemplateAssignments = nextAssignments;
 
                 await this.recalcGlobalStats();
 
@@ -6417,6 +6697,9 @@
 
         // Expose Store for debugging
         window.MicroSaveStore = Store;
+        // Expose the storage layer and import gate for debugging and safety tests
+        window.MicroSaveDB = DB;
+        window.RushdImportValidation = { validateBackupPayload };
 
     </script>
     <script>
@@ -9766,25 +10049,30 @@
                     this.addModal.mode = 'template';
                     this.addModal.open = true;
                 },
+                async buildBackupSnapshot() {
+                    const data = {
+                        version: '3.1',
+                        exportedAt: new Date().toISOString(),
+                        settings: this.store.settings,
+                        templates: this.store.templates,
+                        expenses: await DB.getAllExpenses()
+                    };
+                    return JSON.stringify(data, null, 2);
+                },
+                downloadBackupFile(jsonStr) {
+                    const blob = new Blob([jsonStr], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `rushd-backup-${new Date().toISOString().split('T')[0]}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                },
                 async exportData() {
                     try {
-                        const data = {
-                            version: '3.1',
-                            exportedAt: new Date().toISOString(),
-                            settings: this.store.settings,
-                            templates: this.store.templates,
-                            expenses: await DB.getAllExpenses()
-                        };
-                        const jsonStr = JSON.stringify(data, null, 2);
-                        const blob = new Blob([jsonStr], { type: 'application/json' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = `rushd-backup-${new Date().toISOString().split('T')[0]}.json`;
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                        URL.revokeObjectURL(url);
+                        this.downloadBackupFile(await this.buildBackupSnapshot());
                     } catch (err) {
                         console.error('Export failed:', err);
                         alert(this.t.exportFailed);
@@ -9796,74 +10084,85 @@
 
                     const reader = new FileReader();
                     reader.onload = async (e) => {
+                        let data;
                         try {
-                            const data = JSON.parse(e.target.result);
-
-                            if (!data.expenses || !Array.isArray(data.expenses)) {
-                                throw new Error(this.t.invalidBackup);
-                            }
-
-                            this.showConfirmDialog(
-                                this.t.importQ,
-                                this.t.importMsg,
-                                async () => {
-                                    try {
-                                        if (data.settings) {
-                                            await DB.setSetting('baseAllowance', data.settings.baseAllowance);
-                                            await DB.setSetting('safeToSpendMode', data.settings.safeToSpendMode);
-                                            await DB.setSetting('motionLevel', normalizeMotionLevel(data.settings.motionLevel));
-                                            if (data.settings.theme) {
-                                                await DB.setSetting('theme', data.settings.theme);
-                                            }
-                                            if (Array.isArray(data.settings.templateProfiles)) {
-                                                await DB.setSetting('templateProfiles', data.settings.templateProfiles);
-                                            }
-                                            if (data.settings.activeTemplateProfileId) {
-                                                await DB.setSetting('activeTemplateProfileId', data.settings.activeTemplateProfileId);
-                                            }
-                                            if (Array.isArray(data.settings.monthlyTemplateAssignments)) {
-                                                await DB.setSetting('monthlyTemplateAssignments', data.settings.monthlyTemplateAssignments);
-                                            }
-                                            if (data.settings.vault) {
-                                                await DB.setSetting('vault', data.settings.vault);
-                                            }
-                                            if (Array.isArray(data.settings.monthEndSettlements)) {
-                                                await DB.setSetting('monthEndSettlements', data.settings.monthEndSettlements);
-                                            }
-                                        }
-
-                                        if (data.templates && Array.isArray(data.templates)) {
-                                            for (const tmpl of data.templates) {
-                                                await DB.saveTemplate(tmpl);
-                                            }
-                                        }
-
-                                        for (const exp of data.expenses) {
-                                            await DB.saveExpense(exp);
-                                        }
-
-                                        localStorage.setItem('rushd_import_success', '1');
-                                        await this.store.init();
-                                        this.applyTheme(this.store.settings.theme);
-                                        this.applyMotionProfile(this.store.settings.motionLevel);
-                                        this.dateWindow = this.core.Date.generateWindow(this.core.Date.getTodayISO(), 60, 60, this.t._locale);
-                                        this.$nextTick(() => this.centerDateScroller(this.store.currentDate));
-                                        this.currentView = 'dashboard';
-                                        this.showToast(this.t.importSuccess);
-                                        localStorage.removeItem('rushd_import_success');
-                                    } catch (err) {
-                                        console.error('Import save failed:', err);
-                                        alert(this.t.importFailed + err.message);
-                                    }
-                                },
-                                this.t.importBtn,
-                                'brand'
-                            );
-
+                            data = JSON.parse(e.target.result);
                         } catch (err) {
                             console.error('Import Error:', err);
-                            alert(this.t.importFailed + err.message);
+                            alert(this.t.invalidBackup);
+                            return;
                         }
+
+                        // P1-10: strict structural validation rejects malformed
+                        // backups before any canonical store is touched.
+                        const validation = validateBackupPayload(data);
+                        if (!validation.ok) {
+                            console.error('Import rejected, invalid backup structure:', validation.reason);
+                            alert(this.t.invalidBackup);
+                            return;
+                        }
+
+                        this.showConfirmDialog(
+                            this.t.importQ,
+                            this.t.importMsg,
+                            async () => {
+                                try {
+                                    // P0-03: settings, templates, and expenses are
+                                    // written in one atomic IndexedDB transaction,
+                                    // so a failure cannot leave a partial import.
+                                    const settingsEntries = [];
+                                    if (data.settings) {
+                                        const importedSettings = data.settings;
+                                        if (importedSettings.baseAllowance !== undefined) {
+                                            settingsEntries.push({ key: 'baseAllowance', value: importedSettings.baseAllowance });
+                                        }
+                                        if (importedSettings.safeToSpendMode !== undefined) {
+                                            settingsEntries.push({ key: 'safeToSpendMode', value: importedSettings.safeToSpendMode });
+                                        }
+                                        settingsEntries.push({ key: 'motionLevel', value: normalizeMotionLevel(importedSettings.motionLevel) });
+                                        if (importedSettings.theme) {
+                                            settingsEntries.push({ key: 'theme', value: importedSettings.theme });
+                                        }
+                                        if (Array.isArray(importedSettings.templateProfiles)) {
+                                            settingsEntries.push({ key: 'templateProfiles', value: importedSettings.templateProfiles });
+                                        }
+                                        if (importedSettings.activeTemplateProfileId) {
+                                            settingsEntries.push({ key: 'activeTemplateProfileId', value: importedSettings.activeTemplateProfileId });
+                                        }
+                                        if (Array.isArray(importedSettings.monthlyTemplateAssignments)) {
+                                            settingsEntries.push({ key: 'monthlyTemplateAssignments', value: importedSettings.monthlyTemplateAssignments });
+                                        }
+                                        if (importedSettings.vault) {
+                                            settingsEntries.push({ key: 'vault', value: importedSettings.vault });
+                                        }
+                                        if (Array.isArray(importedSettings.monthEndSettlements)) {
+                                            settingsEntries.push({ key: 'monthEndSettlements', value: importedSettings.monthEndSettlements });
+                                        }
+                                    }
+
+                                    await DB.restoreBackupRecords({
+                                        settingsEntries,
+                                        templates: Array.isArray(data.templates) ? data.templates : [],
+                                        expenses: data.expenses
+                                    });
+
+                                    localStorage.setItem('rushd_import_success', '1');
+                                    await this.store.init();
+                                    this.applyTheme(this.store.settings.theme);
+                                    this.applyMotionProfile(this.store.settings.motionLevel);
+                                    this.dateWindow = this.core.Date.generateWindow(this.core.Date.getTodayISO(), 60, 60, this.t._locale);
+                                    this.$nextTick(() => this.centerDateScroller(this.store.currentDate));
+                                    this.currentView = 'dashboard';
+                                    this.showToast(this.t.importSuccess);
+                                    localStorage.removeItem('rushd_import_success');
+                                } catch (err) {
+                                    console.error('Import save failed:', err);
+                                    alert(this.t.importFailed + (err && err.message ? err.message : ''));
+                                }
+                            },
+                            this.t.importBtn,
+                            'brand'
+                        );
                     };
                     reader.readAsText(file);
                     event.target.value = '';
@@ -9873,18 +10172,51 @@
                         this.t.factoryResetQ,
                         this.t.factoryResetMsg,
                         async () => {
+                            // P0-08: export-first reset. If the safety backup cannot
+                            // be created, the reset is cancelled and data stays intact.
                             try {
-                                await DB.factoryReset();
-                            } catch (e) {
-                                console.warn('Factory reset error (non-fatal):', e);
+                                this.downloadBackupFile(await this.buildBackupSnapshot());
+                            } catch (err) {
+                                console.error('Reset safety export failed:', err);
+                                this.showConfirmDialog(this.t.resetFailedTitle, this.t.resetBackupFailed, () => {}, this.t.dialogOk, 'brand');
+                                return;
                             }
-                            localStorage.removeItem('rushd_import_success');
-                            localStorage.removeItem('microsave_import_success');
-                            localStorage.removeItem('rushd_theme');
-                            localStorage.removeItem('rushd_motion');
+
+                            try {
+                                await DB.factoryReset(() => {
+                                    // A blocked deletion completed after the error was
+                                    // shown: finish the reset so the visible app state
+                                    // matches the deleted database.
+                                    this.clearRushdLocalState();
+                                    location.reload();
+                                });
+                            } catch (e) {
+                                console.error('Factory reset failed:', e);
+                                const message = e && e.name === 'ResetBlockedError'
+                                    ? this.t.resetBlockedError
+                                    : this.t.resetFailed;
+                                this.showConfirmDialog(this.t.resetFailedTitle, message, () => {}, this.t.dialogOk, 'brand');
+                                return;
+                            }
+
+                            this.clearRushdLocalState();
                             location.reload();
                         }
                     );
+                },
+                clearRushdLocalState() {
+                    // P0-08: remove every Rushd-owned preference so the reset is
+                    // complete; language, calendar, and prompt deferrals are included.
+                    const keysToRemove = [];
+                    for (let i = 0; i < localStorage.length; i += 1) {
+                        const key = localStorage.key(i);
+                        if (key && (key.startsWith('rushd_') || key.startsWith('microsave_') || key === ONBOARDING_STATE_KEY)) {
+                            keysToRemove.push(key);
+                        }
+                    }
+                    for (const key of keysToRemove) {
+                        localStorage.removeItem(key);
+                    }
                 },
 
                 // --- LANGUAGE ---
