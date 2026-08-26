@@ -48,17 +48,19 @@ const paidOnlySurplus = 1000 - 100;
 const reservationAwareSurplus = 1000 - 100 - 500;
 assert.equal(paidOnlySurplus, 900);
 assert.equal(reservationAwareSurplus, 400);
-assert.match(source, /if \(expense\.isPaid\) \{\s*actualSpent \+= expense\.actualPaid;/);
+assert.match(source, /} else if \(\(expense\.classification \|\| 'essential'\) === 'essential'\) \{\s*unpaidReserved \+= expense\.expectedCost;/);
+assert.match(source, /surplus: Math\.max\(0, budget - actualSpent - unpaidReserved\)/);
 
-const reusedBalance = 100;
-assert.deepEqual([100, 100].map((target) => Math.min(reusedBalance, target)), [100, 100]);
+assert.match(source, /const progressAmount = Math\.min\(Math\.max\(0, toFiniteNumber\(goal\.allocatedAmount, 0\)\), targetAmount\);/);
+assert.deepEqual([60, 40].map((allocated) => Math.min(allocated, 100)), [60, 40]);
 assert.match(source, /return this\.vaultGoals\.map\(goal =>/);
 
 const legacyVaultState = legacyVault.backup.settings.vault;
 const transactionBalance = legacyVaultState.transactions.reduce((sum, item) => sum + item.amount, 0);
 assert.equal(legacyVaultState.balance, 650);
 assert.equal(transactionBalance, 100);
-assert.match(source, /transactions\.length > 0 \? computedBalance : fallbackBalance/);
+assert.match(source, /openingBalance \+ computedBalance/);
+assert.match(source, /transactions\.length > 0 \? legacyOpeningBalance : Math\.max\(0, toFiniteNumber\(vault\?\.balance, computedBalance\)\)/);
 
 const instant = new Date(boundary.timezone_cases[0].instant);
 assert.equal(instant.toISOString().split('T')[0], '2026-01-01');
@@ -69,7 +71,7 @@ assert.equal(0.1 + 0.2, 0.30000000000000004);
 assert.match(source, /actualSpent \+= expense\.actualPaid/);
 
 assert.match(source, /return toFiniteNumber\(this\.settings\.baseAllowance, 1000\) \+ this\.getBudgetCarryoverForMonth\(monthKey\)/);
-assert.match(source, /getBudgetForMonth\(getMonthKey\(Core\.Date\.getTodayISO\(\)\)\)/);
+assert.match(source, /return toFiniteNumber\(this\.statistics\.safeToSpend, 0\)/);
 assert.equal(900 / 4, 225);
 assert.match(source, /return monthly \/ 4/);
 
@@ -86,6 +88,7 @@ assert.equal(Number('-1') < 0, true);
 assert.equal(Number('1.234'), 1.234);
 assert.equal(Number.isFinite(Number('Infinity')), false);
 assert.equal(Number('١٢٫٥٠'), Number.NaN);
+assert.match(source, /window\.RushdMoneyInput = \{ parseMoneyInput \}/);
 
 const weakCandidate = malformed.malformed_backup_candidates.find((item) => item.id === 'weak-schema-accepted').payload;
 assert.equal(Array.isArray(weakCandidate.expenses), true);

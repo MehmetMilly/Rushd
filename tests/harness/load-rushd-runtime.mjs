@@ -166,6 +166,7 @@ export async function loadRushdRuntime(options = {}) {
         DB: context.MicroSaveDB,
         appOptions: captured.appOptions,
         validateBackupPayload: context.RushdImportValidation?.validateBackupPayload,
+        RushdMoneyInput: context.RushdMoneyInput,
         TRANSLATIONS: context.TRANSLATIONS,
         anchorClicks
     };

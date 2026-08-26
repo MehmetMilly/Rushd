@@ -70,8 +70,8 @@ async function close() {
 
   const modal = page.locator('.modal-floating-card:visible');
   await modal.waitFor({ state: 'visible', timeoutMs: 10_000 });
-  await modal.locator('input[type="text"]:visible').fill(expenseName);
-  await modal.locator('input[type="number"]:visible').first().fill('42');
+  await modal.locator('input[placeholder="تكسي، غداء..."]:visible').fill(expenseName);
+  await modal.locator('input[inputmode="decimal"]:visible').first().fill('٤٢');
   await modal.getByText('إضافة إلى اليوم', { exact: false }).click();
   await page.waitForTimeout(1_000);
 

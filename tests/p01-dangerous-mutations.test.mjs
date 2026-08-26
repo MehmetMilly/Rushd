@@ -124,6 +124,70 @@ async function databaseSnapshot(runtime) {
     const runtime = await loadRushdRuntime();
     await runtime.DB.connect();
     await runtime.Store.init();
+    const methods = runtime.captured.mixins.find(mixin => mixin.methods?.saveSettings).methods;
+    const toasts = [];
+    const controller = {
+        store: runtime.Store,
+        t: { invalidMoneyInput: 'invalid money' },
+        showToast(message) { toasts.push(message); }
+    };
+
+    controller.store.settings.baseAllowance = '١٬٢٣٤٫٥٠';
+    await methods.saveSettings.call(controller);
+    assert.equal(controller.store.settings.baseAllowance, 1234.5);
+    assert.equal((await runtime.DB.getSetting('baseAllowance', 0)), 1234.5);
+    assert.equal(toasts.length, 0);
+
+    controller.store.settings.baseAllowance = '-5';
+    await methods.saveSettings.call(controller);
+    assert.equal(controller.store.settings.baseAllowance, '-5');
+    assert.equal((await runtime.DB.getSetting('baseAllowance', 0)), 1234.5);
+    assert.equal(toasts.at(-1), 'invalid money');
+}
+
+{
+    const runtime = await loadRushdRuntime();
+    await runtime.DB.connect();
+    await runtime.Store.init();
+    await runtime.Store.addExpense({
+        id: 'payment-validation',
+        name: 'FAKE Payment',
+        expectedCost: 20,
+        actualPaid: 0,
+        isPaid: false,
+        category: 'food',
+        classification: 'essential',
+        source: 'manual',
+        date: '2026-08-25'
+    });
+    const expense = await runtime.DB.getAllExpenses()
+        .then(expenses => expenses.find(item => item.id === 'payment-validation'));
+    const methods = runtime.captured.mixins.find(mixin => mixin.methods?.commitPayment).methods;
+    const controller = {
+        store: runtime.Store,
+        payModal: { amount: '-1', item: expense },
+        t: { invalidMoneyInput: 'invalid payment' },
+        showToast(message) { controller.toast = message; },
+        triggerConfetti() { controller.confetti = true; }
+    };
+
+    await methods.commitPayment.call(controller);
+    assert.equal(controller.toast, 'invalid payment');
+    assert.equal(expense.isPaid, false);
+    assert.equal(expense.actualPaid, 0);
+
+    controller.payModal.amount = '١٢٫٥٠';
+    await methods.commitPayment.call(controller);
+    assert.equal(expense.isPaid, true);
+    assert.equal(expense.actualPaid, 12.5);
+    assert.equal(controller.payModal.open, false);
+}
+
+{
+    const runtime = await loadRushdRuntime();
+    await runtime.DB.connect();
+    await runtime.Store.init();
+    runtime.Store.settings.baseAllowance = 1000;
     const vault = { balance: 100, transactions: [], goals: [] };
     runtime.Store.settings.vault = vault;
     runtime.Store.settings.monthEndSettlements = [];
@@ -203,6 +267,135 @@ async function databaseSnapshot(runtime) {
     assert.equal(runtime.captured.reloads, 1);
     assert.equal(runtime.localStorage.getItem('rushd_lang'), null);
     assert.equal(runtime.localStorage.getItem('unrelated'), 'keep');
+}
+
+{
+    const runtime = await loadRushdRuntime();
+    const parse = runtime.RushdMoneyInput.parseMoneyInput;
+    assert.equal(parse('12.50'), 12.5);
+    assert.equal(parse('١٢٫٥٠'), 12.5);
+    assert.equal(parse('١٬٢٣٤٫٥٠'), 1234.5);
+    assert.equal(parse('1,234.50'), 1234.5);
+    for (const value of ['-1', 'NaN', 'Infinity', '1.234', '1000000000', '1,23', '١٢٣٬٤٥٦٫٧٨٩']) {
+        assert.equal(parse(value), null, value);
+    }
+}
+
+{
+    const runtime = await loadRushdRuntime();
+    await runtime.DB.connect();
+    await runtime.Store.init();
+    runtime.Store.settings.baseAllowance = 1000;
+    await runtime.Store.addExpense({
+        id: 'reserved-august',
+        name: 'FAKE reserved rent',
+        expectedCost: 500,
+        actualPaid: 0,
+        isPaid: false,
+        category: 'home',
+        classification: 'essential',
+        source: 'manual',
+        date: '2026-08-10'
+    });
+    await runtime.Store.addExpense({
+        id: 'paid-august',
+        name: 'FAKE paid food',
+        expectedCost: 100,
+        actualPaid: 100,
+        isPaid: true,
+        category: 'food',
+        classification: 'essential',
+        source: 'manual',
+        date: '2026-08-10'
+    });
+    runtime.Store.settings.baseAllowance = 1000;
+    const snapshot = await runtime.Store.getMonthFinancialSnapshot('2026-08');
+    assert.equal(snapshot.unpaidReserved, 500);
+    assert.equal(snapshot.surplus, 400);
+}
+
+{
+    const fixture = await readFixture('legacy-vault');
+    const runtime = await loadRushdRuntime();
+    await runtime.DB.connect();
+    await seedStores(runtime, fixture);
+    await runtime.Store.init();
+    assert.equal(runtime.Store.settings.vault.openingBalance, 550);
+    assert.equal(runtime.Store.settings.vault.balance, 650);
+    const persisted = (await databaseSnapshot(runtime)).stores.settings
+        .find(({ key }) => key === 'vault').value;
+    assert.equal(persisted.openingBalance, 550);
+}
+
+{
+    const fixture = await readFixture('populated');
+    const runtime = await loadRushdRuntime();
+    await runtime.DB.connect();
+    await seedStores(runtime, fixture);
+    await runtime.Store.init();
+    runtime.Store.settings.vault.goals[0].allocatedAmount = 60;
+    runtime.Store.settings.vault.goals[1].allocatedAmount = 40;
+    const getter = runtime.captured.mixins
+        .find(mixin => mixin.computed?.vaultGoalsWithProgress)
+        .computed.vaultGoalsWithProgress;
+    const progress = getter.call({ vaultGoals: runtime.Store.settings.vault.goals });
+    assert.deepEqual(progress.map(goal => goal.progressAmount), [60, 40]);
+    assert.deepEqual(progress.map(goal => goal.progressPercentage), [5, (40 / 450) * 100]);
+}
+
+{
+    const runtime = await loadRushdRuntime();
+    await runtime.DB.connect();
+    await runtime.Store.init();
+    runtime.Store.currentDate = '2025-01-15';
+    await runtime.Store.addExpense({
+        id: 'january-expense',
+        name: 'FAKE January expense',
+        expectedCost: 100,
+        actualPaid: 100,
+        isPaid: true,
+        category: 'food',
+        classification: 'essential',
+        source: 'manual',
+        date: '2025-01-15'
+    });
+    runtime.Store.settings.baseAllowance = 1000;
+    await runtime.Store.refreshStatistics('2025-01-15');
+    assert.equal(runtime.Store.statistics.monthKey, '2025-01');
+    assert.equal(runtime.Store.safeToSpend, 900);
+}
+
+{
+    const runtime = await loadRushdRuntime();
+    await runtime.DB.connect();
+    await runtime.Store.init();
+    runtime.Store.settings.baseAllowance = 0;
+    runtime.Store.settings.vault = {
+        balance: 70,
+        openingBalance: 0,
+        transactions: [{
+            id: 'orphan-transfer',
+            type: 'surplus_transfer',
+            amount: 70,
+            date: '2026-08-01',
+            monthKey: '2026-08',
+            sourceMonthKey: '2026-07',
+            createdAt: '2026-08-01T09:00:00.000Z'
+        }],
+        goals: []
+    };
+    runtime.Store.monthEndSettlements = [];
+    const summary = {
+        previousMonthKey: '2026-07',
+        previousMonthBudget: 100,
+        previousMonthSpent: 10,
+        surplus: 90
+    };
+    const recovered = await runtime.Store.settleMonthEndToVault(summary, '2026-08-01');
+    assert.equal(recovered.alreadySettled, undefined);
+    assert.equal(recovered.transaction.amount, 70);
+    assert.equal(recovered.settlement.surplus, 70);
+    assert.equal(recovered.settlement.vaultTransactionId, 'orphan-transfer');
 }
 
 console.log('Rushd P01 dangerous-mutation regressions passed.');

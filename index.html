@@ -2734,6 +2734,8 @@
                 vaultNewGoal: 'هدف جديد',
                 goalNamePlaceholder: 'طوارئ، سفر...',
                 targetAmount: 'المبلغ المستهدف',
+                allocatedAmount: 'المخصص',
+                vaultAllocatedOf: 'من أصل مخصص',
                 addGoal: 'إضافة هدف',
                 currentProgress: 'التقدم الحالي',
                 progressPercentage: 'نسبة التقدم',
@@ -2822,6 +2824,7 @@
                 exportFailed: 'فشل التصدير. تحقق من وحدة التحكم.',
                 importFailed: 'فشل الاستيراد: ',
                 invalidBackup: 'صيغة النسخة الاحتياطية غير صالحة',
+                invalidMoneyInput: 'أدخل مبلغًا صالحًا حتى منزلتين عشريتين',
                 templateSaveFailed: 'فشل حفظ القالب: ',
                 flexibleItemRequired: 'اختر عنصراً مرناً أولاً.',
                 applyTemplatesDone: 'تم تطبيق القوالب.',
@@ -3011,6 +3014,8 @@
                 vaultNewGoal: 'New Goal',
                 goalNamePlaceholder: 'Emergency, Travel...',
                 targetAmount: 'Target Amount',
+                allocatedAmount: 'Allocated',
+                vaultAllocatedOf: 'of allocated',
                 addGoal: 'Add Goal',
                 currentProgress: 'Current Progress',
                 progressPercentage: 'Progress %',
@@ -3098,6 +3103,7 @@
                 exportFailed: 'Export failed. Check console for details.',
                 importFailed: 'Failed to import: ',
                 invalidBackup: 'Invalid backup file format',
+                invalidMoneyInput: 'Enter a valid amount with up to two decimals',
                 templateSaveFailed: 'Failed to save template: ',
                 applyTemplatesDone: 'Templates applied.',
                 noChanges: 'No changes.',
@@ -3490,7 +3496,7 @@
                                 <div class="font-bold">{{ t.monthlyAllowance }}</div>
                                 <div class="text-xs text-secondary">{{ t.baseFunds }}</div>
                             </div>
-                            <input type="number" v-model.number="store.settings.baseAllowance" @change="saveSettings"
+                            <input type="text" inputmode="decimal" v-model="store.settings.baseAllowance" @change="saveSettings"
                                 class="bg-surface-1 border border-glass text-end font-mono p-3 rounded-lg w-32 focus:border-brand outline-none text-white">
                         </div>
                         <!-- Weekly/Monthly Safe to Spend toggle -->
@@ -4099,7 +4105,7 @@
                                                     <div class="vault-goal-name truncate">{{ goal.name }}</div>
                                                     <div class="vault-goal-meta mt-0.5" dir="ltr" style="unicode-bidi: isolate">
                                                         {{ formatCompactAmount(goal.progressAmount) }}
-                                                        <span style="color: var(--c-text-tertiary)">{{ t.vaultOf }}</span>
+                                                        <span style="color: var(--c-text-tertiary)">{{ t.vaultAllocatedOf }}</span>
                                                         {{ formatCompactAmount(goal.targetAmount) }} SAR
                                                     </div>
                                                 </div>
@@ -4130,8 +4136,12 @@
                                     <input type="text" v-model.trim="vaultGoalForm.name" :placeholder="t.goalNamePlaceholder"
                                         class="vault-add-input" style="flex: 2; min-width: 100px;"
                                         @keydown.enter.prevent="addVaultGoal">
-                                    <input type="number" v-model.number="vaultGoalForm.targetAmount" min="0" step="0.01"
+                                    <input type="text" inputmode="decimal" v-model="vaultGoalForm.targetAmount"
                                         :placeholder="t.targetAmount"
+                                        class="vault-add-input" style="flex: 1; min-width: 90px; font-family: var(--font-mono);"
+                                        @keydown.enter.prevent="addVaultGoal">
+                                    <input type="text" inputmode="decimal" v-model="vaultGoalForm.allocatedAmount"
+                                        :placeholder="t.allocatedAmount"
                                         class="vault-add-input" style="flex: 1; min-width: 90px; font-family: var(--font-mono);"
                                         @keydown.enter.prevent="addVaultGoal">
                                 </div>
@@ -4316,14 +4326,14 @@
                         <label class="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1 block">{{
                             addModal.mode === 'flexibleDefinition' ? t.defaultAmount : t.expectedCost }}
                             (SAR)</label>
-                        <input type="number" v-model.number="addModal.form.cost" placeholder="0.00"
+                        <input type="text" inputmode="decimal" v-model="addModal.form.cost" placeholder="0.00"
                             class="w-full p-3 bg-surface-1 border border-glass rounded-lg text-white font-mono text-lg focus:border-brand outline-none">
                     </div>
 
                     <div v-if="addModal.mode === 'flexibleDefinition'">
                         <label class="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1 block">{{
                             t.monthlyBudget }} (SAR)</label>
-                        <input type="number" v-model.number="addModal.form.monthlyBudget" placeholder="0.00"
+                        <input type="text" inputmode="decimal" v-model="addModal.form.monthlyBudget" placeholder="0.00"
                             class="w-full p-3 bg-surface-1 border border-glass rounded-lg text-white font-mono text-lg focus:border-brand outline-none">
                     </div>
 
@@ -4609,7 +4619,7 @@
                     <div v-if="onboardingModal.step === 1">
                         <label class="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1 block">{{
                             t.monthlyAllowance }}</label>
-                        <input type="number" v-model="onboardingModal.budget"
+                        <input type="text" inputmode="decimal" v-model="onboardingModal.budget"
                             class="w-full p-3 bg-surface-1 border border-glass rounded-lg text-white text-sm focus:border-brand outline-none">
                     </div>
 
@@ -4693,7 +4703,7 @@
                             </div>
                             <div class="grid grid-cols-1 sm:grid-cols-4 gap-2">
                                 <input type="text" v-model.trim="onboardingModal.workdayDraft.name" class="sm:col-span-2 w-full p-3 bg-surface-2 border border-glass rounded-lg text-white text-sm focus:border-brand outline-none" :placeholder="t.placeholder_name">
-                                <input type="number" v-model="onboardingModal.workdayDraft.cost" class="w-full p-3 bg-surface-2 border border-glass rounded-lg text-white text-sm focus:border-brand outline-none" :placeholder="t.expectedCost">
+                                <input type="text" inputmode="decimal" v-model="onboardingModal.workdayDraft.cost" class="w-full p-3 bg-surface-2 border border-glass rounded-lg text-white text-sm focus:border-brand outline-none" :placeholder="t.expectedCost">
                                 <select v-model="onboardingModal.workdayDraft.category" class="glass-input w-full">
                                     <option v-for="cat in categoryOptions" :key="cat.id" :value="cat.id">{{ cat.label }}</option>
                                 </select>
@@ -4722,7 +4732,7 @@
                             </div>
                             <div class="grid grid-cols-1 sm:grid-cols-4 gap-2">
                                 <input type="text" v-model.trim="onboardingModal.offdayDraft.name" class="sm:col-span-2 w-full p-3 bg-surface-2 border border-glass rounded-lg text-white text-sm focus:border-brand outline-none" :placeholder="t.placeholder_name">
-                                <input type="number" v-model="onboardingModal.offdayDraft.cost" class="w-full p-3 bg-surface-2 border border-glass rounded-lg text-white text-sm focus:border-brand outline-none" :placeholder="t.expectedCost">
+                                <input type="text" inputmode="decimal" v-model="onboardingModal.offdayDraft.cost" class="w-full p-3 bg-surface-2 border border-glass rounded-lg text-white text-sm focus:border-brand outline-none" :placeholder="t.expectedCost">
                                 <select v-model="onboardingModal.offdayDraft.category" class="glass-input w-full">
                                     <option v-for="cat in categoryOptions" :key="cat.id" :value="cat.id">{{ cat.label }}</option>
                                 </select>
@@ -4751,7 +4761,7 @@
                             </div>
                             <div class="grid grid-cols-1 sm:grid-cols-5 gap-2">
                                 <input type="text" v-model.trim="onboardingModal.monthlyDraft.name" class="sm:col-span-2 w-full p-3 bg-surface-2 border border-glass rounded-lg text-white text-sm focus:border-brand outline-none" :placeholder="t.placeholder_name">
-                                <input type="number" v-model="onboardingModal.monthlyDraft.cost" class="w-full p-3 bg-surface-2 border border-glass rounded-lg text-white text-sm focus:border-brand outline-none" :placeholder="t.expectedCost">
+                                <input type="text" inputmode="decimal" v-model="onboardingModal.monthlyDraft.cost" class="w-full p-3 bg-surface-2 border border-glass rounded-lg text-white text-sm focus:border-brand outline-none" :placeholder="t.expectedCost">
                                 <select v-model="onboardingModal.monthlyDraft.category" class="glass-input w-full">
                                     <option v-for="cat in categoryOptions" :key="cat.id" :value="cat.id">{{ cat.label }}</option>
                                 </select>
@@ -4816,8 +4826,7 @@
                     <!-- Cost Input -->
                     <div class="edit-input-group">
                         <label class="edit-input-label">{{ t.expectedCost }} (SAR)</label>
-                        <input type="number" v-model="editModal.form.cost" class="glass-input w-full" placeholder="0.00"
-                            step="0.01">
+                        <input type="text" inputmode="decimal" v-model="editModal.form.cost" class="glass-input w-full" placeholder="0.00">
                     </div>
 
                     <!-- Date Input (Hidden for Templates) -->
@@ -4959,6 +4968,40 @@
         const toFiniteNumber = (value, fallback = 0) => {
             const parsed = Number(value);
             return Number.isFinite(parsed) ? parsed : fallback;
+        };
+
+        const MAX_MONEY_INPUT = 999999999.99;
+        const MONEY_DECIMAL_PATTERN = /^(?:\d+)(?:\.\d{1,2})?$/;
+
+        const parseMoneyInput = (value) => {
+            if (typeof value === 'number') {
+                if (!Number.isFinite(value)) return null;
+                return MONEY_DECIMAL_PATTERN.test(String(value)) && value >= 0 && value <= MAX_MONEY_INPUT
+                    ? value
+                    : null;
+            }
+            if (typeof value !== 'string') return null;
+
+            const normalized = value.trim()
+                .replace(/[\u060C\u066C]/g, ',')
+                .replace(/\u066B/g, '.')
+                .replace(/[\u0660-\u0669\u06F0-\u06F9]/g, digit => String(
+                    digit.charCodeAt(0) >= 0x06F0
+                        ? digit.charCodeAt(0) - 0x06F0
+                        : digit.charCodeAt(0) - 0x0660
+                ));
+            if (!normalized || /[^\d.,]/.test(normalized) || (normalized.match(/\./g) || []).length > 1) return null;
+
+            if (normalized.includes(',') && !/^(?:0|[1-9]\d{0,2})(?:,\d{3})+(?:\.\d{1,2})?$/.test(normalized)) return null;
+
+            const amount = Number(normalized.replace(/,/g, ''));
+            const canonicalNormalized = normalized.replace(/,/g, '');
+            return MONEY_DECIMAL_PATTERN.test(canonicalNormalized)
+                && Number.isFinite(amount)
+                && amount >= 0
+                && amount <= MAX_MONEY_INPUT
+                ? amount
+                : null;
         };
 
         const normalizeMotionLevel = (value) => MOTION_LEVEL_VALUES.includes(value) ? value : 'auto';
@@ -5254,11 +5297,13 @@
                 ? goal.name.trim()
                 : '';
             const targetAmount = Math.max(0, toFiniteNumber(goal.targetAmount ?? goal.target, 0));
+            const allocatedAmount = Math.max(0, toFiniteNumber(goal.allocatedAmount ?? goal.allocation, 0));
             if (!id || !name || targetAmount <= 0) return null;
             return {
                 id,
                 name,
-                targetAmount
+                targetAmount,
+                allocatedAmount: Math.min(targetAmount, allocatedAmount)
             };
         };
 
@@ -5302,10 +5347,16 @@
                 .sort((left, right) => String(right.createdAt || right.date).localeCompare(String(left.createdAt || left.date)));
             const goals = normalizeVaultGoals(vault?.goals);
             const computedBalance = transactions.reduce((sum, transaction) => sum + toFiniteNumber(transaction.amount, 0), 0);
-            const fallbackBalance = toFiniteNumber(vault?.balance, computedBalance);
+            const legacyOpeningBalance = Math.max(
+                0,
+                toFiniteNumber(vault?.balance, computedBalance) - computedBalance
+            );
+            const fallbackOpening = transactions.length > 0 ? legacyOpeningBalance : Math.max(0, toFiniteNumber(vault?.balance, computedBalance));
+            const openingBalance = Math.max(0, toFiniteNumber(vault?.openingBalance, fallbackOpening));
             return {
-                balance: Math.max(0, transactions.length > 0 ? computedBalance : fallbackBalance),
+                balance: openingBalance + computedBalance,
                 transactions,
+                openingBalance,
                 goals
             };
         };
@@ -5430,7 +5481,7 @@
         // Valid Rushd exports, including legacy local backups, still pass.
         const BACKUP_EXPENSE_MONEY_FIELDS = Object.freeze(['expectedCost', 'actualPaid']);
         const isPlainObjectRecord = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
-        const isNonNegativeFiniteNumber = (value) => typeof value === 'number' && Number.isFinite(value) && value >= 0;
+        const isValidMoneyValue = (value) => value !== undefined && parseMoneyInput(value) !== null;
         const isValidIsoDateString = (value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
 
         const validateBackupPayload = (payload) => {
@@ -5445,7 +5496,7 @@
             if (payload.settings !== undefined) {
                 const settings = payload.settings;
                 if (!isPlainObjectRecord(settings)) return { ok: false, reason: 'settings' };
-                if (settings.baseAllowance !== undefined && !isNonNegativeFiniteNumber(settings.baseAllowance)) {
+                if (settings.baseAllowance !== undefined && !isValidMoneyValue(settings.baseAllowance)) {
                     return { ok: false, reason: 'settings.baseAllowance' };
                 }
                 if (settings.safeToSpendMode !== undefined && !['weekly', 'monthly'].includes(settings.safeToSpendMode)) {
@@ -5484,12 +5535,13 @@
                     if (!isPlainObjectRecord(vault)
                         || !Array.isArray(vault.transactions)
                         || (vault.goals !== undefined && vault.goals !== null && !Array.isArray(vault.goals))
-                        || (vault.balance !== undefined && !isNonNegativeFiniteNumber(vault.balance))) {
+                        || (vault.balance !== undefined && !isValidMoneyValue(vault.balance))
+                        || (vault.openingBalance !== undefined && !isValidMoneyValue(vault.openingBalance))) {
                         return { ok: false, reason: 'settings.vault' };
                     }
                     for (const vaultTransaction of vault.transactions) {
                         if (!isPlainObjectRecord(vaultTransaction)
-                            || !isNonNegativeFiniteNumber(vaultTransaction.amount)
+                            || !isValidMoneyValue(vaultTransaction.amount)
                             || !isValidIsoDateString(vaultTransaction.date)) {
                             return { ok: false, reason: 'settings.vault.transactions' };
                         }
@@ -5500,7 +5552,8 @@
                     for (const item of settings.monthEndSettlements) {
                         if (!isPlainObjectRecord(item)
                             || !MONTH_KEY_PATTERN.test(item.previousMonthKey || '')
-                            || !MONTH_END_SETTLEMENT_DECISIONS.includes(item.decision)) {
+                            || !MONTH_END_SETTLEMENT_DECISIONS.includes(item.decision)
+                            || ['surplus', 'previousMonthBudget', 'previousMonthSpent'].some(field => !isValidMoneyValue(item[field]))) {
                             return { ok: false, reason: 'settings.monthEndSettlements' };
                         }
                     }
@@ -5515,8 +5568,8 @@
                         || !template.id.trim()
                         || typeof template.name !== 'string'
                         || !template.name.trim()
-                        || (template.expectedCost !== undefined && !isNonNegativeFiniteNumber(template.expectedCost))
-                        || (template.defaultAmount !== undefined && !isNonNegativeFiniteNumber(template.defaultAmount))) {
+                        || (template.expectedCost !== undefined && !isValidMoneyValue(template.expectedCost))
+                        || (template.defaultAmount !== undefined && !isValidMoneyValue(template.defaultAmount))) {
                         return { ok: false, reason: 'templates' };
                     }
                 }
@@ -5530,7 +5583,7 @@
                     || (expense.name !== undefined && typeof expense.name !== 'string')
                     || (expense.isPaid !== undefined && typeof expense.isPaid !== 'boolean')
                     || (expense.source !== undefined && !EXPENSE_SOURCE_VALUES.includes(expense.source))
-                    || BACKUP_EXPENSE_MONEY_FIELDS.some(field => expense[field] !== undefined && !isNonNegativeFiniteNumber(expense[field]))) {
+                    || BACKUP_EXPENSE_MONEY_FIELDS.some(field => expense[field] !== undefined && !isValidMoneyValue(expense[field]))) {
                     return { ok: false, reason: 'expenses' };
                 }
             }
@@ -5865,6 +5918,7 @@
                 this.settings.activeTemplateProfileId = await DB.getSetting('activeTemplateProfileId', LEGACY_TEMPLATE_PROFILE.id);
                 this.settings.monthlyTemplateAssignments = normalizeMonthlyTemplateAssignments(await DB.getSetting('monthlyTemplateAssignments', []));
                 this.settings.vault = normalizeVaultStateRecord(await DB.getSetting('vault', null));
+                await DB.setSetting('vault', this.settings.vault);
                 this.settings.monthEndSettlements = normalizeMonthEndSettlements(await DB.getSetting('monthEndSettlements', []));
 
                 // Load Templates
@@ -6061,11 +6115,14 @@
                 if (!monthStart || !monthEnd) return null;
                 const allExpenses = await DB.getAllExpenses();
                 let actualSpent = 0;
+                let unpaidReserved = 0;
 
                 allExpenses.forEach(expense => {
                     if (expense.date < monthStart || expense.date > monthEnd) return;
                     if (expense.isPaid) {
                         actualSpent += expense.actualPaid;
+                    } else if ((expense.classification || 'essential') === 'essential') {
+                        unpaidReserved += expense.expectedCost;
                     }
                 });
 
@@ -6076,7 +6133,8 @@
                     monthEnd,
                     budget,
                     spent: actualSpent,
-                    surplus: Math.max(0, budget - actualSpent)
+                    unpaidReserved,
+                    surplus: Math.max(0, budget - actualSpent - unpaidReserved)
                 };
             },
 
@@ -6100,6 +6158,7 @@
                 // settlement against it instead of moving money a second time.
                 const existingTransfer = (this.settings.vault?.transactions || [])
                     .find(item => item.type === 'surplus_transfer' && item.sourceMonthKey === previousMonthKey) || null;
+                const historicalAmount = existingTransfer?.amount;
                 const transaction = existingTransfer || normalizeVaultTransactionRecord({
                     id: `vault-settlement-${previousMonthKey}`,
                     amount: surplus,
@@ -6114,7 +6173,7 @@
                     previousMonthKey,
                     decision: 'vault',
                     targetMonthKey,
-                    surplus,
+                    surplus: existingTransfer ? historicalAmount : surplus,
                     previousMonthBudget: summary.previousMonthBudget,
                     previousMonthSpent: summary.previousMonthSpent,
                     settledAt: new Date().toISOString(),
@@ -6684,9 +6743,7 @@
 
             // --- GETTERS (Computed Properties) ---
             get safeToSpend() {
-                // V4: Formula: Monthly Budget - (paid costs this month + expected costs this month)
-                // This shows how much you can still spend this month
-                return this.getBudgetForMonth(getMonthKey(Core.Date.getTodayISO())) - this.globalStats.monthlySpent;
+                return toFiniteNumber(this.statistics.safeToSpend, 0);
             },
 
             // V4: Add monthlySpent to globalStats
@@ -6700,6 +6757,7 @@
         // Expose the storage layer and import gate for debugging and safety tests
         window.MicroSaveDB = DB;
         window.RushdImportValidation = { validateBackupPayload };
+        window.RushdMoneyInput = { parseMoneyInput };
 
     </script>
     <script>
@@ -8425,7 +8483,8 @@
                     onboardingModal: createOnboardingModalState(),
                     vaultGoalForm: {
                         name: '',
-                        targetAmount: ''
+                        targetAmount: '',
+                        allocatedAmount: ''
                     },
 
                     planSectionsOpen: {
@@ -8523,8 +8582,8 @@
                 onboardingBudgetValid() {
                     const rawValue = this.onboardingModal.budget;
                     if (rawValue === '' || rawValue === null || rawValue === undefined) return false;
-                    const value = Number(rawValue);
-                    return Number.isFinite(value) && value >= 0;
+                    const value = parseMoneyInput(rawValue);
+                    return value !== null;
                 },
                 onboardingNewProfileNameNormalized() {
                     return String(this.onboardingModal.newProfileName || '').trim();
@@ -8620,10 +8679,9 @@
                     return Array.isArray(this.store.settings.vault.goals) ? this.store.settings.vault.goals : [];
                 },
                 vaultGoalsWithProgress() {
-                    const balance = Math.max(0, toFiniteNumber(this.store.settings.vault.balance, 0));
                     return this.vaultGoals.map(goal => {
                         const targetAmount = Math.max(0, toFiniteNumber(goal.targetAmount, 0));
-                        const progressAmount = Math.min(balance, targetAmount);
+                        const progressAmount = Math.min(Math.max(0, toFiniteNumber(goal.allocatedAmount, 0)), targetAmount);
                         const progressPercentage = targetAmount > 0 ? Math.min(100, (progressAmount / targetAmount) * 100) : 0;
                         return {
                             ...goal,
@@ -8634,8 +8692,21 @@
                     });
                 },
                 vaultGoalFormValid() {
+                    const targetAmount = parseMoneyInput(this.vaultGoalForm.targetAmount);
+                    const rawAllocation = this.vaultGoalForm.allocatedAmount;
+                    const allocatedAmount = rawAllocation === '' || rawAllocation === null ? 0 : parseMoneyInput(rawAllocation);
                     return !!(typeof this.vaultGoalForm.name === 'string' && this.vaultGoalForm.name.trim())
-                        && toFiniteNumber(this.vaultGoalForm.targetAmount, 0) > 0;
+                        && targetAmount !== null && targetAmount > 0
+                        && allocatedAmount !== null
+                        && allocatedAmount <= targetAmount
+                        && this.vaultUnallocatedBalance >= allocatedAmount;
+                },
+                vaultUnallocatedBalance() {
+                    const balance = Math.max(0, toFiniteNumber(this.store.settings.vault.balance, 0));
+                    return Math.max(0, balance - this.vaultGoals.reduce(
+                        (sum, goal) => sum + Math.max(0, toFiniteNumber(goal.allocatedAmount, 0)),
+                        0
+                    ));
                 },
                 vaultInsight() {
                     const balance = Math.max(0, toFiniteNumber(this.store.settings.vault.balance, 0));
@@ -8916,11 +8987,16 @@
                     const draft = this.onboardingModal[sectionConfig.draftKey];
                     const name = String(draft?.name || '').trim();
                     if (!name) return;
+                    const expectedCost = parseMoneyInput(draft?.cost);
+                    if (expectedCost === null) {
+                        this.showToast(this.t.invalidMoneyInput);
+                        return;
+                    }
 
                     const baseItem = {
                         id: this.core.UUID(),
                         name,
-                        expectedCost: toFiniteNumber(draft?.cost, 0),
+                        expectedCost,
                         category: draft?.category || 'food',
                         recurrence: sectionConfig.recurrence,
                         applicability: sectionConfig.applicability
@@ -9030,11 +9106,15 @@
                     if (!this.onboardingCanFinish) return;
                     this.onboardingModal.isLoading = true;
                     try {
-                        const budgetValue = Number(this.onboardingModal.budget);
+                        const safeBudgetValue = parseMoneyInput(this.onboardingModal.budget);
+                        if (safeBudgetValue === null) {
+                            this.showToast(this.t.invalidMoneyInput);
+                            return;
+                        }
                         const targetProfileId = await this.resolveOnboardingTargetProfileId();
                         if (!targetProfileId) return;
-                        this.store.settings.baseAllowance = budgetValue;
-                        await DB.setSetting('baseAllowance', budgetValue);
+                        this.store.settings.baseAllowance = safeBudgetValue;
+                        await DB.setSetting('baseAllowance', safeBudgetValue);
                         await this.persistOnboardingTemplateItems(targetProfileId);
                         await this.setActiveTemplateProfile(targetProfileId);
                         await this.store.applyTemplatesFrom(this.onboardingModal.effectiveDate, { profileId: targetProfileId });
@@ -9469,7 +9549,8 @@
                 resetVaultGoalForm() {
                     this.vaultGoalForm = {
                         name: '',
-                        targetAmount: ''
+                        targetAmount: '',
+                        allocatedAmount: ''
                     };
                 },
                 async addVaultGoal() {
@@ -9477,7 +9558,10 @@
                     const goal = await this.store.addVaultGoal({
                         id: this.core.UUID(),
                         name: this.vaultGoalForm.name,
-                        targetAmount: this.vaultGoalForm.targetAmount
+                        targetAmount: parseMoneyInput(this.vaultGoalForm.targetAmount),
+                        allocatedAmount: this.vaultGoalForm.allocatedAmount === '' || this.vaultGoalForm.allocatedAmount === null
+                            ? 0
+                            : parseMoneyInput(this.vaultGoalForm.allocatedAmount)
                     });
                     if (!goal) return;
                     this.resetVaultGoalForm();
@@ -9739,6 +9823,11 @@
 
                     const form = this.editModal.form;
                     const original = this.editModal.item;
+                    const expectedCost = parseMoneyInput(form.cost);
+                    if (expectedCost === null) {
+                        this.showToast(this.t.invalidMoneyInput);
+                        return;
+                    }
 
                     if (this.editModal.type === 'template') {
                         const normalizedOriginal = normalizeDefinitionRecord(original);
@@ -9746,7 +9835,7 @@
                         const updatedTemplate = {
                             ...original,
                             name: form.name,
-                            expectedCost: parseFloat(form.cost) || 0,
+                            expectedCost,
                             category: form.category,
                             recurrence: normalizedOriginal.recurrence,
                             applicability: normalizedOriginal.recurrence === 'daily' ? (form.applicability || normalizedOriginal.applicability || 'everyday') : 'everyday',
@@ -9771,7 +9860,7 @@
                         // Update Expense
                         const expense = { ...original }; // Clone
                         expense.name = form.name;
-                        expense.expectedCost = parseFloat(form.cost) || 0;
+                        expense.expectedCost = expectedCost;
                         expense.category = form.category;
                         expense.date = form.date;
                         expense.classification = form.classification || 'essential';
@@ -9853,7 +9942,11 @@
 
                 // V2: Quick amount adjusters
                 adjustAmount(delta) {
-                    let current = parseFloat(this.payModal.amount) || 0;
+                    let current = parseMoneyInput(this.payModal.amount);
+                    if (current === null) {
+                        this.showToast(this.t.invalidMoneyInput);
+                        return;
+                    }
                     current = Math.max(0, current + delta); // Don't go below 0
                     this.payModal.amount = current.toString();
                     this.payModal.autoCleared = true; // Mark as modified
@@ -9869,7 +9962,7 @@
                 // V2: Get color class based on payment vs expected
                 getPaymentAmountClass() {
                     if (!this.payModal.item) return '';
-                    const amount = parseFloat(this.payModal.amount) || 0;
+                    const amount = parseMoneyInput(this.payModal.amount) ?? -1;
                     const expected = this.payModal.item.expectedCost;
                     if (amount === 0) return 'text-lime-400'; // Free
                     if (amount < expected) return 'text-success'; // Saved
@@ -9878,8 +9971,11 @@
                 },
 
                 async commitPayment() {
-                    const amt = parseFloat(this.payModal.amount);
-                    if (isNaN(amt)) return;
+                    const amt = parseMoneyInput(this.payModal.amount);
+                    if (amt === null) {
+                        this.showToast(this.t.invalidMoneyInput);
+                        return;
+                    }
 
                     const item = this.payModal.item;
                     const oldVariance = item.isPaid ? (item.expectedCost - item.actualPaid) : 0;
@@ -9925,13 +10021,25 @@
 
                     this.addModal.isSubmitting = true;
                     try {
+                        const cost = parseMoneyInput(this.addModal.form.cost);
+                        if (cost === null) {
+                            this.showToast(this.t.invalidMoneyInput);
+                            return;
+                        }
+                        const monthlyBudget = this.addModal.mode === 'flexibleDefinition'
+                            ? parseMoneyInput(this.addModal.form.monthlyBudget)
+                            : null;
+                        if (this.addModal.mode === 'flexibleDefinition' && monthlyBudget === null) {
+                            this.showToast(this.t.invalidMoneyInput);
+                            return;
+                        }
                         const activeTemplateProfileId = getDefinitionProfileId({ profileId: this.store.settings.activeTemplateProfileId });
                         if (this.addModal.mode === 'template') {
                             // Save as template
                             const template = {
                                 id: this.core.UUID(),
                                 name: this.addModal.form.name,
-                                expectedCost: this.addModal.form.cost || 0,
+                                expectedCost: cost,
                                 category: this.addModal.form.category,
                                 source: 'template',
                                 recurrence: this.addModal.form.recurrence || 'daily',
@@ -9945,9 +10053,9 @@
                                 id: this.core.UUID(),
                                 source: 'flexible',
                                 name: this.addModal.form.name,
-                                expectedCost: this.addModal.form.cost || 0,
-                                defaultAmount: this.addModal.form.cost || 0,
-                                monthlyBudget: this.addModal.form.monthlyBudget || 0,
+                                expectedCost: cost,
+                                defaultAmount: cost,
+                                monthlyBudget,
                                 maxUsesPerMonth: Math.max(0, parseInt(this.addModal.form.maxUsesPerMonth, 10) || 0),
                                 profileId: activeTemplateProfileId
                             };
@@ -9964,7 +10072,7 @@
                             const isFlexibleExpense = this.addModal.form.source === 'flexible' && !!this.addModal.form.flexibleDefinitionId;
                             await this.store.addExpense({
                                 name: this.addModal.form.name,
-                                expectedCost: this.addModal.form.cost || 0,
+                                expectedCost: cost,
                                 category: this.addModal.form.category,
                                 classification: this.addModal.form.classification || 'essential',
                                 source: isFlexibleExpense ? 'flexible' : 'manual',
@@ -10024,7 +10132,13 @@
                     await DB.setSetting('motionLevel', resolvedLevel);
                 },
                 async saveSettings() {
-                    await DB.setSetting('baseAllowance', this.store.settings.baseAllowance);
+                    const baseAllowance = parseMoneyInput(this.store.settings.baseAllowance);
+                    if (baseAllowance === null) {
+                        this.showToast(this.t.invalidMoneyInput);
+                        return;
+                    }
+                    this.store.settings.baseAllowance = baseAllowance;
+                    await DB.setSetting('baseAllowance', baseAllowance);
                     await this.store.recalcGlobalStats();
                     await this.store.refreshStatistics(this.store.currentDate);
                 },
