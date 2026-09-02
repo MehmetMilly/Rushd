@@ -309,9 +309,20 @@ async function databaseSnapshot(runtime) {
         date: '2026-08-10'
     });
     runtime.Store.settings.baseAllowance = 1000;
+    // Review fix P1-03: the snapshot for a past month is the only trustworthy
+    // budget source; without it the snapshot reports an unknown budget.
+    runtime.Store.settings.monthlyBaseAllowances = { '2026-08': 1000 };
     const snapshot = await runtime.Store.getMonthFinancialSnapshot('2026-08');
+    assert.equal(snapshot.budgetKnown, true);
     assert.equal(snapshot.unpaidReserved, 500);
     assert.equal(snapshot.surplus, 400);
+
+    runtime.Store.settings.monthlyBaseAllowances = {};
+    const unknownBudget = await runtime.Store.getMonthFinancialSnapshot('2026-08');
+    assert.equal(unknownBudget.budgetKnown, false);
+    assert.equal(unknownBudget.budget, null);
+    assert.equal(unknownBudget.surplus, null);
+    runtime.Store.settings.monthlyBaseAllowances = { '2026-08': 1000 };
 }
 
 {
@@ -360,8 +371,10 @@ async function databaseSnapshot(runtime) {
         date: '2025-01-15'
     });
     runtime.Store.settings.baseAllowance = 1000;
+    runtime.Store.settings.monthlyBaseAllowances = { '2025-01': 1000 };
     await runtime.Store.refreshStatistics('2025-01-15');
     assert.equal(runtime.Store.statistics.monthKey, '2025-01');
+    assert.equal(runtime.Store.statistics.budgetKnown, true);
     assert.equal(runtime.Store.safeToSpend, 900);
 }
 

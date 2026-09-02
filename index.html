@@ -1068,32 +1068,6 @@
         }
 
         /* ================================================================
-        COMPONENT: Confetti Animation
-        ================================================================ */
-        .confetti {
-            position: absolute;
-            width: 10px;
-            height: 10px;
-            top: -20px;
-            border-radius: 2px;
-            animation: confetti-fall 1.2s ease-out forwards;
-            z-index: 9999;
-            pointer-events: none;
-        }
-
-        @keyframes confetti-fall {
-            0% {
-                transform: translateY(0) rotate(0deg);
-                opacity: 1;
-            }
-
-            100% {
-                transform: translateY(100vh) rotate(720deg);
-                opacity: 0;
-            }
-        }
-
-        /* ================================================================
         COMPONENT: Brand Title - Premium Typography
         ================================================================ */
         .brand-title {
@@ -2199,6 +2173,32 @@
             color: var(--c-text-secondary);
             opacity: 0.75;
         }
+        /* P1-03 review fix: the unknown-budget state is a tappable route to the
+             full explanation in Statistics, not a bare "Not recorded" label. */
+        .home-hero-unknown-btn {
+            appearance: none;
+            background: none;
+            border: 0;
+            padding: 0;
+            margin: 0;
+            cursor: pointer;
+            text-align: start;
+            font-family: var(--font-mono);
+            font-size: 1.65rem;
+            font-weight: 700;
+            color: var(--c-text-primary);
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 2px;
+        }
+        .home-hero-unknown-hint {
+            font-family: var(--font-sans);
+            font-size: 0.625rem;
+            font-weight: 500;
+            color: var(--c-text-secondary);
+            white-space: nowrap;
+        }
         .home-hero-amount .amt-unit {
             font-size: 0.65rem;
             font-weight: 700;
@@ -2463,20 +2463,40 @@
 
             // --- DATE ENGINE ---
             // Replacement for Moment.js/Day.js to save space but keep power.
+            // P1-01: dates shown or selected by the user are local civil days.
+            // UTC wall-clock timestamps (createdAt, exportedAt) may stay UTC.
             Date: {
+                toLocalISO(date) {
+                    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                },
+
+                // Parses 'YYYY-MM-DD' as a local civil day instead of UTC midnight.
+                parseLocalDate(dateStr) {
+                    if (typeof dateStr !== 'string') return new Date(NaN);
+                    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr.trim());
+                    if (!match) return new Date(NaN);
+                    return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+                },
+
                 getTodayISO() {
-                    return new Date().toISOString().split('T')[0];
+                    return this.toLocalISO(new Date());
                 },
 
                 addDays(dateStr, days) {
-                    const d = new Date(dateStr);
+                    const d = this.parseLocalDate(dateStr);
+                    if (Number.isNaN(d.getTime())) return '';
                     d.setDate(d.getDate() + days);
-                    return d.toISOString().split('T')[0];
+                    return this.toLocalISO(d);
                 },
 
                 // Returns array of date objects for the scroller
                 generateWindow(centerDateStr, daysBefore = 7, daysAfter = 21, locale = 'en-US', calendarType = 'gregorian') {
-                    const center = new Date(centerDateStr);
+                    const center = this.parseLocalDate(centerDateStr);
+                    if (Number.isNaN(center.getTime())) return [];
                     const start = new Date(center);
                     start.setDate(center.getDate() - daysBefore);
 
@@ -2488,12 +2508,10 @@
                     for (let i = 0; i < totalDays; i++) {
                         const d = new Date(start);
                         d.setDate(start.getDate() + i);
-                        const iso = d.toISOString().split('T')[0];
+                        const iso = this.toLocalISO(d);
                         days.push({
                             iso: iso,
-                            dom: calendarType === 'hijri'
-                                ? d.toLocaleDateString(locale + '-u-nu-latn', { ...dateOpts, day: 'numeric' })
-                                : d.toLocaleDateString(locale + '-u-nu-latn', { ...dateOpts, day: 'numeric' }),
+                            dom: d.toLocaleDateString(locale + '-u-nu-latn', { ...dateOpts, day: 'numeric' }),
                             month: d.toLocaleDateString(locale, { ...dateOpts, month: 'short' }).toUpperCase(),
                             day: d.toLocaleDateString(locale, { weekday: 'short' }),
                             fullDate: d,
@@ -2507,14 +2525,16 @@
                 humanize(dateStr, t = null) {
                     const today = this.getTodayISO();
                     if (dateStr === today) return t ? t.today : 'Today';
-                    const d = new Date(dateStr);
-                    const y = new Date(today);
-                    y.setDate(y.getDate() - 1);
-                    if (dateStr === y.toISOString().split('T')[0]) return t ? t.yesterday : 'Yesterday';
+                    const d = this.parseLocalDate(dateStr);
+                    if (Number.isNaN(d.getTime())) return dateStr || '';
+                    const base = this.parseLocalDate(today);
+                    const y = new Date(base);
+                    y.setDate(base.getDate() - 1);
+                    if (dateStr === this.toLocalISO(y)) return t ? t.yesterday : 'Yesterday';
 
-                    const tm = new Date(today);
-                    tm.setDate(tm.getDate() + 1);
-                    if (dateStr === tm.toISOString().split('T')[0]) return t ? t.tomorrow : 'Tomorrow';
+                    const tm = new Date(base);
+                    tm.setDate(base.getDate() + 1);
+                    if (dateStr === this.toLocalISO(tm)) return t ? t.tomorrow : 'Tomorrow';
 
                     const locale = t ? (t._locale || 'en-US') : 'en-US';
                     return d.toLocaleDateString(locale, { calendar: 'gregory', month: 'short', day: 'numeric' });
@@ -2568,7 +2588,6 @@
                 // Dashboard
                 safeToSpend: 'الميزانية المتاحة',
                 expenses: 'المصروفات',
-                weekly: 'أسبوعياً',
                 monthly: 'شهرياً',
                 savings: 'التوفير',
                 paid: 'المدفوع',
@@ -2599,8 +2618,6 @@
                 budgetConfig: 'إعدادات الميزانية',
                 monthlyAllowance: 'المصروف الشهري',
                 baseFunds: 'الأموال الأساسية قبل المصروفات',
-                safeToSpendView: 'عرض الميزانية المتاحة',
-                weeklyDivides: 'الأسبوعي يقسم على 4',
                 autoFillTemplates: 'قوالب الملء التلقائي',
                 templateProfile: 'الخطة الحالية',
                 weeklyOffdays: 'إجازات الأسبوع',
@@ -2714,7 +2731,7 @@
                 cannotUndo: 'لا يمكن التراجع عن هذا الإجراء.',
                 stopAutoFill: 'سيتوقف الملء التلقائي لهذا العنصر.',
                 factoryResetQ: 'إعادة ضبط المصنع؟',
-                factoryResetMsg: 'سيتم تنزيل نسخة احتياطية كاملة تلقائياً قبل الحذف، ثم تُحذف جميع البيانات نهائياً. لا يمكن التراجع.',
+                factoryResetMsg: 'سيتم تنزيل نسخة احتياطية تلقائيًا قبل الحذف تشمل المصروفات والقوالب والخطة والخزنة والإعدادات المحفوظة. لغة الواجهة وبيانات التهيئة الأولى غير مشمولة وستعود للافتراضي، وما لا تشمله النسخة لا يمكن استعادته.',
                 resetFailedTitle: 'تعذّرت إعادة الضبط',
                 resetWaitingTitle: 'إعادة الضبط قيد الانتظار',
                 resetBackupFailed: 'تعذّر إنشاء النسخة الاحتياطية قبل الحذف، لذلك أُلغيت إعادة الضبط ولم تتغير بياناتك. جرّب التصدير يدوياً ثم أعد المحاولة.',
@@ -2804,20 +2821,11 @@
                 tech: 'تقنية',
                 shopping: 'تسوّق',
                 other: 'أخرى',
-                // Profile / Gamification
+                // Profile
                 yourProfile: 'ملفك الشخصي',
-                totalXP: 'إجمالي XP',
-                badgesUnlocked: 'الشارات المفتوحة',
-                next: 'التالي',
-                varianceTrend: 'اتجاه الفارق (7 أيام)',
+                momentumTitle: 'مومينتوم — قيد إعادة البناء',
+                momentumPlaceholder: 'نظام التحفيز الحقيقي قيد البناء ولن يحتسب الإنفاق أو الثروة أو عدد العمليات أو فتح التطبيق.',
                 flexibleConsumption: 'استهلاك المصروفات المرنة',
-                lvl: 'لفل',
-                maxedOut: 'أقصى مستوى',
-                // Badges
-                badge_novice: 'مبتدئ',
-                badge_hunter: 'صائد الفوارق',
-                badge_master: 'خبير مالي',
-                badge_grand: 'أمين الخزنة',
                 // Dates
                 today: 'اليوم',
                 yesterday: 'أمس',
@@ -2827,6 +2835,17 @@
                 importFailed: 'فشل الاستيراد: ',
                 invalidBackup: 'صيغة النسخة الاحتياطية غير صالحة',
                 invalidMoneyInput: 'أدخل مبلغًا صالحًا حتى منزلتين عشريتين',
+                monthlyDayRequired: 'اختر يومًا من 1 إلى 31 للقالب الشهري',
+                monthlyDayMissingWarning: 'قالب شهري بدون يوم: اختر يومًا من 1 إلى 31 حتى يعمل',
+                planBlockedMonthlyDay: 'تم إيقاف إنشاء الخطة: القالب الشهري «{name}» لا يحتوي يومًا صالحًا (1–31). عدّل القالب واختر يومًا، ثم أعد المحاولة.',
+                autoFillBlockedMonthlyDay: 'تم إيقاف الملء التلقائي: القالب الشهري «{name}» بدون يوم صالح (1–31). عدّل القالب واختر يومًا.',
+                onboardingBlockedMonthlyDay: 'لا يمكن حفظ الإعداد: القالب الشهري «{name}» بدون يوم صالح (1–31). احذفه من هنا أو عدّله في الخطط واختر يومًا.',
+                monthEndBudgetUnknown: 'تسوية {month} غير متاحة: ميزانية الشهر السابق غير مسجلة، لذلك لا يمكن حساب فائض موثوق.',
+                historicalBudgetUnknownShort: 'غير مسجلة',
+                historicalBudgetUnknownHint: 'اضغط لعرض السبب',
+                historicalBudgetUnknownTitle: 'ميزانية هذا الشهر السابق غير مسجلة',
+                historicalBudgetUnknownNote: 'لم تُسجَّل ميزانية هذا الشهر وقتها، لذلك لا يمكن لرُشد عرض ميزانية أو مبلغ متاح موثوق له، وتسوية نهايته متوقفة. ميزانية اليوم لا تُستخدم أبدًا كحقيقة تاريخية.',
+                historicalAutoFillBlocked: 'الملء التلقائي غير متاح للتواريخ السابقة: القواعد الأصلية وقتها غير محفوظة، ولن يولّد رُشد نشاطًا تاريخيًا بقواعد اليوم.',
                 templateSaveFailed: 'فشل حفظ القالب: ',
                 flexibleItemRequired: 'اختر عنصراً مرناً أولاً.',
                 applyTemplatesDone: 'تم تطبيق القوالب.',
@@ -2850,7 +2869,6 @@
                 // Dashboard
                 safeToSpend: 'Safe to Spend',
                 expenses: 'Expenses',
-                weekly: 'Weekly',
                 monthly: 'Monthly',
                 savings: 'Savings',
                 paid: 'Paid',
@@ -2881,8 +2899,6 @@
                 budgetConfig: 'Budget Configuration',
                 monthlyAllowance: 'Monthly Allowance',
                 baseFunds: 'Base funds before expenses',
-                safeToSpendView: 'Safe to Spend View',
-                weeklyDivides: 'Weekly divides by 4',
                 autoFillTemplates: 'Auto-Fill Templates',
                 templateProfile: 'Current Plan',
                 weeklyOffdays: 'Weekly Offdays',
@@ -3003,7 +3019,7 @@
                 resetFailed: 'Local data could not be deleted and nothing has changed. Please try again.',
                 dialogOk: 'OK',
                 factoryResetQ: 'Factory Reset?',
-                factoryResetMsg: 'A full backup will be downloaded automatically before deletion, then all data will be permanently deleted. This cannot be undone.',
+                factoryResetMsg: 'A backup will download automatically before deletion. It includes expenses, templates, the plan, the vault, and saved settings. Language and onboarding preferences are not included and reset to defaults, and anything not in the backup cannot be restored.',
                 importQ: 'Import Backup?',
                 importMsg: 'This will merge/overwrite your current data. Existing entries with same IDs will be updated.',
                 importBtn: 'Import',
@@ -3086,19 +3102,10 @@
                 tech: 'Tech',
                 shopping: 'Shopping',
                 other: 'Other',
-                // Profile / Gamification
+                // Profile
                 yourProfile: 'Your Profile',
-                totalXP: 'Total XP',
-                badgesUnlocked: 'Badges Unlocked',
-                next: 'Next',
-                varianceTrend: 'Variance Trend (7 Days)',
-                lvl: 'LVL',
-                maxedOut: 'Maxed Out',
-                // Badges
-                badge_novice: 'Novice Saver',
-                badge_hunter: 'Variance Hunter',
-                badge_master: 'Budget Master',
-                badge_grand: 'Grand Treasurer',
+                momentumTitle: 'Momentum — being rebuilt',
+                momentumPlaceholder: 'The real motivation system is being rebuilt. It will never count spending, wealth, transaction counts, or app opens.',
                 // Dates
                 today: 'Today',
                 yesterday: 'Yesterday',
@@ -3108,6 +3115,18 @@
                 importFailed: 'Failed to import: ',
                 invalidBackup: 'Invalid backup file format',
                 invalidMoneyInput: 'Enter a valid amount with up to two decimals',
+                monthlyDayRequired: 'Choose a day from 1 to 31 for the monthly template',
+                monthlyDayMissingWarning: 'Monthly template without a day: choose a day from 1 to 31 to make it work',
+                planBlockedMonthlyDay: 'Plan generation is blocked: the monthly template “{name}” has no valid day (1–31). Edit the template, choose a day, then try again.',
+                autoFillBlockedMonthlyDay: 'Auto-Fill is blocked: the monthly template “{name}” has no valid day (1–31). Edit the template and choose a day.',
+                onboardingBlockedMonthlyDay: 'Setup can’t be saved: the monthly template “{name}” has no valid day (1–31). Remove it here, or edit it in Plans and choose a day.',
+                monthEndBudgetUnknown: 'Settlement for {month} is unavailable: last month’s budget was not recorded, so no trustworthy surplus can be calculated.',
+                historicalBudgetUnknownShort: 'Not recorded',
+                historicalBudgetUnknownHint: 'Tap to see why',
+                historicalBudgetUnknownShort: 'Not recorded',
+                historicalBudgetUnknownTitle: "This past month's budget was not recorded",
+                historicalBudgetUnknownNote: "The budget for this past month was never recorded, so Rushd cannot truthfully show its budget or safe-to-spend, and its month-end settlement is blocked. Today's budget is never used as historical fact.",
+                historicalAutoFillBlocked: "Auto-Fill is not available for past dates: the rules in effect back then are not preserved, so Rushd will not generate historical activity from today's rules.",
                 templateSaveFailed: 'Failed to save template: ',
                 applyTemplatesDone: 'Templates applied.',
                 noChanges: 'No changes.',
@@ -3161,12 +3180,12 @@
                             </div>
                             <!-- End: Level Indicator + Settings - Aligned -->
                             <div class="flex items-center gap-2">
-                                <!-- Level Indicator Pill -->
+                                <!-- Profile Button (P1-12: the wealth-flavored level pill was removed) -->
                                 <button @click="showProfile = true"
                                     class="flex items-center gap-1.5 px-3 h-9 rounded-xl bg-surface-1 border border-glass hover:bg-surface-2 transition-all">
-                                    <span class="material-symbols-rounded text-amber-400"
-                                        style="font-size: 16px;">emoji_events</span>
-                                    <span class="text-xs font-bold text-white">{{ t.lvl }} {{ game.level }}</span>
+                                    <span class="material-symbols-rounded text-zinc-300"
+                                        style="font-size: 16px;">person</span>
+                                    <span class="text-xs font-bold text-white">{{ t.yourProfile }}</span>
                                 </button>
                                 <!-- Settings Icon -->
                                 <button @click="navigateTo('settings')"
@@ -3191,7 +3210,7 @@
                             <div class="relative z-10 flex items-center justify-between mb-2">
                                 <div class="home-hero-label">
                                     <span>{{ t.safeToSpend }}</span>
-                                    <span class="home-hero-mode">{{ store.settings.safeToSpendMode === 'monthly' ? t.monthly : t.weekly }}</span>
+                                    <span class="home-hero-mode">{{ t.monthly }}</span>
                                 </div>
                                 <div class="home-context-chip"
                                     :class="{ 'is-today': store.currentDate === core.Date.getTodayISO() }">
@@ -3202,11 +3221,20 @@
 
                             <!-- Bottom row: amount + net variance -->
                             <div class="relative z-10 flex items-end justify-between gap-3">
-                                <div class="home-hero-amount" dir="ltr" style="unicode-bidi: isolate">
+                                <!-- P1-03 review fix: a past month without a recorded budget shows the
+                                     truthful unavailable state instead of a number from today's allowance -->
+                                <div class="home-hero-amount" v-if="displaySafeToSpend !== null" dir="ltr" style="unicode-bidi: isolate">
                                     <span class="amt-whole">{{ core.Currency.formatParts(displaySafeToSpend).whole }}</span>
                                     <span class="amt-frac">.{{ core.Currency.formatParts(displaySafeToSpend).fraction }}</span>
                                     <span class="amt-unit">SAR</span>
                                 </div>
+                                <!-- P1-03 review fix: the unavailable state explains itself and
+                                     routes to the full explanation in Statistics -->
+                                <button type="button" v-else class="home-hero-amount home-hero-unknown-btn"
+                                    @click="showHistoricalBudgetExplanation" :aria-label="t.historicalBudgetUnknownNote">
+                                    <span>{{ t.historicalBudgetUnknownShort }}</span>
+                                    <span class="home-hero-unknown-hint">{{ t.historicalBudgetUnknownHint }}</span>
+                                </button>
 
                                 <div class="home-hero-stat animate-fade-in-up" style="animation-delay: 0.2s;">
                                     <span class="home-hero-stat-label">{{ t.savings }}</span>
@@ -3235,8 +3263,6 @@
                                 {{ d.dom }}</div>
                             <!-- Day Name Bottom -->
                             <div class="date-day">{{ d.day }}</div>
-                            <!-- Activity Dot -->
-                            <div class="date-dot" :style="{ opacity: hasPending(d.iso) ? 1 : 0 }"></div>
                         </div>
                     </div>
 
@@ -3500,35 +3526,19 @@
                                 <div class="font-bold">{{ t.monthlyAllowance }}</div>
                                 <div class="text-xs text-secondary">{{ t.baseFunds }}</div>
                             </div>
-                            <input type="text" inputmode="decimal" v-model="store.settings.baseAllowance" @change="saveSettings"
-                                class="bg-surface-1 border border-glass text-end font-mono p-3 rounded-lg w-32 focus:border-brand outline-none text-white">
+                        <input type="text" inputmode="decimal" v-model="store.settings.baseAllowance" @change="saveSettings"
+                            class="bg-surface-1 border border-glass text-end font-mono p-3 rounded-lg w-32 focus:border-brand outline-none text-white">
                         </div>
-                        <!-- Weekly/Monthly Safe to Spend toggle -->
-                        <div class="glass-panel p-4 flex justify-between items-center">
-                            <div>
-                                <div class="font-bold">{{ t.safeToSpendView }}</div>
-                                <div class="text-xs text-secondary">{{ t.weeklyDivides }}</div>
-                            </div>
-                            <div class="flex bg-surface-1 rounded-lg p-1 border border-glass">
-                                <button @click="setSafeToSpendMode('weekly')"
-                                    class="px-3 py-1.5 text-xs font-bold rounded-md transition-all"
-                                    :class="store.settings.safeToSpendMode === 'weekly' ? 'bg-brand text-white' : 'text-zinc-400 hover:text-white'">
-                                    {{ t.weekly }}
-                                </button>
-                                <button @click="setSafeToSpendMode('monthly')"
-                                    class="px-3 py-1.5 text-xs font-bold rounded-md transition-all"
-                                    :class="store.settings.safeToSpendMode === 'monthly' ? 'bg-brand text-white' : 'text-zinc-400 hover:text-white'">
-                                    {{ t.monthly }}
-                                </button>
-                            </div>
-                        </div>
+                        <!-- P1-05: the weekly "divide by four" safe-to-spend view was
+                             removed as misleading; deterministic pacing arrives with
+                             the Insights phase, so only the monthly view remains. -->
                     </section>
 
                     <section v-if="currentView === 'statistics'" class="mb-8 stats-page">
 
                         <!-- ═══ SECTION 1: MONTH SNAPSHOT HERO ═══ -->
                         <div class="glass-panel stats-hero relative overflow-hidden p-4 mb-3">
-                            <div class="absolute inset-0 pointer-events-none" :style="{
+                            <div class="absolute inset-0 pointer-events-none" v-if="store.statistics.budgetKnown !== false" :style="{
                                 background: store.statistics.safeToSpend >= 0
                                     ? 'radial-gradient(ellipse at 30% 50%, var(--c-accent-success-glow), transparent 60%)'
                                     : 'radial-gradient(ellipse at 30% 50%, var(--c-accent-danger-glow), transparent 60%)',
@@ -3539,6 +3549,12 @@
                                     <div class="text-[10px] font-bold uppercase tracking-wider text-zinc-500">{{ t.monthSnapshot }}</div>
                                     <div class="text-[10px] text-secondary">{{ formatMonthKeyLabel(store.statistics.monthKey) }}</div>
                                 </div>
+                                <!-- P1-03 review fix: truthful state for a past month whose budget was never recorded -->
+                                <div v-if="store.statistics.budgetKnown === false" class="glass-panel p-4 bg-surface-1 text-center mt-3 mb-1 flex flex-col gap-1">
+                                    <div class="text-sm font-bold">{{ t.historicalBudgetUnknownTitle }}</div>
+                                    <div class="text-xs text-secondary leading-relaxed">{{ t.historicalBudgetUnknownNote }}</div>
+                                </div>
+                                <template v-else>
                                 <!-- Budget utilization bar -->
                                 <div class="stats-utilization-track mb-4 mt-2">
                                     <div class="stats-utilization-fill" :style="{ width: store.statistics.budgetUtilization + '%' }"
@@ -3573,6 +3589,7 @@
                                         {{ formatCompactAmount(store.statistics.projectedBalance) }} <span class="text-[10px] text-zinc-500">SAR</span>
                                     </div>
                                 </div>
+                                </template>
                             </div>
                         </div>
 
@@ -3968,7 +3985,11 @@
                                         </div>
                                         <div class="flex-1 min-w-0">
                                             <div class="text-sm font-bold truncate">{{ tmpl.name }}</div>
-                                            <div class="text-[10px] text-zinc-500">{{ t.monthly }} · {{ (tmpl.days || []).join(', ') }}</div>
+                                            <!-- P1-06 review fix: a legacy monthly template without a day is
+                                                 visibly invalid instead of silently generating nothing. -->
+                                            <div class="text-[10px]" :class="monthlyTemplateScheduleValid(tmpl) ? 'text-zinc-500' : 'text-warning font-bold'">
+                                                {{ monthlyTemplateScheduleValid(tmpl) ? (t.monthly + ' · ' + (tmpl.days || []).join(', ')) : t.monthlyDayMissingWarning }}
+                                            </div>
                                         </div>
                                         <div class="plan-tmpl-amount" dir="ltr" style="unicode-bidi: isolate">{{ tmpl.expectedCost }}</div>
                                         <button class="plan-tmpl-delete" @click.stop="deleteTemplate(tmpl.id)">
@@ -4451,6 +4472,13 @@
                         </div>
                     </div>
 
+                    <div v-if="addModal.mode === 'template' && addModal.form.recurrence === 'monthly'">
+                        <label class="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-2 block">{{ t.dayOfMonth }}</label>
+                        <input type="number" min="1" max="31" v-model="addModal.form.monthDay"
+                            class="w-full p-3 bg-surface-1 border border-glass rounded-lg text-white font-mono focus:border-brand outline-none"
+                            :placeholder="t.dayOfMonth">
+                    </div>
+
                     <div v-if="addModal.mode === 'template' && addModal.form.recurrence === 'daily'">
                         <label class="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-2 block">{{ t.templateApplicability }}</label>
                         <div class="flex gap-2">
@@ -4509,7 +4537,16 @@
                         <div class="text-[11px] text-secondary mb-3">{{
                             core.Date.humanize(applyTemplatesModal.preview.rangeStart, t) }} → {{
                             core.Date.humanize(applyTemplatesModal.preview.rangeEnd, t) }}</div>
-                        <div class="grid grid-cols-3 gap-2">
+                        <!-- P1-06 review fix: a blocked plan explains itself instead of
+                             showing a silent zero-change summary. -->
+                        <div v-if="applyTemplatesModal.blockedPlan"
+                            class="p-3 rounded-lg border border-warning/60 bg-warning/10 flex items-start gap-2">
+                            <span class="material-symbols-rounded text-warning" style="font-size: 18px;">calendar_month</span>
+                            <div class="text-xs text-white leading-relaxed">{{
+                                t.planBlockedMonthlyDay.replace('{name}', applyTemplatesModal.blockedPlan.blockedTemplates?.[0]?.name || '') }}
+                            </div>
+                        </div>
+                        <div v-else class="grid grid-cols-3 gap-2">
                             <div class="p-2 rounded-lg bg-surface-2 border border-glass text-center">
                                 <div class="text-[10px] font-bold uppercase tracking-wider text-zinc-500">{{
                                     t.willCreate }}</div>
@@ -4549,7 +4586,7 @@
                             :disabled="applyTemplatesModal.isLoading || !applyTemplatesEffectiveDateValid || !selectedApplyTemplatesProfileId">
                             {{ t.reviewChanges }}
                         </button>
-                        <button v-if="applyTemplatesModal.preview"
+                        <button v-if="applyTemplatesModal.preview && !applyTemplatesModal.blockedPlan"
                             class="flex-1 py-3 rounded-xl bg-brand text-white border border-brand/40 hover:brightness-110 transition-all text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                             @click="confirmTemplateApplication"
                             :disabled="applyTemplatesModal.isLoading || !applyTemplatesEffectiveDateValid || !selectedApplyTemplatesProfileId">
@@ -4557,7 +4594,7 @@
                         </button>
                     </div>
 
-                    <button v-if="applyTemplatesModal.mode === 'monthStart' && applyTemplatesModal.preview"
+                    <button v-if="applyTemplatesModal.mode === 'monthStart' && applyTemplatesModal.preview && !applyTemplatesModal.blockedPlan"
                         class="w-full py-3 rounded-xl bg-brand text-white border border-brand/40 hover:brightness-110 transition-all text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                         @click="confirmTemplateApplication"
                         :disabled="applyTemplatesModal.isLoading || !applyTemplatesEffectiveDateValid || !selectedApplyTemplatesProfileId">
@@ -4755,7 +4792,7 @@
                                 <div v-for="item in onboardingModal.monthlyItems" :key="item.id" class="flex items-center gap-2 p-2.5 rounded-lg bg-surface-2 border border-glass">
                                     <div class="min-w-0 flex-1">
                                         <div class="text-sm font-semibold text-white truncate">{{ item.name }}</div>
-                                        <div class="text-[11px] text-secondary">{{ categoryOptions.find(option => option.id === item.category)?.label || item.category }} · {{ t.dayOfMonth }} {{ item.days[0] }} · {{ formatCompactAmount(item.expectedCost) }} SAR</div>
+                                        <div class="text-[11px]" :class="item.days && item.days.length > 0 ? 'text-secondary' : 'text-warning'">{{ categoryOptions.find(option => option.id === item.category)?.label || item.category }} · <template v-if="item.days && item.days.length > 0">{{ t.dayOfMonth }} {{ item.days.join(', ') }}</template><template v-else>{{ t.monthlyDayMissingWarning }}</template> · {{ formatCompactAmount(item.expectedCost) }} SAR</div>
                                     </div>
                                     <button type="button" @click="removeOnboardingTemplateItem('monthly', item.id)" class="w-8 h-8 rounded-lg bg-surface-1 border border-glass text-zinc-400 hover:text-white hover:bg-surface-3 transition-all">
                                         <span class="material-symbols-rounded text-sm">close</span>
@@ -4876,6 +4913,15 @@
                                 {{ option.label }}
                             </button>
                         </div>
+                    </div>
+
+                    <!-- P1-06 review fix: monthly templates must carry an explicit day;
+                         a legacy dayless template shows the warning until repaired. -->
+                    <div class="edit-input-group" v-if="editModal.type === 'template' && editModal.form.recurrence === 'monthly'">
+                        <label class="edit-input-label">{{ t.dayOfMonth }}</label>
+                        <input type="number" min="1" max="31" v-model="editModal.form.monthDay" class="glass-input w-full font-mono"
+                            :placeholder="t.dayOfMonth">
+                        <div v-if="!editModalMonthDayValid" class="text-[11px] text-warning mt-1">{{ t.monthlyDayMissingWarning }}</div>
                     </div>
 
                     <!-- Classification Toggle (expenses only) -->
@@ -5028,12 +5074,21 @@
 
         const toISODate = (value) => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
 
+        // P1-01: parse 'YYYY-MM-DD' as a local civil day so local getters
+        // (getFullYear/getMonth/getDate/getDay) agree in every timezone.
+        const parseLocalCalendarDate = (dateStr) => {
+            if (typeof dateStr !== 'string' || !dateStr) return new Date(NaN);
+            const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr.trim());
+            if (!match) return new Date(NaN);
+            return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+        };
+
         const DEFAULT_PROFILE_OFFDAYS = Object.freeze([5, 6]);
 
         const TEMPLATE_APPLICABILITY_VALUES = Object.freeze(['everyday', 'workday', 'offday']);
 
         const getMonthBoundsFromDate = (dateStr) => {
-            const base = dateStr ? new Date(dateStr) : new Date();
+            const base = dateStr ? parseLocalCalendarDate(dateStr) : new Date();
             if (Number.isNaN(base.getTime())) {
                 return { monthKey: '', monthStart: '', monthEnd: '' };
             }
@@ -5051,7 +5106,7 @@
         };
 
         const getPreviousMonthKey = (dateStr) => {
-            const base = dateStr ? new Date(dateStr) : new Date();
+            const base = dateStr ? parseLocalCalendarDate(dateStr) : new Date();
             if (Number.isNaN(base.getTime())) return '';
             const previousMonthDate = new Date(base.getFullYear(), base.getMonth() - 1, 1);
             return getMonthKey(toISODate(previousMonthDate));
@@ -5065,8 +5120,8 @@
             if (!startDate || !endDate || startDate > endDate) return [];
 
             const dates = [];
-            const cursor = new Date(startDate);
-            const limit = new Date(endDate);
+            const cursor = parseLocalCalendarDate(startDate);
+            const limit = parseLocalCalendarDate(endDate);
 
             if (Number.isNaN(cursor.getTime()) || Number.isNaN(limit.getTime())) return [];
 
@@ -5097,8 +5152,17 @@
             return [...new Set(normalized)].sort((left, right) => left - right);
         };
 
+        // P1-06 review fix: strict day extraction for validation and display.
+        // Unlike normalizeTemplateDays, it never invents a fallback day, so a
+        // legacy monthly template without a usable schedule stays visibly empty.
+        const getValidTemplateDays = (template) => (Array.isArray(template?.days) ? template.days : [])
+            .map(day => toNonNegativeInteger(day, NaN))
+            .filter(day => Number.isInteger(day) && day >= 1 && day <= 31);
+
+        const hasValidMonthlySchedule = (template) => getValidTemplateDays(template).length > 0;
+
         const getDateWeekdayIndex = (dateStr) => {
-            const base = new Date(dateStr);
+            const base = parseLocalCalendarDate(dateStr);
             if (Number.isNaN(base.getTime())) return null;
             return base.getDay();
         };
@@ -5121,7 +5185,7 @@
         };
 
         const getMonthlyTemplateDays = (template, dateStr) => {
-            const base = new Date(dateStr);
+            const base = parseLocalCalendarDate(dateStr);
             if (Number.isNaN(base.getTime())) return [];
 
             const lastDay = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
@@ -5135,7 +5199,7 @@
             if (isFlexibleDefinitionRecord(normalizedTemplate)) return false;
             if (normalizedTemplate.recurrence === 'daily') return templateMatchesApplicabilityForDate(normalizedTemplate, dateStr, profile);
             if (normalizedTemplate.recurrence === 'monthly') {
-                const base = new Date(dateStr);
+                const base = parseLocalCalendarDate(dateStr);
                 if (Number.isNaN(base.getTime())) return false;
                 return getMonthlyTemplateDays(normalizedTemplate, dateStr).includes(base.getDate());
             }
@@ -5288,6 +5352,19 @@
                 byMonthKey.set(normalizedAssignment.monthKey, normalizedAssignment);
             });
             return Array.from(byMonthKey.values()).sort((left, right) => left.monthKey.localeCompare(right.monthKey));
+        };
+
+        // P1-03: monthKey -> base allowance snapshots. Entries are recorded while
+        // a month is live and are never rewritten by later allowance changes.
+        const normalizeMonthlyBaseAllowances = (value) => {
+            if (!isPlainObjectRecord(value)) return {};
+            const normalized = {};
+            for (const [monthKey, amount] of Object.entries(value)) {
+                if (!MONTH_KEY_PATTERN.test(monthKey || '')) continue;
+                const parsed = toFiniteNumber(amount, NaN);
+                if (Number.isFinite(parsed) && parsed >= 0) normalized[monthKey] = parsed;
+            }
+            return normalized;
         };
 
         const normalizeOnboardingStateRecord = (state) => {
@@ -5634,6 +5711,14 @@
                     }
                     if (hasDuplicateRecordIds(settings.monthEndSettlements, 'previousMonthKey')) return { ok: false, reason: 'settings.monthEndSettlements' };
                 }
+                if (settings.monthlyBaseAllowances !== undefined) {
+                    if (!isPlainObjectRecord(settings.monthlyBaseAllowances)) return { ok: false, reason: 'settings.monthlyBaseAllowances' };
+                    for (const [monthKey, amount] of Object.entries(settings.monthlyBaseAllowances)) {
+                        if (!MONTH_KEY_PATTERN.test(monthKey || '') || !isValidBackupMoneyValue(amount)) {
+                            return { ok: false, reason: 'settings.monthlyBaseAllowances' };
+                        }
+                    }
+                }
             }
 
             if (payload.templates !== undefined) {
@@ -5647,6 +5732,14 @@
                         || (template.expectedCost !== undefined && !isValidBackupMoneyValue(template.expectedCost))
                         || (template.defaultAmount !== undefined && !isValidBackupMoneyValue(template.defaultAmount))) {
                         return { ok: false, reason: 'templates' };
+                    }
+                    // P1-06: an imported monthly template without an explicit valid
+                    // occurrence day would sit silently with zero occurrences.
+                    if ((template.recurrence || 'daily') === 'monthly') {
+                        const days = Array.isArray(template.days) ? template.days : [];
+                        if (days.length === 0 || days.some(day => !Number.isInteger(day) || day < 1 || day > 31)) {
+                            return { ok: false, reason: 'templates.monthlyDays' };
+                        }
                     }
                 }
                 if (hasDuplicateRecordIds(payload.templates)) return { ok: false, reason: 'templates' };
@@ -6015,6 +6108,9 @@
                 templateProfiles: [LEGACY_TEMPLATE_PROFILE],
                 activeTemplateProfileId: LEGACY_TEMPLATE_PROFILE.id,
                 monthlyTemplateAssignments: [],
+                // P1-03: monthKey -> base allowance recorded while that month was
+                // live, so older periods keep the budget they actually had.
+                monthlyBaseAllowances: {},
                 vault: { balance: 0, transactions: [], goals: [] },
                 monthEndSettlements: []
             },
@@ -6041,6 +6137,7 @@
             },
             statistics: {
                 monthKey: '',
+                budgetKnown: true,
                 budget: 0,
                 paidSpent: 0,
                 unpaidEssential: 0,
@@ -6068,15 +6165,24 @@
                 // Load Settings
                 this.settings.baseAllowance = normalizePersistedMoney(await DB.getSetting('baseAllowance', 1000), 1000);
                 await DB.setSetting('baseAllowance', this.settings.baseAllowance);
-                this.settings.safeToSpendMode = await DB.getSetting('safeToSpendMode', 'monthly');
+                // P1-05: the fake "divide by four" weekly view was removed. Any
+                // stored weekly preference normalizes to the honest monthly view.
+                this.settings.safeToSpendMode = 'monthly';
+                if (await DB.getSetting('safeToSpendMode', 'monthly') !== 'monthly') {
+                    await DB.setSetting('safeToSpendMode', 'monthly');
+                }
                 this.settings.motionLevel = normalizeMotionLevel(await DB.getSetting('motionLevel', localStorage.getItem('rushd_motion') || 'auto'));
                 this.settings.theme = await DB.getSetting('theme', localStorage.getItem('rushd_theme') === 'light' ? 'light' : 'dark');
                 this.settings.templateProfiles = normalizeTemplateProfiles(await DB.getSetting('templateProfiles', []));
                 this.settings.activeTemplateProfileId = await DB.getSetting('activeTemplateProfileId', LEGACY_TEMPLATE_PROFILE.id);
                 this.settings.monthlyTemplateAssignments = normalizeMonthlyTemplateAssignments(await DB.getSetting('monthlyTemplateAssignments', []));
+                this.settings.monthlyBaseAllowances = normalizeMonthlyBaseAllowances(await DB.getSetting('monthlyBaseAllowances', {}));
                 this.settings.vault = normalizeVaultStateRecord(await DB.getSetting('vault', null));
                 await DB.setSetting('vault', this.settings.vault);
                 this.settings.monthEndSettlements = normalizeMonthEndSettlements(await DB.getSetting('monthEndSettlements', []));
+                // P1-03: record this month's allowance so later changes cannot
+                // rewrite what this month's budget claim will be.
+                await this.recordCurrentMonthBaseAllowance();
 
                 // Load Templates
                 this.templates = await DB.getTemplates();
@@ -6165,8 +6271,15 @@
 
             resolveTemplateProfileIdForDate(dateStr, fallbackProfileId = this.settings.activeTemplateProfileId) {
                 const assignment = this.getMonthlyTemplateAssignment(dateStr);
-                const assignedProfileId = getDefinitionProfileId({ profileId: assignment?.assignedProfileId }, '');
-                return assignedProfileId || getDefinitionProfileId({ profileId: fallbackProfileId });
+                // P1-07: an assignment governs only dates from its effective date
+                // forward. Earlier dates must not silently inherit month-wide plan
+                // behavior; per-date revision history belongs to the P03/P04
+                // versioned plan domain.
+                if (assignment && dateStr && dateStr >= assignment.effectiveDate) {
+                    const assignedProfileId = getDefinitionProfileId({ profileId: assignment.assignedProfileId }, '');
+                    if (assignedProfileId) return assignedProfileId;
+                }
+                return getDefinitionProfileId({ profileId: fallbackProfileId });
             },
 
             getTemplateProfileRecord(profileId = this.settings.activeTemplateProfileId) {
@@ -6203,7 +6316,36 @@
             },
 
             getBudgetForMonth(monthKey) {
+                const currentMonthKey = getMonthKey(Core.Date.getTodayISO());
+                // P1-03: a past month keeps the allowance recorded while that month
+                // was live. Changing today's allowance must not rewrite the budget
+                // Rushd claims for an older period.
+                if (currentMonthKey && monthKey && monthKey < currentMonthKey) {
+                    const history = isPlainObjectRecord(this.settings.monthlyBaseAllowances)
+                        ? this.settings.monthlyBaseAllowances
+                        : {};
+                    const recorded = toFiniteNumber(history[monthKey], NaN);
+                    // Review fix: without a trustworthy record the historical budget
+                    // is unknown. Today's allowance must never become historical
+                    // fact, so callers receive null and surface that state.
+                    if (!Number.isFinite(recorded)) return null;
+                    return recorded + this.getBudgetCarryoverForMonth(monthKey);
+                }
                 return toFiniteNumber(this.settings.baseAllowance, 1000) + this.getBudgetCarryoverForMonth(monthKey);
+            },
+
+            async recordCurrentMonthBaseAllowance() {
+                const monthKey = getMonthKey(Core.Date.getTodayISO());
+                if (!MONTH_KEY_PATTERN.test(monthKey || '')) return this.settings.monthlyBaseAllowances;
+                const value = toFiniteNumber(this.settings.baseAllowance, 1000);
+                const history = isPlainObjectRecord(this.settings.monthlyBaseAllowances)
+                    ? { ...this.settings.monthlyBaseAllowances }
+                    : {};
+                if (toFiniteNumber(history[monthKey], NaN) === value) return history;
+                history[monthKey] = value;
+                this.settings.monthlyBaseAllowances = history;
+                await DB.setSetting('monthlyBaseAllowances', history);
+                return history;
             },
 
             async persistVaultState() {
@@ -6272,14 +6414,16 @@
                 });
 
                 const budget = this.getBudgetForMonth(monthKey);
+                const budgetKnown = budget !== null;
                 return {
                     monthKey,
                     monthStart,
                     monthEnd,
+                    budgetKnown,
                     budget,
                     spent: actualSpent,
                     unpaidReserved,
-                    surplus: Math.max(0, budget - actualSpent - unpaidReserved)
+                    surplus: budgetKnown ? Math.max(0, budget - actualSpent - unpaidReserved) : null
                 };
             },
 
@@ -6322,15 +6466,23 @@
                 this.currentDate = dateStr;
                 this.currentViewExpenses = []; // Clear immediately to avoid stale data
                 const expenses = await DB.getExpensesByDate(dateStr);
-                // Only apply if no newer request was made
-                if (gen === this._loadGen) {
-                    this.currentViewExpenses = expenses;
-                }
-                await this.refreshFlexibleStats(dateStr);
-                await this.refreshStatistics(dateStr);
+                // P1-08: one generation guards the complete day-loading and
+                // derived-statistics pipeline. A late response for date A must
+                // never publish or refresh over the newer date B.
+                if (gen !== this._loadGen) return;
+                this.currentViewExpenses = expenses;
+                await this.refreshFlexibleStats(dateStr, gen);
+                if (gen !== this._loadGen) return;
+                await this.refreshStatistics(dateStr, gen);
             },
 
-            async refreshFlexibleStats(referenceDate = this.currentDate) {
+            // P1-08: when a refresh runs inside the loadDay pipeline, its publishes
+            // must be dropped if a newer loadDay took over while they were awaited.
+            _pipelineGenIsCurrent(pipelineGen) {
+                return pipelineGen === null || pipelineGen === this._loadGen;
+            },
+
+            async refreshFlexibleStats(referenceDate = this.currentDate, pipelineGen = null) {
                 const targetDate = referenceDate || this.currentDate || Core.Date.getTodayISO();
                 const monthKey = getMonthKey(targetDate);
                 const gen = ++this._flexibleStatsGen;
@@ -6340,7 +6492,7 @@
                     .map(normalizeDefinitionRecord);
 
                 if (definitions.length === 0) {
-                    if (gen === this._flexibleStatsGen) {
+                    if (gen === this._flexibleStatsGen && this._pipelineGenIsCurrent(pipelineGen)) {
                         this.flexibleStats = {
                             monthKey,
                             items: [],
@@ -6383,7 +6535,7 @@
                     };
                 });
 
-                if (gen !== this._flexibleStatsGen) return;
+                if (gen !== this._flexibleStatsGen || !this._pipelineGenIsCurrent(pipelineGen)) return;
 
                 this.flexibleStats = {
                     monthKey,
@@ -6395,7 +6547,7 @@
                 };
             },
 
-            async refreshStatistics(referenceDate = this.currentDate) {
+            async refreshStatistics(referenceDate = this.currentDate, pipelineGen = null) {
                 const targetDate = referenceDate || this.currentDate || Core.Date.getTodayISO();
                 const { monthKey, monthStart, monthEnd } = getMonthBoundsFromDate(targetDate);
                 const previousMonthKey = getPreviousMonthKey(targetDate);
@@ -6403,7 +6555,7 @@
                 const gen = ++this._statisticsGen;
 
                 const emptyStats = {
-                    monthKey: '', budget: 0, paidSpent: 0, unpaidEssential: 0,
+                    monthKey: '', budgetKnown: true, budget: 0, paidSpent: 0, unpaidEssential: 0,
                     safeToSpend: 0, projectedBalance: 0, essentialSpent: 0,
                     luxurySpent: 0, luxuryCount: 0, essentialCount: 0,
                     previousMonthKey: '', previousMonthSpent: 0, previousMonthLuxurySpent: 0,
@@ -6412,7 +6564,7 @@
                 };
 
                 if (!monthKey || !monthStart || !monthEnd) {
-                    if (gen === this._statisticsGen) this.statistics = emptyStats;
+                    if (gen === this._statisticsGen && this._pipelineGenIsCurrent(pipelineGen)) this.statistics = emptyStats;
                     return;
                 }
 
@@ -6482,10 +6634,14 @@
                     }
                 });
 
-                if (gen !== this._statisticsGen) return;
+                if (gen !== this._statisticsGen || !this._pipelineGenIsCurrent(pipelineGen)) return;
 
+                // P1-03 review fix: an unsnapshotted historical month has no
+                // trustworthy budget. Publish the unavailable state instead of a
+                // number derived from today's allowance.
                 const budget = this.getBudgetForMonth(monthKey);
-                const safeToSpend = budget - paidSpent - unpaidEssential;
+                const budgetKnown = budget !== null;
+                const safeToSpend = budgetKnown ? budget - paidSpent - unpaidEssential : null;
 
                 // Build sorted category breakdown
                 const categoryBreakdown = Object.values(categoryMap)
@@ -6503,6 +6659,7 @@
 
                 this.statistics = {
                     monthKey,
+                    budgetKnown,
                     budget,
                     paidSpent,
                     unpaidEssential,
@@ -6519,7 +6676,7 @@
                     luxuryDelta: luxurySpent - previousMonthLuxurySpent,
                     categoryBreakdown,
                     weeklySpending,
-                    budgetUtilization: budget > 0 ? Math.min(100, (paidSpent / budget) * 100) : 0
+                    budgetUtilization: budgetKnown && budget > 0 ? Math.min(100, (paidSpent / budget) * 100) : 0
                 };
             },
 
@@ -6621,16 +6778,40 @@
                 this.templates = seeds;
             },
 
+            // P1-06 review fix: monthly templates whose stored record carries no
+            // valid schedule day (legacy rows can predate the day requirement).
+            // They stay stored untouched — Rushd never invents a day — but every
+            // generation path blocks visibly until one is chosen.
+            getInvalidMonthlyScheduleTemplates(profileId = null) {
+                return this.templates.filter(template => {
+                    if (isFlexibleDefinitionRecord(template)) return false;
+                    const normalizedTemplate = normalizeDefinitionRecord(template);
+                    if (normalizedTemplate.recurrence !== 'monthly') return false;
+                    if (profileId && !isDefinitionInProfile(template, profileId)) return false;
+                    return !hasValidMonthlySchedule(normalizedTemplate);
+                });
+            },
+
             // The "Auto-Fill" Logic
             async autoFillDay(dateStr) {
                 // Prevent double invocation
                 if (this._autoFillLock) return 0;
+                // P1-07 review fix: Auto-Fill on a historical date would regenerate
+                // activity from today's mutable profile and template rules. The
+                // original revision is unknown, so past dates are refused here and
+                // visibly blocked with an explanation at the UI layer.
+                if (dateStr && dateStr < Core.Date.getTodayISO()) return 0;
                 this._autoFillLock = true;
                 try {
                     // FORCE SYNC: Ensure we have the absolute latest templates from DB
-                    this.templates = await DB.getTemplates();
-                    const activeTemplateProfileId = this.resolveTemplateProfileIdForDate(dateStr);
-                    const activeTemplateProfile = this.getTemplateProfileRecord(activeTemplateProfileId);
+                this.templates = await DB.getTemplates();
+                const activeTemplateProfileId = this.resolveTemplateProfileIdForDate(dateStr);
+                const activeTemplateProfile = this.getTemplateProfileRecord(activeTemplateProfileId);
+
+                // P1-06 review fix: a legacy monthly template without a schedule day
+                // would silently generate nothing. Auto-Fill refuses to run until the
+                // day is repaired, and the UI layer shows the bilingual explanation.
+                if (this.getInvalidMonthlyScheduleTemplates(activeTemplateProfileId).length > 0) return 0;
 
                     const existing = await DB.getExpensesByDate(dateStr);
                     const existingNames = new Set(existing.map(e => e.name));
@@ -6709,6 +6890,36 @@
                 const activeTemplateProfile = this.getTemplateProfileRecord(activeTemplateProfileId);
 
                 const templates = this.templates.filter(template => !isFlexibleDefinitionRecord(template) && isDefinitionInProfile(template, activeTemplateProfileId));
+
+                // P1-06 review fix: a monthly template without a schedule day can
+                // never produce an occurrence, so planning would silently no-op.
+                // The plan is refused atomically — zero mutations, zero writes —
+                // until the template is repaired with a valid day.
+                const invalidMonthlyTemplates = templates.filter(template => template.recurrence === 'monthly' && !hasValidMonthlySchedule(template));
+                if (invalidMonthlyTemplates.length > 0) {
+                    const blockedSummary = {
+                        rangeStart,
+                        rangeEnd: monthEnd,
+                        createCount: 0,
+                        updateCount: 0,
+                        deleteCount: 0,
+                        totalChanges: 0,
+                        blocked: true
+                    };
+                    return {
+                        effectiveDate: normalizedEffectiveDate,
+                        rangeStart,
+                        rangeEnd: monthEnd,
+                        toCreate: [],
+                        toUpdate: [],
+                        toDelete: [],
+                        blocked: true,
+                        blockedReason: 'monthlyDayMissing',
+                        blockedTemplates: invalidMonthlyTemplates.map(template => ({ id: template.id, name: template.name || template.id })),
+                        summary: blockedSummary
+                    };
+                }
+
                 const allExpenses = (await DB.getAllExpenses()).map(normalizeExpenseRecord);
                 const rangeExpenses = allExpenses.filter(expense => isDateInRange(expense.date, rangeStart, monthEnd));
                 const expensesByDate = rangeExpenses.reduce((lookup, expense) => {
@@ -6784,6 +6995,11 @@
                     : getDefinitionProfileId({ profileId: this.settings.activeTemplateProfileId });
                 const plan = await this.buildTemplateApplyPlan(normalizedEffectiveDate, { profileId });
 
+                // P1-06 review fix: a blocked plan must not touch IndexedDB at all —
+                // no expense writes and no monthly assignment write. The caller is
+                // responsible for the visible bilingual explanation.
+                if (plan.blocked) return plan;
+
                 // P0-02: deletes, updates, creates, and the monthly assignment all
                 // commit in one atomic IndexedDB transaction or not at all.
                 const normalizedAssignment = normalizeMonthlyTemplateAssignmentRecord({
@@ -6821,6 +7037,9 @@
 
             // --- GETTERS (Computed Properties) ---
             get safeToSpend() {
+                // P1-03 review fix: an unsnapshotted historical month has no
+                // trustworthy safe-to-spend amount; null means "unknown".
+                if (this.statistics.budgetKnown === false) return null;
                 return toFiniteNumber(this.statistics.safeToSpend, 0);
             },
 
@@ -8480,6 +8699,7 @@
             category: 'food',
             recurrence: 'daily',
             applicability: 'everyday',
+            monthDay: '',
             classification: 'essential',
             source: 'manual',
             flexibleDefinitionId: '',
@@ -8491,7 +8711,9 @@
             name: '',
             cost: '',
             category: 'food',
-            day: 1,
+            // P1-06 review fix: a monthly recurrence must never silently start on
+            // day 1; the day input starts empty and an explicit day is required.
+            day: '',
             ...(overrides || {})
         });
 
@@ -8511,7 +8733,7 @@
             monthlyItems: [],
             workdayDraft: createOnboardingTemplateDraft(),
             offdayDraft: createOnboardingTemplateDraft(),
-            monthlyDraft: createOnboardingTemplateDraft({ day: 1 })
+            monthlyDraft: createOnboardingTemplateDraft(),
         });
 
         MicroSaveApp.mixin({
@@ -8549,6 +8771,7 @@
                         mode: 'manual',
                         effectiveDate: '',
                         preview: null,
+                        blockedPlan: null,
                         isLoading: false,
                         selectedProfileId: '',
                         promptMonthKey: ''
@@ -8682,6 +8905,14 @@
                         return !!this.onboardingNewProfileNameNormalized && !this.onboardingNewProfileNameTaken;
                     }
                     return !!this.selectedOnboardingProfileId;
+                },
+                // P1-06 review fix: the editor's day input must hold a valid
+                // occurrence day before a monthly template can be saved.
+                editModalMonthDayValid() {
+                    if (this.editModal.type !== 'template') return true;
+                    if (this.editModal.form?.recurrence !== 'monthly') return true;
+                    const occurrenceDay = Math.floor(Number(this.editModal.form?.monthDay));
+                    return Number.isInteger(occurrenceDay) && occurrenceDay >= 1 && occurrenceDay <= 31;
                 },
                 selectedApplyTemplatesProfileId() {
                     const selectedProfileId = this.applyTemplatesModal.selectedProfileId;
@@ -8849,7 +9080,7 @@
                     return this.store.currentViewExpenses.filter(e => this.selectedExpenseIds.includes(e.id) && e.isPaid).length;
                 },
                 currentMonthYear() {
-                    const d = new Date(this.store.currentDate);
+                    const d = this.core.Date.parseLocalDate(this.store.currentDate);
                     if (this.calendarType === 'hijri') {
                         let str = d.toLocaleDateString(this.t._locale, { calendar: 'islamic', month: 'long', year: 'numeric' });
                         // Remove trailing "AH" suffix for English locale
@@ -8883,11 +9114,10 @@
                                 : this.t.settings;
                 },
                 displaySafeToSpend() {
-                    const monthly = this.store.safeToSpend;
-                    if (this.store.settings.safeToSpendMode === 'weekly') {
-                        return monthly / 4;
-                    }
-                    return monthly;
+                    // P1-05: the divide-by-four weekly pace was not trustworthy and is
+                    // disabled. Deterministic pacing belongs to the Insights phase,
+                    // so Rushd only shows the monthly amount it can actually compute.
+                    return this.store.safeToSpend;
                 },
                 isArabicText() {
                     const arRegex = /[\u0600-\u06FF]/;
@@ -9014,10 +9244,12 @@
                     return {
                         workdayItems: templates.filter(template => template.recurrence === 'daily' && template.applicability === 'workday'),
                         offdayItems: templates.filter(template => template.recurrence === 'daily' && template.applicability === 'offday'),
+                        // P1-06 review fix: show only the genuinely stored valid days —
+                        // a legacy monthly template without a day stays visibly dayless.
                         monthlyItems: templates.filter(template => template.recurrence === 'monthly')
                             .map(template => ({
                                 ...template,
-                                days: normalizeTemplateDays(template.days)
+                                days: getValidTemplateDays(template)
                             }))
                     };
                 },
@@ -9080,12 +9312,22 @@
                         applicability: sectionConfig.applicability
                     };
 
-                    const item = section === 'monthly'
-                        ? { ...baseItem, days: normalizeTemplateDays([draft?.day]) }
-                        : baseItem;
+                    // P1-06 review fix: a monthly item needs an explicit valid day;
+                    // nothing is added until one is chosen.
+                    let item;
+                    if (section === 'monthly') {
+                        const occurrenceDay = Math.floor(Number(draft?.day));
+                        if (!Number.isInteger(occurrenceDay) || occurrenceDay < 1 || occurrenceDay > 31) {
+                            this.showToast(this.t.monthlyDayRequired);
+                            return;
+                        }
+                        item = { ...baseItem, days: [occurrenceDay] };
+                    } else {
+                        item = baseItem;
+                    }
 
                     this.onboardingModal[sectionConfig.itemsKey] = [...this.onboardingModal[sectionConfig.itemsKey], item];
-                    this.onboardingModal[sectionConfig.draftKey] = createOnboardingTemplateDraft(section === 'monthly' ? { day: 1 } : {});
+                    this.onboardingModal[sectionConfig.draftKey] = createOnboardingTemplateDraft();
                 },
                 removeOnboardingTemplateItem(section, itemId) {
                     const itemsKey = section === 'workday'
@@ -9152,7 +9394,9 @@
                         profileId,
                         recurrence: template.recurrence === 'monthly' ? 'monthly' : 'daily',
                         applicability: template.recurrence === 'monthly' ? 'everyday' : (template.applicability || 'everyday'),
-                        days: template.recurrence === 'monthly' ? normalizeTemplateDays(template.days) : []
+                        // P1-06 review fix: persist only the valid days that were
+                        // explicitly chosen; no day is ever invented here.
+                        days: template.recurrence === 'monthly' ? getValidTemplateDays(template) : []
                     }));
 
                     const stagedTemplateIds = new Set(stagedTemplates.map(template => template.id));
@@ -9182,6 +9426,15 @@
                 },
                 async finishOnboarding() {
                     if (!this.onboardingCanFinish) return;
+                    // P1-06 review fix: a monthly item without a valid day (including
+                    // a legacy template kept in the plan) blocks setup before ANY
+                    // write happens — no profile, no settings, no plan application.
+                    const invalidStagedMonthly = this.onboardingModal.monthlyItems
+                        .filter(item => item.recurrence === 'monthly' && !hasValidMonthlySchedule(item));
+                    if (invalidStagedMonthly.length > 0) {
+                        this.showToast(this.t.onboardingBlockedMonthlyDay.replace('{name}', invalidStagedMonthly[0].name || invalidStagedMonthly[0].id || ''));
+                        return;
+                    }
                     this.onboardingModal.isLoading = true;
                     try {
                         const safeBudgetValue = parseMoneyInput(this.onboardingModal.budget);
@@ -9193,6 +9446,7 @@
                         if (!targetProfileId) return;
                         this.store.settings.baseAllowance = safeBudgetValue;
                         await DB.setSetting('baseAllowance', safeBudgetValue);
+                        await this.store.recordCurrentMonthBaseAllowance();
                         await this.persistOnboardingTemplateItems(targetProfileId);
                         await this.setActiveTemplateProfile(targetProfileId);
                         await this.store.applyTemplatesFrom(this.onboardingModal.effectiveDate, { profileId: targetProfileId });
@@ -9283,16 +9537,29 @@
                 },
 
                 // --- DATA ACTIONS ---
-                hasPending(iso) {
-                    // This is expensive to calculate for all dates, 
-                    // in a real large app we'd index this in DB stats.
-                    // For now, we trust the view logic or omit specific dots for performance.
-                    return false; // Placeholder for optimization
-                },
+                // P1-11: the always-false hasPending activity dot placeholder was
+                // removed; real per-day activity indicators belong to the Insights
+                // phase and must be computed from actual data.
 
                 async autoFillToday() {
-                    const count = await this.store.autoFillDay(this.store.currentDate);
-                    if (count > 0) this.triggerConfetti();
+                    const dateStr = this.store.currentDate;
+                    // P1-07 review fix: historical Auto-Fill is visibly blocked — the
+                    // rules that were in effect back then are not preserved, so Rushd
+                    // must not generate historical activity from today's edited rules.
+                    if (dateStr && dateStr < this.core.Date.getTodayISO()) {
+                        this.showToast(this.t.historicalAutoFillBlocked);
+                        return;
+                    }
+                    // P1-06 review fix: a monthly template without a schedule day
+                    // blocks generation visibly instead of silently doing nothing.
+                    const blockedMonthly = this.store.getInvalidMonthlyScheduleTemplates(
+                        this.store.resolveTemplateProfileIdForDate(dateStr)
+                    );
+                    if (blockedMonthly.length > 0) {
+                        this.showToast(this.t.autoFillBlockedMonthlyDay.replace('{name}', blockedMonthly[0].name || blockedMonthly[0].id));
+                        return;
+                    }
+                    await this.store.autoFillDay(dateStr);
                 },
 
                 getMonthStartPromptDeferral() {
@@ -9358,7 +9625,7 @@
                 },
                 formatMonthKeyLabel(monthKey) {
                     if (!MONTH_KEY_PATTERN.test(monthKey || '')) return '';
-                    const monthDate = new Date(`${monthKey}-01`);
+                    const monthDate = this.core.Date.parseLocalDate(`${monthKey}-01`);
                     if (Number.isNaN(monthDate.getTime())) return monthKey;
                     if (this.calendarType === 'hijri') {
                         let label = monthDate.toLocaleDateString(this.t._locale, { calendar: 'islamic', month: 'long', year: 'numeric' });
@@ -9378,6 +9645,10 @@
                     if (!currentMonthKey || !previousMonthKey || currentMonthKey === previousMonthKey) return null;
                     const snapshot = await this.store.getMonthFinancialSnapshot(previousMonthKey);
                     if (!snapshot) return null;
+                    // P1-03 review fix: settlement math requires the recorded
+                    // historical budget. When it is unknown, the calculation is
+                    // blocked rather than settled with today's allowance.
+                    if (snapshot.budgetKnown === false) return null;
                     return {
                         currentMonthKey,
                         previousMonthKey,
@@ -9411,7 +9682,17 @@
                         return false;
                     }
                     const summary = await this.buildMonthEndDecisionSummary(referenceDate);
-                    if (!summary) return false;
+                    if (!summary) {
+                        // P1-03 review fix: when settlement is impossible because the
+                        // previous month's budget was never recorded, say so instead of
+                        // failing silently. The prompt is deferred for today so the
+                        // message does not repeat on every reload.
+                        if (await this.monthEndBlockedByUnknownBudget(referenceDate)) {
+                            this.showToast(this.t.monthEndBudgetUnknown.replace('{month}', this.formatMonthKeyLabel(previousMonthKey)));
+                            this.deferMonthEndPrompt(previousMonthKey, referenceDate);
+                        }
+                        return false;
+                    }
                     if (summary.surplus <= 0) {
                         await this.store.settleMonthEndNoSurplus(summary, referenceDate);
                         this.clearMonthEndPromptDeferral();
@@ -9482,6 +9763,7 @@
                     this.applyTemplatesModal.mode = mode;
                     this.applyTemplatesModal.effectiveDate = effectiveDate;
                     this.applyTemplatesModal.preview = null;
+                    this.applyTemplatesModal.blockedPlan = null;
                     this.applyTemplatesModal.isLoading = false;
                     this.applyTemplatesModal.selectedProfileId = resolvedProfileId;
                     this.applyTemplatesModal.promptMonthKey = mode === 'monthStart'
@@ -9490,6 +9772,7 @@
                 },
                 resetApplyTemplatesPreview() {
                     this.applyTemplatesModal.preview = null;
+                    this.applyTemplatesModal.blockedPlan = null;
                 },
                 selectApplyTemplatesProfile(profileId) {
                     if (!this.templateProfiles.some(profile => profile.id === profileId)) return;
@@ -9507,15 +9790,32 @@
                     try {
                         const plan = await this.store.buildTemplateApplyPlan(this.applyTemplatesModal.effectiveDate, { profileId: this.selectedApplyTemplatesProfileId });
                         this.applyTemplatesModal.preview = plan.summary;
+                        // P1-06 review fix: a legacy monthly template without a day
+                        // blocks the whole plan; the preview says so bilingually and
+                        // the apply button is withheld.
+                        this.applyTemplatesModal.blockedPlan = plan.blocked ? plan : null;
                     } finally {
                         this.applyTemplatesModal.isLoading = false;
                     }
                 },
                 async confirmTemplateApplication() {
                     if (!this.applyTemplatesEffectiveDateValid || !this.selectedApplyTemplatesProfileId) return;
+                    // P1-06 review fix: never reach the write path while the plan is
+                    // blocked on a monthly template missing its day.
+                    if (this.applyTemplatesModal.blockedPlan) {
+                        this.showToast(this.t.planBlockedMonthlyDay.replace('{name}', this.applyTemplatesModal.blockedPlan.blockedTemplates?.[0]?.name || ''));
+                        return;
+                    }
                     this.applyTemplatesModal.isLoading = true;
                     try {
                         const plan = await this.store.applyTemplatesFrom(this.applyTemplatesModal.effectiveDate, { profileId: this.selectedApplyTemplatesProfileId });
+                        // Defense in depth: the store refuses blocked plans before
+                        // any write; surface the block instead of reporting success.
+                        if (plan.blocked) {
+                            this.applyTemplatesModal.blockedPlan = plan;
+                            this.showToast(this.t.planBlockedMonthlyDay.replace('{name}', plan.blockedTemplates?.[0]?.name || ''));
+                            return;
+                        }
                         this.applyTemplatesModal.preview = plan.summary;
                         this.clearMonthStartPromptDeferral();
                         this.applyTemplatesModal.open = false;
@@ -9889,6 +10189,12 @@
                         date: item.date || '', // Templates don't have dates
                         recurrence: normalizedTemplate ? normalizedTemplate.recurrence : 'daily',
                         applicability: normalizedTemplate ? normalizedTemplate.applicability : 'everyday',
+                        // P1-06 review fix: a legacy monthly template may have no
+                        // schedule day; the editor starts empty and requires an
+                        // explicit valid day before it can save.
+                        monthDay: normalizedTemplate && normalizedTemplate.recurrence === 'monthly'
+                            ? (getValidTemplateDays(normalizedTemplate)[0] ?? '')
+                            : '',
                         isPaid: !!item.isPaid,
                         actualPaid: item.actualPaid || 0,
                         classification: item.classification || 'essential',
@@ -9909,6 +10215,23 @@
 
                     if (this.editModal.type === 'template') {
                         const normalizedOriginal = normalizeDefinitionRecord(original);
+                        // P1-06 review fix: saving a monthly template requires an
+                        // explicit valid day; a legacy dayless template can only be
+                        // saved once it is repaired.
+                        let monthlyDays = null;
+                        if (normalizedOriginal.recurrence === 'monthly') {
+                            const occurrenceDay = Math.floor(Number(this.editModal.form.monthDay));
+                            if (!Number.isInteger(occurrenceDay) || occurrenceDay < 1 || occurrenceDay > 31) {
+                                this.showToast(this.t.monthlyDayRequired);
+                                return;
+                            }
+                            // Keep a legacy multi-day schedule intact when the displayed
+                            // first day was left unchanged; an explicit edit replaces it.
+                            const originalDays = getValidTemplateDays(normalizedOriginal);
+                            monthlyDays = originalDays.length > 0 && originalDays[0] === occurrenceDay
+                                ? originalDays
+                                : [occurrenceDay];
+                        }
                         // Update Template
                         const updatedTemplate = {
                             ...original,
@@ -9917,6 +10240,7 @@
                             category: form.category,
                             recurrence: normalizedOriginal.recurrence,
                             applicability: normalizedOriginal.recurrence === 'daily' ? (form.applicability || normalizedOriginal.applicability || 'everyday') : 'everyday',
+                            ...(monthlyDays ? { days: monthlyDays } : {}),
                             profileId: form.profileId || normalizedOriginal.profileId
                         };
 
@@ -10034,7 +10358,6 @@
                 async markAsFree() {
                     this.payModal.amount = '0';
                     await this.commitPayment();
-                    this.triggerConfetti();
                 },
 
                 // V2: Get color class based on payment vs expected
@@ -10056,7 +10379,6 @@
                     }
 
                     const item = this.payModal.item;
-                    const oldVariance = item.isPaid ? (item.expectedCost - item.actualPaid) : 0;
 
                     // Update Item
                     item.isPaid = true;
@@ -10064,11 +10386,9 @@
 
                     await this.store.updateExpense(JSON.parse(JSON.stringify(item)));
 
-                    // Check for "Savings Joy"
-                    const newVariance = item.expectedCost - amt;
-                    if (newVariance > oldVariance) {
-                        this.triggerConfetti();
-                    }
+                    // P1 review fix: paying less than expected is not celebrated.
+                    // Rushd must not reward underspending, so the old "savings joy"
+                    // confetti on positive variance is removed entirely.
 
                     this.payModal.open = false;
                 },
@@ -10113,6 +10433,18 @@
                         }
                         const activeTemplateProfileId = getDefinitionProfileId({ profileId: this.store.settings.activeTemplateProfileId });
                         if (this.addModal.mode === 'template') {
+                            // P1-06: a monthly template must carry an explicit valid
+                            // occurrence day so it can never save silently and then
+                            // produce zero occurrences.
+                            let monthlyDays = null;
+                            if ((this.addModal.form.recurrence || 'daily') === 'monthly') {
+                                const occurrenceDay = Math.floor(Number(this.addModal.form.monthDay));
+                                if (!Number.isInteger(occurrenceDay) || occurrenceDay < 1 || occurrenceDay > 31) {
+                                    this.showToast(this.t.monthlyDayRequired);
+                                    return;
+                                }
+                                monthlyDays = [occurrenceDay];
+                            }
                             // Save as template
                             const template = {
                                 id: this.core.UUID(),
@@ -10122,6 +10454,7 @@
                                 source: 'template',
                                 recurrence: this.addModal.form.recurrence || 'daily',
                                 applicability: this.addModal.form.recurrence === 'daily' ? (this.addModal.form.applicability || 'everyday') : 'everyday',
+                                ...(monthlyDays ? { days: monthlyDays } : {}),
                                 profileId: activeTemplateProfileId
                             };
                             await DB.saveTemplate(JSON.parse(JSON.stringify(template)));
@@ -10217,14 +10550,13 @@
                     }
                     this.store.settings.baseAllowance = baseAllowance;
                     await DB.setSetting('baseAllowance', baseAllowance);
+                    // P1-03: the explicit change is recorded for the live month only;
+                    // older months keep the allowance recorded while they were active.
+                    await this.store.recordCurrentMonthBaseAllowance();
                     await this.store.recalcGlobalStats();
                     await this.store.refreshStatistics(this.store.currentDate);
                 },
-                // V5: Set weekly/monthly safe to spend mode
-                async setSafeToSpendMode(mode) {
-                    this.store.settings.safeToSpendMode = mode;
-                    await DB.setSetting('safeToSpendMode', mode);
-                },
+                // P1-05: setSafeToSpendMode was removed with the fake weekly view.
                 async deleteTemplate(id) {
                     this.showConfirmDialog(
                         this.t.deleteTemplateQ,
@@ -10256,7 +10588,7 @@
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = `rushd-backup-${new Date().toISOString().split('T')[0]}.json`;
+                    a.download = `rushd-backup-${Core.Date.getTodayISO()}.json`;
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);
@@ -10309,7 +10641,9 @@
                                             settingsEntries.push({ key: 'baseAllowance', value: normalizePersistedMoney(importedSettings.baseAllowance) });
                                         }
                                         if (importedSettings.safeToSpendMode !== undefined) {
-                                            settingsEntries.push({ key: 'safeToSpendMode', value: importedSettings.safeToSpendMode });
+                                            // P1-05: the weekly view was removed; imports
+                                            // normalize to the honest monthly view.
+                                            settingsEntries.push({ key: 'safeToSpendMode', value: 'monthly' });
                                         }
                                         settingsEntries.push({ key: 'motionLevel', value: normalizeMotionLevel(importedSettings.motionLevel) });
                                         if (importedSettings.theme) {
@@ -10329,6 +10663,9 @@
                                         }
                                         if (Array.isArray(importedSettings.monthEndSettlements)) {
                                             settingsEntries.push({ key: 'monthEndSettlements', value: importedSettings.monthEndSettlements });
+                                        }
+                                        if (isPlainObjectRecord(importedSettings.monthlyBaseAllowances)) {
+                                            settingsEntries.push({ key: 'monthlyBaseAllowances', value: normalizeMonthlyBaseAllowances(importedSettings.monthlyBaseAllowances) });
                                         }
                                     }
 
@@ -10455,16 +10792,23 @@
                 getExpenseSourceIndicatorClass(expense) {
                     return `source-${this.getExpenseSource(expense)}`;
                 },
-                triggerConfetti() {
-                    // Simple confetti effect (Part 1 CSS handles the dots)
-                    for (let i = 0; i < 15; i++) {
-                        const el = document.createElement('div');
-                        el.className = 'confetti';
-                        el.style.left = Math.random() * 100 + 'vw';
-                        el.style.backgroundColor = ['#10b981', '#6366f1', '#f43f5e'][Math.floor(Math.random() * 3)];
-                        document.body.appendChild(el);
-                        setTimeout(() => el.remove(), 1200);
-                    }
+                // P1-06 review fix: true when a monthly template carries at least one
+                // valid occurrence day; false exposes legacy dayless templates.
+                monthlyTemplateScheduleValid(tmpl) {
+                    return !!tmpl && Array.isArray(tmpl.days) && tmpl.days.some(day => Number.isInteger(day) && day >= 1 && day <= 31);
+                },
+                // P1-03 review fix: the Home hero's unknown-budget state routes to the
+                // full explanation in Statistics instead of a bare "Not recorded".
+                showHistoricalBudgetExplanation() {
+                    this.navigateTo('statistics');
+                },
+                // P1-03 review fix: month-end settlement that cannot run because the
+                // previous month's budget is unknown reports itself truthfully.
+                async monthEndBlockedByUnknownBudget(referenceDate) {
+                    const previousMonthKey = getPreviousMonthKey(referenceDate);
+                    if (!MONTH_KEY_PATTERN.test(previousMonthKey || '')) return false;
+                    const snapshot = await this.store.getMonthFinancialSnapshot(previousMonthKey);
+                    return !!snapshot && snapshot.budgetKnown === false;
                 },
                 showToast(message) {
                     this.toastMessage = message;
@@ -10482,116 +10826,19 @@
 
         /**
          * ================================================================
-         * MODULE: GAMIFICATION & ANALYTICS ENGINE
+         * MODULE: PROFILE PANEL
          * ================================================================
-         * Adds RPG mechanics to finance.
+         * P1-11/P1-12: the hard-coded analytics trend and the XP/badge engine
+         * that rewarded underspending and wealth were removed. Momentum is
+         * rebuilt properly in P11 and will never count spending amount, wealth,
+         * transaction counts, or app opens.
          */
 
-        // --- 1. THE GAMIFICATION STORE ---
-        const GameStore = Vue.reactive({
-            xp: 0,
-            level: 1,
-            badges: [],
-
-            // Badge Definitions
-            definitions: [
-                { id: 'b1', name: 'Novice Saver', icon: 'star', req: 0 },
-                { id: 'b2', name: 'Variance Hunter', icon: 'gps_fixed', req: 50 },
-                { id: 'b3', name: 'Budget Master', icon: 'account_balance_wallet', req: 200 },
-                { id: 'b4', name: 'Grand Treasurer', icon: 'diamond', req: 1000 }
-            ],
-
-            calculate(totalSaved) {
-                // Formula: 1 SAR Saved = 10 XP
-                this.xp = Math.max(0, Math.floor(totalSaved * 10));
-
-                // Formula: Level = Sqrt(XP / 100)
-                const newLevel = Math.floor(Math.sqrt(this.xp / 100)) + 1;
-
-                if (newLevel > this.level) {
-                    this.level = newLevel;
-                    // Trigger Level Up Event (Visual only)
-                    // In a full app, we'd queue a toast here
-                }
-
-                // Check Badges
-                this.badges = this.definitions.filter(b => this.xp >= b.req);
-            },
-
-            getNextBadge() {
-                return this.definitions.find(b => this.xp < b.req) || { name: 'Maxed Out', req: this.xp };
-            }
-        });
-
-        // --- 2. COMPONENT: ANALYTICS CHART (SVG) ---
-        MicroSaveApp.component('ms-trend-chart', {
-            props: ['data'], // Array of numbers
-            template: `
-                <div class="w-full h-32 relative">
-                    <svg viewBox="0 0 100 40" preserveAspectRatio="none" class="w-full h-full overflow-visible">
-                        <defs>
-                            <linearGradient id="grad" x1="0%" y1="0%" x2="0%" y2="100%">
-                                <stop offset="0%" style="stop-color:var(--c-accent-brand);stop-opacity:0.5" />
-                                <stop offset="100%" style="stop-color:var(--c-accent-brand);stop-opacity:0" />
-                            </linearGradient>
-                        </defs>
-                        
-                        <path :d="areaPath" fill="url(#grad)" />
-                        
-                        <path :d="linePath" fill="none" stroke="var(--c-accent-brand)" stroke-width="2" vector-effect="non-scaling-stroke" />
-                        
-                        <circle v-for="p in points" :cx="p.x" :cy="p.y" r="1.5" fill="white" />
-                    </svg>
-                </div>
-            `,
-            computed: {
-                points() {
-                    if (!this.data || this.data.length === 0) return [];
-                    const max = Math.max(...this.data, 10);
-                    const min = Math.min(...this.data, 0);
-                    const range = max - min;
-
-                    return this.data.map((val, i) => ({
-                        x: (i / (this.data.length - 1)) * 100,
-                        y: 40 - ((val - min) / range) * 40
-                    }));
-                },
-                linePath() {
-                    if (this.points.length === 0) return '';
-                    return 'M' + this.points.map(p => `${p.x},${p.y}`).join(' L');
-                },
-                areaPath() {
-                    if (this.points.length === 0) return '';
-                    return this.linePath + ` L100,40 L0,40 Z`;
-                }
-            }
-        });
-
-        // --- 3. EXTEND ROOT APP WITH GAMIFICATION ---
         MicroSaveApp.mixin({
             data() {
                 return {
-                    showProfile: false,
-                    game: GameStore
+                    showProfile: false
                 };
-            },
-            watch: {
-                // Recalc Game Stats whenever savings change
-                'store.globalStats.netVariance': {
-                    handler(newVal) {
-                        if (this.isRoot && this.game) {
-                            this.game.calculate(newVal);
-                        }
-                    },
-                    immediate: true
-                }
-            },
-            methods: {
-                getChartData() {
-                    // Mock data generator based on store stats
-                    // In real implementation, this would query DB history
-                    return [10, 15, 8, 12, 20, 18, 25, this.store.globalStats.netVariance];
-                }
             }
         });
 
@@ -10605,25 +10852,10 @@
         MicroSaveApp.component('ms-profile-overlay', {
             props: ['open', 'appLang'],
             emits: ['close'],
-            setup() { return { game: GameStore, store: MicroSaveStore } },
+            setup() { return { store: MicroSaveStore } },
             computed: {
                 t() {
                     return TRANSLATIONS[this.appLang] || TRANSLATIONS.ar;
-                },
-                localizedBadgeName() {
-                    const t = this.t;
-                    const map = {
-                        b1: t.badge_novice,
-                        b2: t.badge_hunter,
-                        b3: t.badge_master,
-                        b4: t.badge_grand
-                    };
-                    return (id) => map[id] || id;
-                },
-                nextBadgeName() {
-                    const next = this.game.getNextBadge();
-                    if (next.name === 'Maxed Out') return this.t.maxedOut;
-                    return this.localizedBadgeName(next.id) || next.name;
                 }
             },
             methods: {
@@ -10635,48 +10867,21 @@
             template: `
                 <ms-modal :modelValue="open" @update:modelValue="$emit('close')" :title="t.yourProfile">
                     <div class="flex flex-col gap-6">
-                        
-                        <div class="glass-panel p-6 flex items-center gap-4 bg-surface-1">
-                            <div class="w-16 h-16 rounded-full border-4 border-brand flex items-center justify-center text-2xl font-black bg-surface-2 relative">
-                                {{ game.level }}
-                                <div class="absolute -bottom-2 bg-brand text-xs px-2 rounded-full">{{ t.lvl }}</div>
-                            </div>
-                            <div>
-                                <div class="text-xs font-bold text-secondary uppercase">{{ t.totalXP }}</div>
-                                <div class="text-2xl font-mono font-bold">{{ game.xp }}</div>
-                            </div>
-                        </div>
 
-                        <div>
-                            <div class="text-xs font-bold text-secondary uppercase mb-3 ms-2">{{ t.badgesUnlocked }}</div>
-                            <div class="grid grid-cols-4 gap-2">
-                                <div v-for="b in game.definitions" :key="b.id" 
-                                     class="aspect-square rounded-xl flex flex-col items-center justify-center gap-1 border transition-all"
-                                     :class="game.xp >= b.req ? 'bg-brand text-white border-brand' : 'bg-surface-1 text-secondary border-glass opacity-50 grayscale'">
-                                    <ms-icon :name="b.icon" size="20"></ms-icon>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="glass-panel p-4">
-                            <div class="flex justify-between text-xs font-bold mb-2">
-                                <span>{{ t.next }}: {{ nextBadgeName }}</span>
-                                <span>{{ game.xp }} / {{ game.getNextBadge().req }}</span>
-                            </div>
-                            <div class="h-2 w-full bg-surface-1 rounded-full overflow-hidden">
-                                <div class="h-full bg-success transition-all duration-1000" 
-                                     :style="{ width: Math.min(100, (game.xp / game.getNextBadge().req) * 100) + '%' }"></div>
-                            </div>
+                        <div class="glass-panel p-4 bg-surface-1 flex flex-col items-center gap-2 text-center">
+                            <ms-icon name="emoji_events" size="24"></ms-icon>
+                            <div class="text-sm font-bold">{{ t.momentumTitle }}</div>
+                            <div class="text-xs text-secondary leading-relaxed">{{ t.momentumPlaceholder }}</div>
                         </div>
 
                         <div v-if="store.flexibleStats.items.length > 0">
                             <div class="text-xs font-bold text-secondary uppercase mb-3 ms-2">{{ t.flexibleConsumption }}</div>
                             <div class="glass-panel p-4 bg-surface-1 flex flex-col gap-3">
-                                <div class="flex items-center justify-between text-[10px] font-bold uppercase text-secondary">
+                                <div class="flex justify-between text-[10px] font-bold uppercase text-secondary">
                                     <span>{{ t.monthly }}</span>
                                     <span dir="ltr" style="unicode-bidi: isolate">{{ formatCompactAmount(store.flexibleStats.totalUsedBudget) }} / {{ formatCompactAmount(store.flexibleStats.totalBudget) }} SAR</span>
                                 </div>
-                                <div v-for="item in store.flexibleStats.items" :key="item.id" class="flex items-center justify-between gap-3 py-2 border-b border-glass last:border-b-0">
+                                <div v-for="item in store.flexibleStats.items" :key="item.id" class="flex justify-between items-center gap-3 py-2 border-b border-glass last:border-b-0">
                                     <div class="min-w-0">
                                         <div class="font-semibold text-sm truncate">{{ item.name }}</div>
                                         <div class="text-[10px] text-secondary" dir="ltr" style="unicode-bidi: isolate">{{ formatCompactAmount(item.usedBudget) }} / {{ formatCompactAmount(item.monthlyBudget) }} SAR · {{ item.uses }} / {{ item.maxUsesPerMonth }}</div>
@@ -10686,13 +10891,6 @@
                                         <div class="text-[10px] text-secondary">{{ t.remainingUses }}: {{ item.remainingUses }}</div>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-
-                        <div>
-                            <div class="text-xs font-bold text-secondary uppercase mb-3 ms-2">{{ t.varianceTrend }}</div>
-                            <div class="glass-panel p-4 pt-8 bg-surface-1 overflow-hidden">
-                                <ms-trend-chart :data="[5, 12, 8, 15, 10, 20, store.globalStats.netVariance]"></ms-trend-chart>
                             </div>
                         </div>
 

@@ -167,7 +167,9 @@ export async function loadRushdRuntime(options = {}) {
         appOptions: captured.appOptions,
         validateBackupPayload: context.RushdImportValidation?.validateBackupPayload,
         RushdMoneyInput: context.RushdMoneyInput,
-        TRANSLATIONS: context.TRANSLATIONS,
+        // Top-level consts live in the context's global lexical environment,
+        // so read them through an in-context evaluation.
+        TRANSLATIONS: vm.runInContext('TRANSLATIONS', context),
         anchorClicks
     };
 }

@@ -4,8 +4,8 @@
   "private": false,
   "description": "Arabic-first personal finance assistant for tracking expenses, budgets, goals, and spending insights.",
   "scripts": {
-    "test": "node scripts/smoke-check.mjs && node scripts/finance-rules.test.mjs && node scripts/p00-fixtures.test.mjs && node scripts/p00-characterization.test.mjs && node tests/p01-dangerous-mutations.test.mjs && node scripts/p00-artifact-guards.test.mjs && node scripts/verify-p00-baseline.mjs",
-    "test:p01": "node tests/p01-dangerous-mutations.test.mjs",
+    "test": "node scripts/smoke-check.mjs && node scripts/finance-rules.test.mjs && node scripts/p00-fixtures.test.mjs && node scripts/p00-characterization.test.mjs && node tests/p01-dangerous-mutations.test.mjs && node tests/p01-stability.test.mjs && node scripts/p00-artifact-guards.test.mjs && node scripts/verify-p00-baseline.mjs",
+    "test:p01": "node tests/p01-dangerous-mutations.test.mjs && node tests/p01-stability.test.mjs",
     "test:browser": "PLAYWRIGHT_BROWSERS_PATH=0 node scripts/browser-smoke.cjs",
     "test:characterization": "node scripts/p00-characterization.test.mjs",
     "baseline:capture": "PLAYWRIGHT_BROWSERS_PATH=0 node scripts/capture-p00-baseline.cjs",

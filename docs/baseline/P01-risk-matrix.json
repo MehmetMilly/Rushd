@@ -2,7 +2,7 @@
   "schema": "rushd.p01-risk-matrix.v1",
   "source_inventory": "docs/implementation/P0-P1-INVENTORY.md",
   "reproduction_catalog": "tests/characterization/p0-p1-cases.json",
-  "status": "task_2_complete",
+  "status": "task_3_complete",
   "items": [
     {"id":"P0-01","title":"Paid plan history mutation","task":1,"status":"fixed","p01_disposition":"fix_now","final_owner":"none","regression_owner":"P01","evidence_path":"tests/p01-dangerous-mutations.test.mjs"},
     {"id":"P0-02","title":"Partial plan application","task":1,"status":"fixed","p01_disposition":"atomic_or_block","final_owner":"none","regression_owner":"P01","evidence_path":"tests/p01-dangerous-mutations.test.mjs"},
@@ -12,18 +12,26 @@
     {"id":"P0-06","title":"Goal double counting","task":2,"status":"fixed","p01_disposition":"fix_now","final_owner":"none","regression_owner":"P01","evidence_path":"tests/p01-dangerous-mutations.test.mjs"},
     {"id":"P0-07","title":"Legacy vault disappearance","task":2,"status":"fixed","p01_disposition":"fix_now","final_owner":"none","regression_owner":"P01","evidence_path":"tests/p01-dangerous-mutations.test.mjs"},
     {"id":"P0-08","title":"Dangerous reset blockage","task":1,"status":"fixed","p01_disposition":"fix_now","final_owner":"none","regression_owner":"P01","evidence_path":"tests/p01-dangerous-mutations.test.mjs"},
-    {"id":"P1-01","title":"UTC local-date error","task":3,"p01_disposition":"fix_or_contain","final_owner":"P03 if contained","regression_owner":"P01","evidence_path":"docs/baseline/p0-p1/P1-01.json"},
+    {"id":"P1-01","title":"UTC local-date error","task":3,"status":"fixed","p01_disposition":"fix_now","final_owner":"none","regression_owner":"P01","evidence_path":"tests/p01-stability.test.mjs"},
     {"id":"P1-02","title":"Floating-point money","task":2,"status":"contained","p01_disposition":"contain_inputs","final_owner":"P03","regression_owner":"P01","evidence_path":"tests/p01-dangerous-mutations.test.mjs"},
-    {"id":"P1-03","title":"Historical budget rewrite","task":3,"p01_disposition":"fix_or_contain","final_owner":"P04 if contained","regression_owner":"P01","evidence_path":"docs/baseline/p0-p1/P1-03.json"},
+    {"id":"P1-03","title":"Historical budget rewrite","task":3,"status":"contained","p01_disposition":"record_and_freeze_allowance_history","final_owner":"P04","regression_owner":"P01","evidence_path":"tests/p01-stability.test.mjs"},
     {"id":"P1-04","title":"Home date/month mismatch","task":2,"status":"fixed","p01_disposition":"fix_now","final_owner":"none","regression_owner":"P01","evidence_path":"tests/p01-dangerous-mutations.test.mjs"},
-    {"id":"P1-05","title":"False weekly pace","task":3,"p01_disposition":"fix_label_or_disable","final_owner":"P06 if deferred","regression_owner":"P01","evidence_path":"docs/baseline/p0-p1/P1-05.json"},
-    {"id":"P1-06","title":"Missing monthly schedule day","task":3,"p01_disposition":"validate_or_block","final_owner":"none","regression_owner":"P01","evidence_path":"docs/baseline/p0-p1/P1-06.json"},
-    {"id":"P1-07","title":"Ignored assignment effective date/profile","task":3,"p01_disposition":"contain","final_owner":"P04","regression_owner":"P01","evidence_path":"docs/baseline/p0-p1/P1-07.json"},
-    {"id":"P1-08","title":"Stale derived state","task":3,"p01_disposition":"fix_now","final_owner":"none","regression_owner":"P01","evidence_path":"docs/baseline/p0-p1/P1-08.json"},
+    {"id":"P1-05","title":"False weekly pace","task":3,"status":"contained","p01_disposition":"disable_weekly_view","final_owner":"P06","regression_owner":"P01","evidence_path":"tests/p01-stability.test.mjs"},
+    {"id":"P1-06","title":"Missing monthly schedule day","task":3,"status":"fixed","p01_disposition":"require_schedule_day","final_owner":"none","regression_owner":"P01","evidence_path":"tests/p01-stability.test.mjs"},
+    {"id":"P1-07","title":"Ignored assignment effective date/profile","task":3,"status":"contained","p01_disposition":"effective_date_resolution","final_owner":"P04","regression_owner":"P01","evidence_path":"tests/p01-stability.test.mjs"},
+    {"id":"P1-08","title":"Stale derived state","task":3,"status":"fixed","p01_disposition":"fix_now","final_owner":"none","regression_owner":"P01","evidence_path":"tests/p01-stability.test.mjs"},
     {"id":"P1-09","title":"Weak numeric validation","task":2,"status":"contained","p01_disposition":"reject_unsafe_inputs","final_owner":"P03","regression_owner":"P01","evidence_path":"tests/p01-dangerous-mutations.test.mjs"},
     {"id":"P1-10","title":"Weak import schema","task":1,"status":"fixed","p01_disposition":"strict_validate_or_block","final_owner":"none","regression_owner":"P01","evidence_path":"tests/p01-dangerous-mutations.test.mjs"},
-    {"id":"P1-11","title":"Hard-coded/nonfunctional analytics","task":3,"p01_disposition":"label_or_disable","final_owner":"P06","regression_owner":"P01","evidence_path":"docs/baseline/p0-p1/P1-11.json"},
-    {"id":"P1-12","title":"Current gamification misincentive","task":3,"p01_disposition":"disable_or_replace","final_owner":"P08 if deferred","regression_owner":"P01","evidence_path":"docs/baseline/p0-p1/P1-12.json"}
+    {"id":"P1-11","title":"Hard-coded/nonfunctional analytics","task":3,"status":"contained","p01_disposition":"remove_mock_analytics","final_owner":"P06","regression_owner":"P01","evidence_path":"tests/p01-stability.test.mjs"},
+    {"id":"P1-12","title":"Current gamification misincentive","task":3,"status":"contained","p01_disposition":"disable_reward_basis","final_owner":"P11","regression_owner":"P01","evidence_path":"tests/p01-stability.test.mjs"}
   ],
+  "containment_notes": {
+    "P1-03": "Allowance snapshots (monthlyBaseAllowances) are recorded while a month is live and past months read their recorded value. An older month without a snapshot has an unknown budget: getBudgetForMonth returns null, Home and Statistics show a bilingual unavailable state, and the month-end settlement calculation for that month is blocked. Today's allowance is never used as historical fact; versioned per-cycle budgets arrive with P04.",
+    "P1-06": "A saved monthly template must carry an explicit day 1-31: the add, edit, onboarding, and import paths all refuse to create a dayless monthly template, and no migration invents a day. A legacy IndexedDB record without a day stays stored untouched but is visibly invalid (bilingual warning in the plan list and editor) and blocks plan preview/apply, plan application, Auto-Fill, and onboarding finish atomically - zero writes - until a valid day is chosen.",
+    "P1-05": "The weekly safe-to-spend view is removed, not yet replaced: deterministic pacing is built in P06. Stored/imported weekly preferences normalize to the monthly view.",
+    "P1-07": "Assignments govern only dates from their effective date forward, and Auto-Fill is visibly blocked for past dates (bilingual explanation) because the rules in effect back then are not preserved. Immutable per-date profile/template revision history belongs to the P04 versioned plan domain; historical rewriting of already-applied unpaid generated items remains possible only through the explicit preview-and-confirm plan apply.",
+    "P1-11": "The hard-coded trend chart, mock data generator, and always-false activity dot were removed rather than labeled; real analytics arrives with P06/P07 Insights.",
+    "P1-12": "XP, levels, badges, and the netVariance reward watcher were removed; the profile panel shows a truthful bilingual placeholder stating Momentum is being rebuilt and will never count spending, wealth, transaction counts, or app opens. Real Momentum arrives in P11. The remaining confetti reward (fired on underspend/positive variance and auto-fill counts) was removed entirely."
+  },
   "completion_rule": "Every item must have executable regression coverage plus a verified fix, explicit visible containment, or explicit non-authoritative status with a final owning phase."
 }
