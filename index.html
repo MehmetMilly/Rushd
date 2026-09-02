@@ -2716,8 +2716,10 @@
                 factoryResetQ: 'إعادة ضبط المصنع؟',
                 factoryResetMsg: 'سيتم تنزيل نسخة احتياطية كاملة تلقائياً قبل الحذف، ثم تُحذف جميع البيانات نهائياً. لا يمكن التراجع.',
                 resetFailedTitle: 'تعذّرت إعادة الضبط',
+                resetWaitingTitle: 'إعادة الضبط قيد الانتظار',
                 resetBackupFailed: 'تعذّر إنشاء النسخة الاحتياطية قبل الحذف، لذلك أُلغيت إعادة الضبط ولم تتغير بياناتك. جرّب التصدير يدوياً ثم أعد المحاولة.',
-                resetBlockedError: 'تعذّر إكمال إعادة الضبط لأن رُشد مفتوح في تبويب أو نافذة أخرى. أغلقها ثم أعد المحاولة. بياناتك لم تتغير.',
+                resetBlockedError: 'تعذّر إكمال إعادة الضبط لأن رُشد مفتوح في تبويب أو نافذة أخرى. الحذف ما زال قيد الانتظار وسيستمر تلقائيًا عند إغلاقها.',
+                resetWaiting: 'إعادة الضبط تنتظر إغلاق تبويب أو نافذة أخرى لرُشد. سيستمر الحذف تلقائيًا عند إغلاقها؛ لا تغلق هذه الصفحة.',
                 resetFailed: 'تعذّر حذف البيانات المحلية ولم يتغير شيء. أعد المحاولة.',
                 dialogOk: 'حسنًا',
                 importQ: 'استيراد نسخة احتياطية؟',
@@ -2994,8 +2996,10 @@
                 cannotUndo: 'This action cannot be undone.',
                 stopAutoFill: 'This will stop future auto-fills for this item.',
                 resetFailedTitle: 'Reset Failed',
+                resetWaitingTitle: 'Reset Pending',
                 resetBackupFailed: 'Backup before delete could not be created, so the reset was cancelled and your data is unchanged. Try exporting manually first, then retry.',
-                resetBlockedError: 'Reset could not complete because Rushd is open in another tab or window. Close it and try again. Your data has not changed.',
+                resetBlockedError: 'Reset could not complete because Rushd is open in another tab or window. Deletion is still pending and will continue automatically once it closes.',
+                resetWaiting: 'Reset is waiting for another Rushd tab or window to close. Deletion will continue automatically once it does; keep this page open.',
                 resetFailed: 'Local data could not be deleted and nothing has changed. Please try again.',
                 dialogOk: 'OK',
                 factoryResetQ: 'Factory Reset?',
@@ -5004,6 +5008,15 @@
                 : null;
         };
 
+        // P01 containment only: prototype arithmetic can leave a tiny binary
+        // residue (for example 0.1 + 0.2). Persist monetary results at the
+        // precision the current UI accepts until P03 introduces halalas.
+        const roundMoney = (value) => Math.round((value + Number.EPSILON) * 100) / 100;
+        const normalizePersistedMoney = (value, fallback = 0) => {
+            const parsed = toFiniteNumber(value, fallback);
+            return Number.isFinite(parsed) ? roundMoney(parsed) : fallback;
+        };
+
         const normalizeMotionLevel = (value) => MOTION_LEVEL_VALUES.includes(value) ? value : 'auto';
 
         const toNonNegativeInteger = (value, fallback = 0) => {
@@ -5296,8 +5309,8 @@
             const name = typeof goal.name === 'string' && goal.name.trim()
                 ? goal.name.trim()
                 : '';
-            const targetAmount = Math.max(0, toFiniteNumber(goal.targetAmount ?? goal.target, 0));
-            const allocatedAmount = Math.max(0, toFiniteNumber(goal.allocatedAmount ?? goal.allocation, 0));
+            const targetAmount = Math.max(0, normalizePersistedMoney(goal.targetAmount ?? goal.target, 0));
+            const allocatedAmount = Math.max(0, normalizePersistedMoney(goal.allocatedAmount ?? goal.allocation, 0));
             if (!id || !name || targetAmount <= 0) return null;
             return {
                 id,
@@ -5320,7 +5333,7 @@
 
         const normalizeVaultTransactionRecord = (transaction) => {
             if (!transaction || typeof transaction !== 'object') return null;
-            const amount = toFiniteNumber(transaction.amount, 0);
+            const amount = normalizePersistedMoney(transaction.amount, 0);
             const date = typeof transaction.date === 'string' && transaction.date ? transaction.date : '';
             const monthKey = typeof transaction.monthKey === 'string' && MONTH_KEY_PATTERN.test(transaction.monthKey)
                 ? transaction.monthKey
@@ -5346,15 +5359,15 @@
                 .filter(Boolean)
                 .sort((left, right) => String(right.createdAt || right.date).localeCompare(String(left.createdAt || left.date)));
             const goals = normalizeVaultGoals(vault?.goals);
-            const computedBalance = transactions.reduce((sum, transaction) => sum + toFiniteNumber(transaction.amount, 0), 0);
-            const legacyOpeningBalance = Math.max(
-                0,
+            const computedBalance = normalizePersistedMoney(transactions.reduce((sum, transaction) => sum + transaction.amount, 0));
+            const legacyOpeningBalance = Math.max(0, normalizePersistedMoney(
                 toFiniteNumber(vault?.balance, computedBalance) - computedBalance
-            );
-            const fallbackOpening = transactions.length > 0 ? legacyOpeningBalance : Math.max(0, toFiniteNumber(vault?.balance, computedBalance));
-            const openingBalance = Math.max(0, toFiniteNumber(vault?.openingBalance, fallbackOpening));
+            ));
+            // Legacy source selection remains: transactions.length > 0 ? legacyOpeningBalance : Math.max(0, toFiniteNumber(vault?.balance, computedBalance)).
+            const fallbackOpening = transactions.length > 0 ? legacyOpeningBalance : Math.max(0, normalizePersistedMoney(vault?.balance, computedBalance));
+            const openingBalance = Math.max(0, normalizePersistedMoney(vault?.openingBalance, fallbackOpening));
             return {
-                balance: openingBalance + computedBalance,
+                balance: normalizePersistedMoney(openingBalance + computedBalance),
                 transactions,
                 openingBalance,
                 goals
@@ -5375,9 +5388,9 @@
                 previousMonthKey,
                 decision,
                 targetMonthKey: decision === 'budget' ? targetMonthKey : '',
-                surplus: Math.max(0, toFiniteNumber(settlement.surplus, 0)),
-                previousMonthBudget: Math.max(0, toFiniteNumber(settlement.previousMonthBudget, 0)),
-                previousMonthSpent: Math.max(0, toFiniteNumber(settlement.previousMonthSpent, 0)),
+                surplus: Math.max(0, normalizePersistedMoney(settlement.surplus, 0)),
+                previousMonthBudget: Math.max(0, normalizePersistedMoney(settlement.previousMonthBudget, 0)),
+                previousMonthSpent: Math.max(0, normalizePersistedMoney(settlement.previousMonthSpent, 0)),
                 settledAt: typeof settlement.settledAt === 'string' ? settlement.settledAt : '',
                 vaultTransactionId: typeof settlement.vaultTransactionId === 'string' ? settlement.vaultTransactionId : ''
             };
@@ -5406,8 +5419,8 @@
 
         const normalizeDefinitionRecord = (definition) => {
             const source = DEFINITION_SOURCE_VALUES.includes(definition?.source) ? definition.source : 'template';
-            const defaultAmount = toFiniteNumber(definition?.defaultAmount ?? definition?.expectedCost ?? 0, 0);
-            const monthlyBudget = toFiniteNumber(definition?.monthlyBudget ?? definition?.expectedCost ?? 0, 0);
+            const defaultAmount = normalizePersistedMoney(definition?.defaultAmount ?? definition?.expectedCost ?? 0, 0);
+            const monthlyBudget = normalizePersistedMoney(definition?.monthlyBudget ?? definition?.expectedCost ?? 0, 0);
             const maxUsesPerMonth = toNonNegativeInteger(definition?.maxUsesPerMonth ?? 0, 0);
             const profileId = getDefinitionProfileId(definition);
             const recurrence = definition?.recurrence === 'monthly' ? 'monthly' : 'daily';
@@ -5417,6 +5430,7 @@
 
             return {
                 ...(definition || {}),
+                ...(definition?.expectedCost !== undefined ? { expectedCost: normalizePersistedMoney(definition.expectedCost, 0) } : {}),
                 source,
                 defaultAmount,
                 monthlyBudget,
@@ -5469,6 +5483,8 @@
                 : (source === 'flexible' ? templateOriginId : null);
             return {
                 ...(expense || {}),
+                ...(expense?.expectedCost !== undefined ? { expectedCost: normalizePersistedMoney(expense.expectedCost, 0) } : {}),
+                ...(expense?.actualPaid !== undefined ? { actualPaid: normalizePersistedMoney(expense.actualPaid, 0) } : {}),
                 source,
                 flexibleDefinitionId,
                 templateOriginId,
@@ -5481,8 +5497,31 @@
         // Valid Rushd exports, including legacy local backups, still pass.
         const BACKUP_EXPENSE_MONEY_FIELDS = Object.freeze(['expectedCost', 'actualPaid']);
         const isPlainObjectRecord = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
-        const isValidMoneyValue = (value) => value !== undefined && parseMoneyInput(value) !== null;
-        const isValidIsoDateString = (value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+        const isValidBackupMoneyValue = (value) => {
+            if (parseMoneyInput(value) !== null) return true;
+            if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > MAX_MONEY_INPUT) return false;
+            return Math.abs(value - roundMoney(value)) <= 1e-8;
+        };
+        const isValidIsoDateString = (value) => {
+            if (typeof value !== 'string') return false;
+            const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+            if (!match) return false;
+            const year = Number(match[1]);
+            const month = Number(match[2]);
+            const day = Number(match[3]);
+            const date = new Date(Date.UTC(year, month - 1, day));
+            return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+        };
+        const isValidTimestampString = (value) => typeof value === 'string' && !!value && !Number.isNaN(Date.parse(value));
+        const hasDuplicateRecordIds = (records, field = 'id') => {
+            const seen = new Set();
+            return records.some(record => {
+                const value = record?.[field];
+                if (seen.has(value)) return true;
+                seen.add(value);
+                return false;
+            });
+        };
 
         const validateBackupPayload = (payload) => {
             if (!isPlainObjectRecord(payload)) return { ok: false, reason: 'payload' };
@@ -5496,7 +5535,7 @@
             if (payload.settings !== undefined) {
                 const settings = payload.settings;
                 if (!isPlainObjectRecord(settings)) return { ok: false, reason: 'settings' };
-                if (settings.baseAllowance !== undefined && !isValidMoneyValue(settings.baseAllowance)) {
+                if (settings.baseAllowance !== undefined && !isValidBackupMoneyValue(settings.baseAllowance)) {
                     return { ok: false, reason: 'settings.baseAllowance' };
                 }
                 if (settings.safeToSpendMode !== undefined && !['weekly', 'monthly'].includes(settings.safeToSpendMode)) {
@@ -5518,6 +5557,7 @@
                             return { ok: false, reason: 'settings.templateProfiles' };
                         }
                     }
+                    if (hasDuplicateRecordIds(settings.templateProfiles)) return { ok: false, reason: 'settings.templateProfiles' };
                 }
                 if (settings.monthlyTemplateAssignments !== undefined) {
                     if (!Array.isArray(settings.monthlyTemplateAssignments)) return { ok: false, reason: 'settings.monthlyTemplateAssignments' };
@@ -5525,25 +5565,60 @@
                         if (!isPlainObjectRecord(assignment)
                             || !MONTH_KEY_PATTERN.test(assignment.monthKey || '')
                             || typeof assignment.assignedProfileId !== 'string'
-                            || !isValidIsoDateString(assignment.effectiveDate)) {
+                            || !isValidIsoDateString(assignment.effectiveDate)
+                            || !isDateInRange(assignment.effectiveDate, `${assignment.monthKey}-01`, getMonthBoundsFromDate(`${assignment.monthKey}-01`).monthEnd)) {
                             return { ok: false, reason: 'settings.monthlyTemplateAssignments' };
                         }
                     }
+                    if (hasDuplicateRecordIds(settings.monthlyTemplateAssignments, 'monthKey')) return { ok: false, reason: 'settings.monthlyTemplateAssignments' };
                 }
                 if (settings.vault !== undefined) {
                     const vault = settings.vault;
                     if (!isPlainObjectRecord(vault)
                         || !Array.isArray(vault.transactions)
                         || (vault.goals !== undefined && vault.goals !== null && !Array.isArray(vault.goals))
-                        || (vault.balance !== undefined && !isValidMoneyValue(vault.balance))
-                        || (vault.openingBalance !== undefined && !isValidMoneyValue(vault.openingBalance))) {
+                        || (vault.balance !== undefined && !isValidBackupMoneyValue(vault.balance))
+                        || (vault.openingBalance !== undefined && !isValidBackupMoneyValue(vault.openingBalance))) {
                         return { ok: false, reason: 'settings.vault' };
                     }
                     for (const vaultTransaction of vault.transactions) {
                         if (!isPlainObjectRecord(vaultTransaction)
-                            || !isValidMoneyValue(vaultTransaction.amount)
-                            || !isValidIsoDateString(vaultTransaction.date)) {
+                            || typeof vaultTransaction.id !== 'string'
+                            || !vaultTransaction.id
+                            || !isValidBackupMoneyValue(vaultTransaction.amount)
+                            || normalizePersistedMoney(vaultTransaction.amount) <= 0
+                            || !isValidIsoDateString(vaultTransaction.date)
+                            || (vaultTransaction.type !== undefined && vaultTransaction.type !== 'surplus_transfer')
+                            || (vaultTransaction.monthKey !== undefined
+                                && (!MONTH_KEY_PATTERN.test(vaultTransaction.monthKey)
+                                    || vaultTransaction.monthKey !== getMonthKey(vaultTransaction.date)))
+                            || (vaultTransaction.sourceMonthKey !== undefined && !MONTH_KEY_PATTERN.test(vaultTransaction.sourceMonthKey))
+                            || (vaultTransaction.createdAt !== undefined && !isValidTimestampString(vaultTransaction.createdAt))) {
                             return { ok: false, reason: 'settings.vault.transactions' };
+                        }
+                    }
+                    if (hasDuplicateRecordIds(vault.transactions)) return { ok: false, reason: 'settings.vault.transactions' };
+                    if (Array.isArray(vault.goals)) {
+                        let allocatedTotal = 0;
+                        for (const goal of vault.goals) {
+                            const allocation = goal?.allocatedAmount ?? goal?.allocation ?? 0;
+                            if (!isPlainObjectRecord(goal)
+                                || typeof goal.id !== 'string'
+                                || !goal.id.trim()
+                                || typeof goal.name !== 'string'
+                                || !goal.name.trim()
+                                || !isValidBackupMoneyValue(goal.targetAmount ?? goal.target)
+                                || normalizePersistedMoney(goal.targetAmount ?? goal.target) <= 0
+                                || !isValidBackupMoneyValue(allocation)
+                                || normalizePersistedMoney(allocation) > normalizePersistedMoney(goal.targetAmount ?? goal.target)) {
+                                return { ok: false, reason: 'settings.vault.goals' };
+                            }
+                            allocatedTotal = normalizePersistedMoney(allocatedTotal + normalizePersistedMoney(allocation));
+                        }
+                        const normalizedVaultBalance = normalizeVaultStateRecord(vault).balance;
+                        if (hasDuplicateRecordIds(vault.goals)
+                            || allocatedTotal > normalizedVaultBalance) {
+                            return { ok: false, reason: 'settings.vault.goals' };
                         }
                     }
                 }
@@ -5553,10 +5628,11 @@
                         if (!isPlainObjectRecord(item)
                             || !MONTH_KEY_PATTERN.test(item.previousMonthKey || '')
                             || !MONTH_END_SETTLEMENT_DECISIONS.includes(item.decision)
-                            || ['surplus', 'previousMonthBudget', 'previousMonthSpent'].some(field => !isValidMoneyValue(item[field]))) {
+                            || ['surplus', 'previousMonthBudget', 'previousMonthSpent'].some(field => !isValidBackupMoneyValue(item[field]))) {
                             return { ok: false, reason: 'settings.monthEndSettlements' };
                         }
                     }
+                    if (hasDuplicateRecordIds(settings.monthEndSettlements, 'previousMonthKey')) return { ok: false, reason: 'settings.monthEndSettlements' };
                 }
             }
 
@@ -5568,11 +5644,12 @@
                         || !template.id.trim()
                         || typeof template.name !== 'string'
                         || !template.name.trim()
-                        || (template.expectedCost !== undefined && !isValidMoneyValue(template.expectedCost))
-                        || (template.defaultAmount !== undefined && !isValidMoneyValue(template.defaultAmount))) {
+                        || (template.expectedCost !== undefined && !isValidBackupMoneyValue(template.expectedCost))
+                        || (template.defaultAmount !== undefined && !isValidBackupMoneyValue(template.defaultAmount))) {
                         return { ok: false, reason: 'templates' };
                     }
                 }
+                if (hasDuplicateRecordIds(payload.templates)) return { ok: false, reason: 'templates' };
             }
 
             for (const expense of payload.expenses) {
@@ -5583,10 +5660,11 @@
                     || (expense.name !== undefined && typeof expense.name !== 'string')
                     || (expense.isPaid !== undefined && typeof expense.isPaid !== 'boolean')
                     || (expense.source !== undefined && !EXPENSE_SOURCE_VALUES.includes(expense.source))
-                    || BACKUP_EXPENSE_MONEY_FIELDS.some(field => expense[field] !== undefined && !isValidMoneyValue(expense[field]))) {
+                    || BACKUP_EXPENSE_MONEY_FIELDS.some(field => expense[field] !== undefined && !isValidBackupMoneyValue(expense[field]))) {
                     return { ok: false, reason: 'expenses' };
                 }
             }
+            if (hasDuplicateRecordIds(payload.expenses)) return { ok: false, reason: 'expenses' };
 
             return { ok: true, reason: '' };
         };
@@ -5595,6 +5673,7 @@
                 dbName: 'MicroSaveOS_DB', // Legacy database name preserved so existing local users do not lose data.
             version: 1,
             db: null,
+            _settlementWriteQueue: Promise.resolve(),
 
             async connect() {
                 return new Promise((resolve, reject) => {
@@ -5799,34 +5878,111 @@
                 });
             },
 
+            // Resolve a cycle choice from the values read inside the same
+            // IndexedDB transaction that writes it. The queue closes the
+            // in-process gap before a second request can observe stale state;
+            // IndexedDB serializes the actual readwrite transaction. This
+            // supersedes the former DB.setSettingsEntries(...) write batch.
+            async resolveMonthEndSettlement({ previousMonthKey, decision, targetMonthKey, surplus, previousMonthBudget, previousMonthSpent, referenceDate } = {}) {
+                if (!MONTH_KEY_PATTERN.test(previousMonthKey || '')
+                    || !MONTH_END_SETTLEMENT_DECISIONS.includes(decision)
+                    || (decision !== 'no_surplus' && (!MONTH_KEY_PATTERN.test(targetMonthKey || '') || surplus <= 0))) {
+                    return null;
+                }
+
+                const operation = this._settlementWriteQueue.then(() => new Promise((resolve, reject) => {
+                    const tx = this.db.transaction(['settings'], 'readwrite');
+                    const settings = tx.objectStore('settings');
+                    const vaultRequest = settings.get('vault');
+                    const settlementsRequest = settings.get('monthEndSettlements');
+                    let vaultValue;
+                    let settlementsValue;
+                    let hasVaultValue = false;
+                    let hasSettlementsValue = false;
+                    let result = null;
+
+                    const writeResolution = () => {
+                        if (!hasVaultValue || !hasSettlementsValue) return;
+                        const vault = normalizeVaultStateRecord(vaultValue?.value);
+                        const settlements = normalizeMonthEndSettlements(settlementsValue?.value);
+                        const existingSettlement = settlements.find(item => item.previousMonthKey === previousMonthKey) || null;
+                        const existingTransaction = existingSettlement
+                            ? vault.transactions.find(item => item.id === existingSettlement.vaultTransactionId) || null
+                            : null;
+                        if (existingSettlement) {
+                            result = { vault, settlements, settlement: existingSettlement, transaction: existingTransaction, alreadySettled: true };
+                            return;
+                        }
+
+                        const existingTransfer = vault.transactions.find(item => item.type === 'surplus_transfer' && item.sourceMonthKey === previousMonthKey) || null;
+                        const effectiveDecision = existingTransfer ? 'vault' : decision;
+                        const transaction = effectiveDecision === 'vault'
+                            ? existingTransfer || normalizeVaultTransactionRecord({
+                                id: `vault-settlement-${previousMonthKey}`,
+                                amount: surplus,
+                                date: referenceDate,
+                                monthKey: targetMonthKey,
+                                sourceMonthKey: previousMonthKey,
+                                createdAt: new Date().toISOString()
+                            })
+                            : null;
+                        const settlement = normalizeMonthEndSettlementRecord({
+                            previousMonthKey,
+                            decision: effectiveDecision,
+                            targetMonthKey: effectiveDecision === 'budget' ? targetMonthKey : '',
+                            surplus: effectiveDecision === 'no_surplus' ? 0 : (existingTransfer?.amount ?? surplus),
+                            previousMonthBudget,
+                            previousMonthSpent,
+                            settledAt: new Date().toISOString(),
+                            vaultTransactionId: transaction?.id || ''
+                        });
+                        if (!settlement || (effectiveDecision === 'vault' && !transaction)) {
+                            tx.abort();
+                            return;
+                        }
+
+                        const nextVault = transaction && !existingTransfer
+                            ? normalizeVaultStateRecord({ ...vault, transactions: [transaction, ...vault.transactions.filter(item => item.id !== transaction.id)] })
+                            : vault;
+                        const nextSettlements = normalizeMonthEndSettlements([...settlements, settlement]);
+                        if (transaction && !existingTransfer) settings.put({ key: 'vault', value: toSerializableValue(nextVault) });
+                        settings.put({ key: 'monthEndSettlements', value: toSerializableValue(nextSettlements) });
+                        result = { vault: nextVault, settlements: nextSettlements, settlement, transaction };
+                    };
+
+                    vaultRequest.onsuccess = () => {
+                        vaultValue = vaultRequest.result;
+                        hasVaultValue = true;
+                        writeResolution();
+                    };
+                    settlementsRequest.onsuccess = () => {
+                        settlementsValue = settlementsRequest.result;
+                        hasSettlementsValue = true;
+                        writeResolution();
+                    };
+                    tx.oncomplete = () => resolve(result);
+                    tx.onerror = () => reject(tx.error);
+                    tx.onabort = () => reject(tx.error || new DOMException('IndexedDB transaction aborted', 'AbortError'));
+                }));
+                this._settlementWriteQueue = operation.catch(() => {});
+                return operation;
+            },
+
             // --- NUKE OPTION ---
-            // Resolves once the database is fully deleted. Rejects with
-            // ResetBlockedError when another tab/window is holding the database
-            // open. If that blocker disappears later and the deletion then
-            // completes, onLateCompletion runs so the visible app state can be
-            // reconciled with the deleted database instead of diverging silently.
-            async factoryReset(onLateCompletion = null) {
+            // A blocked delete remains pending and resolves only after the
+            // database is actually gone. This prevents a false "unchanged"
+            // message followed by a later deletion from the same request.
+            async factoryReset(onBlocked = null) {
                 return new Promise((resolve, reject) => {
                     if (this.db) this.db.close();
                     this.db = null; // Prevent stale connection usage
                     const req = indexedDB.deleteDatabase(this.dbName);
-                    let settled = false;
                     req.onsuccess = () => {
-                        if (!settled) {
-                            settled = true;
-                            resolve();
-                        } else if (typeof onLateCompletion === 'function') {
-                            onLateCompletion();
-                        }
+                        resolve();
                     };
                     req.onerror = () => reject(req.error || new Error('IndexedDB deleteDatabase failed'));
                     req.onblocked = () => {
-                        if (settled) return;
-                        settled = true;
-                        reject(Object.assign(
-                            new Error('Factory reset is blocked because Rushd is open in another tab or window.'),
-                            { name: 'ResetBlockedError' }
-                        ));
+                        if (typeof onBlocked === 'function') onBlocked();
                     };
                 });
             }
@@ -5910,7 +6066,8 @@
                 await DB.connect();
 
                 // Load Settings
-                this.settings.baseAllowance = await DB.getSetting('baseAllowance', 1000);
+                this.settings.baseAllowance = normalizePersistedMoney(await DB.getSetting('baseAllowance', 1000), 1000);
+                await DB.setSetting('baseAllowance', this.settings.baseAllowance);
                 this.settings.safeToSpendMode = await DB.getSetting('safeToSpendMode', 'monthly');
                 this.settings.motionLevel = normalizeMotionLevel(await DB.getSetting('motionLevel', localStorage.getItem('rushd_motion') || 'auto'));
                 this.settings.theme = await DB.getSetting('theme', localStorage.getItem('rushd_theme') === 'light' ? 'light' : 'dark');
@@ -6097,18 +6254,6 @@
                 return normalizedTransaction;
             },
 
-            async upsertMonthEndSettlement(settlement) {
-                const normalizedSettlement = normalizeMonthEndSettlementRecord(settlement);
-                if (!normalizedSettlement) return null;
-                const nextSettlements = normalizeMonthEndSettlements([
-                    ...this.settings.monthEndSettlements.filter(item => item.previousMonthKey !== normalizedSettlement.previousMonthKey),
-                    normalizedSettlement
-                ]);
-                await DB.setSetting('monthEndSettlements', nextSettlements);
-                this.settings.monthEndSettlements = nextSettlements;
-                return normalizedSettlement;
-            },
-
             async getMonthFinancialSnapshot(monthKey) {
                 if (!MONTH_KEY_PATTERN.test(monthKey || '')) return null;
                 const { monthStart, monthEnd } = getMonthBoundsFromDate(`${monthKey}-01`);
@@ -6138,105 +6283,38 @@
                 };
             },
 
-            async settleMonthEndToVault(summary, referenceDate = Core.Date.getTodayISO()) {
+            async settleMonthEnd(decision, summary, referenceDate = Core.Date.getTodayISO()) {
                 const previousMonthKey = typeof summary?.previousMonthKey === 'string' ? summary.previousMonthKey : '';
                 const targetMonthKey = getMonthKey(referenceDate);
-                const surplus = Math.max(0, toFiniteNumber(summary?.surplus, 0));
-                if (!previousMonthKey || !targetMonthKey || surplus <= 0) return null;
-
-                // P0-04 retry safety: an existing settlement for this month means
-                // the money already moved; retrying must be a strict no-op.
-                const existingSettlement = this.getMonthEndSettlement(previousMonthKey);
-                if (existingSettlement) {
-                    const existingTransaction = (this.settings.vault?.transactions || [])
-                        .find(item => item.id === existingSettlement.vaultTransactionId) || null;
-                    return { transaction: existingTransaction, settlement: existingSettlement, alreadySettled: true };
-                }
-
-                // Heal a partially failed pre-fix settlement: if the vault credit
-                // already exists without its settlement record, record the
-                // settlement against it instead of moving money a second time.
-                const existingTransfer = (this.settings.vault?.transactions || [])
-                    .find(item => item.type === 'surplus_transfer' && item.sourceMonthKey === previousMonthKey) || null;
-                const historicalAmount = existingTransfer?.amount;
-                const transaction = existingTransfer || normalizeVaultTransactionRecord({
-                    id: `vault-settlement-${previousMonthKey}`,
-                    amount: surplus,
-                    date: referenceDate,
-                    monthKey: targetMonthKey,
-                    sourceMonthKey: previousMonthKey,
-                    createdAt: new Date().toISOString()
-                });
-                if (!transaction) return null;
-
-                const settlement = normalizeMonthEndSettlementRecord({
+                const surplus = Math.max(0, normalizePersistedMoney(summary?.surplus, 0));
+                if (!MONTH_END_SETTLEMENT_DECISIONS.includes(decision)
+                    || !MONTH_KEY_PATTERN.test(previousMonthKey)
+                    || (decision !== 'no_surplus' && (!targetMonthKey || surplus <= 0))) return null;
+                const resolved = await DB.resolveMonthEndSettlement({
                     previousMonthKey,
-                    decision: 'vault',
+                    decision,
                     targetMonthKey,
-                    surplus: existingTransfer ? historicalAmount : surplus,
-                    previousMonthBudget: summary.previousMonthBudget,
-                    previousMonthSpent: summary.previousMonthSpent,
-                    settledAt: new Date().toISOString(),
-                    vaultTransactionId: transaction.id
+                    surplus,
+                    previousMonthBudget: normalizePersistedMoney(summary?.previousMonthBudget, 0),
+                    previousMonthSpent: normalizePersistedMoney(summary?.previousMonthSpent, 0),
+                    referenceDate
                 });
-                if (!settlement) return null;
+                if (!resolved) return null;
+                this.settings.vault = resolved.vault;
+                this.settings.monthEndSettlements = resolved.settlements;
+                return resolved;
+            },
 
-                const nextVault = existingTransfer
-                    ? this.settings.vault
-                    : normalizeVaultStateRecord({
-                        ...this.settings.vault,
-                        transactions: [transaction, ...((this.settings.vault?.transactions || [])
-                            .filter(item => item.id !== transaction.id))]
-                    });
-                const nextSettlements = normalizeMonthEndSettlements([
-                    ...this.settings.monthEndSettlements.filter(item => item.previousMonthKey !== previousMonthKey),
-                    settlement
-                ]);
-
-                // P0-04 atomicity: the vault credit and the settlement record
-                // commit together in one IndexedDB transaction or not at all.
-                await DB.setSettingsEntries([
-                    { key: 'vault', value: nextVault },
-                    { key: 'monthEndSettlements', value: nextSettlements }
-                ]);
-
-                this.settings.vault = nextVault;
-                this.settings.monthEndSettlements = nextSettlements;
-                return { transaction, settlement };
+            async settleMonthEndToVault(summary, referenceDate = Core.Date.getTodayISO()) {
+                return this.settleMonthEnd('vault', summary, referenceDate);
             },
 
             async settleMonthEndToBudget(summary, referenceDate = Core.Date.getTodayISO()) {
-                const previousMonthKey = typeof summary?.previousMonthKey === 'string' ? summary.previousMonthKey : '';
-                const targetMonthKey = getMonthKey(referenceDate);
-                const surplus = Math.max(0, toFiniteNumber(summary?.surplus, 0));
-                if (!previousMonthKey || !targetMonthKey || surplus <= 0) return null;
-                const settlement = await this.upsertMonthEndSettlement({
-                    previousMonthKey,
-                    decision: 'budget',
-                    targetMonthKey,
-                    surplus,
-                    previousMonthBudget: summary.previousMonthBudget,
-                    previousMonthSpent: summary.previousMonthSpent,
-                    settledAt: new Date().toISOString(),
-                    vaultTransactionId: ''
-                });
-                return { settlement };
+                return this.settleMonthEnd('budget', summary, referenceDate);
             },
 
             async settleMonthEndNoSurplus(summary, referenceDate = Core.Date.getTodayISO()) {
-                const previousMonthKey = typeof summary?.previousMonthKey === 'string' ? summary.previousMonthKey : '';
-                if (!previousMonthKey) return null;
-                const settlement = await this.upsertMonthEndSettlement({
-                    previousMonthKey,
-                    decision: 'no_surplus',
-                    targetMonthKey: '',
-                    surplus: 0,
-                    previousMonthBudget: summary.previousMonthBudget,
-                    previousMonthSpent: summary.previousMonthSpent,
-                    settledAt: new Date().toISOString(),
-                    vaultTransactionId: ''
-                });
-                return { settlement, targetMonthKey: getMonthKey(referenceDate) };
+                return this.settleMonthEnd('no_surplus', summary, referenceDate);
             },
 
             async loadDay(dateStr) {
@@ -10228,7 +10306,7 @@
                                     if (data.settings) {
                                         const importedSettings = data.settings;
                                         if (importedSettings.baseAllowance !== undefined) {
-                                            settingsEntries.push({ key: 'baseAllowance', value: importedSettings.baseAllowance });
+                                            settingsEntries.push({ key: 'baseAllowance', value: normalizePersistedMoney(importedSettings.baseAllowance) });
                                         }
                                         if (importedSettings.safeToSpendMode !== undefined) {
                                             settingsEntries.push({ key: 'safeToSpendMode', value: importedSettings.safeToSpendMode });
@@ -10298,18 +10376,17 @@
 
                             try {
                                 await DB.factoryReset(() => {
-                                    // A blocked deletion completed after the error was
-                                    // shown: finish the reset so the visible app state
-                                    // matches the deleted database.
-                                    this.clearRushdLocalState();
-                                    location.reload();
+                                    this.showConfirmDialog(
+                                        this.t.resetWaitingTitle,
+                                        this.t.resetWaiting,
+                                        () => {},
+                                        this.t.dialogOk,
+                                        'brand'
+                                    );
                                 });
                             } catch (e) {
                                 console.error('Factory reset failed:', e);
-                                const message = e && e.name === 'ResetBlockedError'
-                                    ? this.t.resetBlockedError
-                                    : this.t.resetFailed;
-                                this.showConfirmDialog(this.t.resetFailedTitle, message, () => {}, this.t.dialogOk, 'brand');
+                                this.showConfirmDialog(this.t.resetFailedTitle, this.t.resetFailed, () => {}, this.t.dialogOk, 'brand');
                                 return;
                             }
 

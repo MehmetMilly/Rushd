@@ -168,7 +168,6 @@ export function createIdbShim() {
 
     const createTransaction = (db, storeNames, mode) => {
         const buffered = []; // { storeName, op, key, value }
-        const readOnlyResults = [];
         const logEntry = {
             stores: [...storeNames],
             mode,
@@ -210,7 +209,8 @@ export function createIdbShim() {
                     get: (key) => {
                         const request = makeRequest();
                         const value = store.data.get(key);
-                        readOnlyResults.push(() => {
+                        nextTick().then(() => {
+                            if (finished) return;
                             request.result = value === undefined ? undefined : JSON.parse(JSON.stringify(value));
                             settleRequest(request, null);
                         });
@@ -219,7 +219,8 @@ export function createIdbShim() {
                     getAll: () => {
                         const request = makeRequest();
                         const values = Array.from(store.data.values());
-                        readOnlyResults.push(() => {
+                        nextTick().then(() => {
+                            if (finished) return;
                             request.result = values.map((value) => JSON.parse(JSON.stringify(value)));
                             settleRequest(request, null);
                         });
@@ -229,9 +230,11 @@ export function createIdbShim() {
                         getAll: (range) => {
                             const request = makeRequest();
                             const field = store.indexes[indexName];
+                            const key = range && typeof range === 'object' && 'value' in range ? range.value : range;
                             const values = Array.from(store.data.values())
-                                .filter((value) => field in value && (range === undefined || value[field] === range));
-                            readOnlyResults.push(() => {
+                                .filter((value) => field in value && (range === undefined || value[field] === key));
+                            nextTick().then(() => {
+                                if (finished) return;
                                 request.result = values.map((value) => JSON.parse(JSON.stringify(value)));
                                 settleRequest(request, null);
                             });
@@ -258,7 +261,6 @@ export function createIdbShim() {
                     if (entry.op === 'put') store.data.set(entry.key, JSON.parse(JSON.stringify(entry.value)));
                     if (entry.op === 'delete') store.data.delete(entry.key);
                 }
-                for (const run of readOnlyResults) run();
                 if (typeof tx.oncomplete === 'function') tx.oncomplete({ target: tx });
             } else {
                 tx.error = abortError || new ShimDOMException('The transaction was aborted.', 'AbortError');
@@ -268,7 +270,7 @@ export function createIdbShim() {
         };
 
         // Commit/abort asynchronously after the synchronous request queue drains.
-        nextTick().then(() => {
+        nextTick().then(() => nextTick()).then(() => {
             if (finished) return;
             if (mode === 'readwrite' && state.failNextWriteTransaction) {
                 abortError = new ShimDOMException(state.failNextWriteTransaction.reason || 'Injected write failure', 'InjectedFailure');

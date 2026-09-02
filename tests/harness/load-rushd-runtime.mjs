@@ -136,7 +136,7 @@ export async function loadRushdRuntime(options = {}) {
             }
         },
         IDBKeyRange: {
-            only: (value) => ({ value })
+            only: (value) => ({ type: 'only', value })
         },
         URL: {
             createObjectURL: (blob) => `blob:rushd-test-${captured.downloads.length}`,
