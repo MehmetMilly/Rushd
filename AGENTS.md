@@ -64,6 +64,7 @@ Manual QA checklist lives in `docs/manual-qa.md`.
 - `docs/RUSHD_FINAL_FOUNDER_BRIEF.md`: concise approved product description.
 - `docs/RUSHD_MASTER_PLAN_FINAL.md`: canonical product and technical contract.
 - `docs/implementation/phase-plan.json`: machine-readable phases and acceptance gates.
+- `docs/implementation/ACTIVE_DELIVERY_PLAN.md`: current phase status, model routing, acceleration plan, and Astra handoff context.
 - `docs/RUSHD_EXECUTION_PROTOCOL.md`: manager/worker/reviewer state machine.
 - `.agents/skills/rushd-phase-orchestrator/SKILL.md`: reusable phase orchestration workflow.
 - `.agents/skills/rushd-motion-lab/SKILL.md`: Rushd-specific signature-motion prototype and verification loop.

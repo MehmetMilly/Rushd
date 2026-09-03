@@ -124,48 +124,6 @@ No receipts, manifests, lifecycle transcripts, or state transitions are required
 
 ## Current phase plan
 
-P00 is closed. Remaining work follows the phase order in `docs/implementation/phase-plan.json`, but ordinary development no longer uses the P00 state machine. The live P01 risk map is `docs/baseline/P01-risk-matrix.json`; update it as each item changes state.
+P00 and P01 are closed. P01's reviewed product baseline is commit `075317ebebd1aa4f366a2ac6fd3f715f748d54fe`; its risk dispositions remain in `docs/baseline/P01-risk-matrix.json`.
 
-## P01 — Immediate corruption containment
-
-P01 is split around consequence: stop dangerous mutation first, restore money truth second, then remove remaining misleading behavior.
-
-### Task 1 — Stop dangerous mutation
-
-Outcome:
-
-- prevent paid generated activity from being mutated by plan reconciliation;
-- make plan application atomic or visibly blocked;
-- validate imports strictly and make them atomic or visibly blocked;
-- make settlement atomic and retry-safe;
-- make reset export-first, complete, and visibly handle blocked deletion;
-- add focused regression coverage.
-
-Fault-injection checks cover partial plan apply, import, and settlement where those operations are enabled.
-
-### Task 2 — Restore money truth
-
-Outcome:
-
-- unpaid reserved commitments affect availability and settlement;
-- each goal uses only its own allocation rather than double-counting the vault;
-- the legacy vault opening value remains visible once history exists;
-- unsafe numeric input is rejected consistently while supporting Arabic and Western numerals;
-- Home's displayed period matches its calculation period.
-
-Do not build the complete currency-aware domain here; that belongs to P03.
-
-### Task 3 — Stability and proof
-
-Outcome:
-
-- local-date semantics are corrected or contained;
-- historical budget rewriting is prevented;
-- weekly pace no longer gives a false answer;
-- monthly scheduling cannot silently drop its selected day;
-- assignment effective dates and profile revisions are respected or contained;
-- stale derived state is guarded;
-- mock analytics and harmful gamification incentives are disabled, labeled, or corrected;
-- ordinary capture/export/reload works;
-- Arabic/English manual QA is recorded;
-- every row in `docs/baseline/P01-risk-matrix.json` is fixed, visibly contained, or explicitly made non-authoritative with its final owning phase.
+The next product phase is P02. Read its contract from `docs/implementation/phase-plan.json` and the current execution position from `docs/implementation/ACTIVE_DELIVERY_PLAN.md`. Ordinary development follows this workflow and does not use the retired P00 state machine.
