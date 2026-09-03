@@ -73,15 +73,9 @@ Weak or unfamiliar models may need a higher reasoning level for the same task. A
 
 ## Astra handoff
 
-For its first review, Astra should read:
+Start Astra's first review with `docs/implementation/ASTRA_P02_REVIEW_PACKET.md`. It points to the product contract, phase plan, workflow, current status, GLM technical reconnaissance, and GLM/Muse experimental feasibility spike.
 
-1. `docs/RUSHD_MASTER_PLAN_FINAL.md`
-2. `docs/implementation/phase-plan.json`
-3. `WORKFLOW_LITE.md`
-4. This file
-5. The current Git log and P01 diff
-
-Ask it to challenge the dependency graph, identify work that can safely overlap, propose substantial task boundaries, and find schedule risks. It may recommend better execution, but it should not cut the approved feature set or recreate the old governance system.
+Ask Astra to challenge the evidence and dependency graph, identify work that can safely overlap, propose substantial task boundaries, and find schedule risks. It may recommend better execution, but it should not cut the approved feature set or recreate the old governance system.
 
 ## Founder decisions that remain external
 

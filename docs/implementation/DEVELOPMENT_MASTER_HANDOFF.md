@@ -43,7 +43,7 @@ The final master plan defines product scope. The phase plan defines acceptance o
 
 ## Immediate continuation
 
-If GPT 6 Astra is available, use it once for the bounded acceleration and dependency review described in `ACTIVE_DELIVERY_PLAN.md`. Ask it to improve sequencing, task boundaries, safe overlap, and schedule risk without reducing scope or recreating governance ceremony.
+If GPT 6 Astra is available, begin with `ASTRA_P02_REVIEW_PACKET.md` and use it once for the bounded acceleration and dependency review described in `ACTIVE_DELIVERY_PLAN.md`. Ask it to improve sequencing, task boundaries, safe overlap, and schedule risk without reducing scope or recreating governance ceremony.
 
 Then define P02 as a small number of substantial implementation tasks. Keep P02's module boundaries stable enough for P03 finance-domain work and later parallel preparation. Give each worker only the files and acceptance criteria needed for its task.
 
