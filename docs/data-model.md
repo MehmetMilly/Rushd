@@ -1,24 +1,27 @@
 # Data Model
 
-This document describes the current Rushd data model based on `index.html`.
+This document describes the current Rushd data model. P02 moves its legacy-v1
+implementation to `src/data/legacy-v1/` without changing persisted data.
 
 ## Implemented
 
 ### Expense
 
-Stored in IndexedDB `expenses`.
+Stored in IndexedDB `MicroSaveOS_DB` version 1, object store `expenses` with
+key path `id` and non-unique `date` and `isPaid` indexes.
 
 Typical fields include `id`, `name`, `expectedCost`, `actualPaid`, `date`, `category`, `classification`, `isPaid`, source fields for templates/flexible expenses, and timestamps.
 
 ### Template
 
-Stored in IndexedDB `templates`.
+Stored in the unchanged version-1 `templates` object store with key path `id`.
 
 Templates represent planned expenses. Current template types cover daily/workday/offday applicability, monthly recurrence, and flexible expense definitions with monthly budget and max-use settings.
 
 ### Settings
 
-Stored in IndexedDB `settings`, with some boot preferences mirrored in localStorage.
+Stored in the unchanged version-1 `settings` object store with key path `key`.
+Some boot preferences remain mirrored in localStorage.
 
 Settings include base allowance, safe-to-spend mode, language/calendar preferences, theme, motion level, template profiles, monthly template assignments, vault state, and month-end settlements.
 
@@ -59,3 +62,10 @@ The app has smart/rule-based insights, but no model-backed insight entity exists
 ### Category Catalog
 
 Categories are currently defined in app code rather than managed as a separate persistent catalog.
+
+## P02 compatibility boundary
+
+`src/data/legacy-v1/contracts.ts` records the v1 database name, version,
+stores, and common persisted shapes. `runtime.js` holds the mechanical
+normalizers and storage behavior. P02 does not rename the database, bump its
+version, rewrite records, or add a migration. P04 owns any verified migration.

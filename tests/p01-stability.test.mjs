@@ -15,9 +15,10 @@ import { spawnSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { loadRushdRuntime } from './harness/load-rushd-runtime.mjs';
+import { readProductionSource } from '../scripts/production-source.mjs';
 
 const thisFile = fileURLToPath(import.meta.url);
-const readSource = () => readFile('index.html', 'utf8');
+const readSource = async () => readProductionSource();
 const waitTick = () => new Promise((resolve) => setTimeout(resolve, 5));
 
 async function runTimezoneAssertions() {

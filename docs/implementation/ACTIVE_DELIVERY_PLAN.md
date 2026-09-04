@@ -20,7 +20,7 @@ The working target is a feature-complete build ready for private founder use wit
 - A follow-up correction closed independently reproduced import, settlement, reset, decimal, and IndexedDB test-harness defects. A fresh Sol review returned PASS.
 - P01 Task 3 and its corrections close the remaining local-date, historical-budget, weekly-pace, scheduling, assignment, stale-state, mock-analytics, and harmful-gamification problems. The final commit `075317e` passed an independent Muse Spark 1.3 xHigh production-path review with no blocking findings.
 - P01 is closed. Two harmless cleanup notes remain for nearby future work: remove one duplicate English translation key and align the display-only monthly-day validity check with the production helper.
-- P02 architecture is decided in `docs/implementation/P02_EXECUTION_PLAN.md`: proof/build foundation, local assets, then one controlled modular split. Work begins without waiting for Astra.
+- P02 architecture is decided in `docs/implementation/P02_EXECUTION_PLAN.md`: proof/build foundation, local assets, then one controlled modular split. Task C is the implementation candidate for independent review: it moves the app into owned modules while preserving `MicroSaveOS_DB` v1, runtime templates, and P01 production-path assertions.
 
 ## Working method
 

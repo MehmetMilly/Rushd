@@ -1,0 +1,72 @@
+{
+  "source_sha256": "cba32f4b60de615bccdd62a84919ae2e750d76ba61dcf319752efde2dbe8f33a",
+  "html_parser": "parse5@7.3.0",
+  "original_execution_order": [
+    "index.html pre-paint boot",
+    "src/shared/core.js",
+    "src/app/i18n/translations.js",
+    "src/data/legacy-v1/runtime.js",
+    "src/components/*.js",
+    "src/app/root-controller.js",
+    "src/main.ts mount"
+  ],
+  "style_cascade_order": [
+    "src/styles/legacy-foundation.css",
+    "src/styles/tailwind.css",
+    "src/styles/legacy-components.css"
+  ],
+  "explicit_import_edges": [
+    "main -> root template, CSS, bootstrap, debug bridge, i18n contract",
+    "bootstrap -> legacy-v1 runtime, component registry, root controller",
+    "legacy-v1 runtime -> shared Core",
+    "root controller -> shared Core, translations, profile registration",
+    "profile overlay -> translations and legacy data runtime"
+  ],
+  "original_regions": [
+    {
+      "owner": "pre-paint boot retained in index.html",
+      "start_line": 19,
+      "end_line": 42
+    },
+    {
+      "owner": "src/styles/legacy-foundation.css",
+      "start_line": 46,
+      "end_line": 2392
+    },
+    {
+      "owner": "src/shared/core.js",
+      "start_line": 2396,
+      "end_line": 2538
+    },
+    {
+      "owner": "src/app/i18n/translations.js",
+      "start_line": 2540,
+      "end_line": 3111
+    },
+    {
+      "owner": "src/app/root-template.html",
+      "start_line": 3118,
+      "end_line": 4966
+    },
+    {
+      "owner": "src/data/legacy-v1/runtime.js",
+      "start_line": 4969,
+      "end_line": 7024
+    },
+    {
+      "owner": "src/components/*.js",
+      "start_line": 7025,
+      "end_line": 7375
+    },
+    {
+      "owner": "src/styles/legacy-components.css",
+      "start_line": 7377,
+      "end_line": 8645
+    },
+    {
+      "owner": "src/app/root-controller.js and ms-profile-overlay.js",
+      "start_line": 8647,
+      "end_line": 10876
+    }
+  ]
+}

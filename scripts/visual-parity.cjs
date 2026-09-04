@@ -254,6 +254,28 @@ function addStableClock(context) {
   }, { fixedClock: FIXED_CLOCK_UTC });
 }
 
+function addParityProxyResolver(context) {
+  return context.addInitScript(() => {
+    globalThis.__rushdResolveParityProxy = (purpose) => {
+      const debugBridge = globalThis.RushdDebug;
+      if (debugBridge) {
+        if (typeof debugBridge.getAppProxy !== 'function') {
+          throw new Error(`P02 debug bridge has no getAppProxy() while ${purpose}.`);
+        }
+        const proxy = debugBridge.getAppProxy();
+        if (!proxy) throw new Error(`P02 debug bridge returned no mounted proxy while ${purpose}.`);
+        return proxy;
+      }
+
+      // The pinned pre-P02 reference cannot expose the P02 bridge. Keep its
+      // legacy Vue-private lookup contained to this characterization helper.
+      const legacyProxy = document.querySelector('#app')?.__vue_app__?._instance?.proxy;
+      if (!legacyProxy) throw new Error(`Legacy reference mounted proxy is unavailable while ${purpose}.`);
+      return legacyProxy;
+    };
+  });
+}
+
 function collectDiagnostics(page, rootUrl) {
   const diagnostics = { console: [], pageErrors: [], failedRequests: [], externalRequests: [] };
   const localOrigin = new URL(rootUrl).origin;
@@ -340,8 +362,11 @@ async function seedFixture(page, rootUrl, fixture, language, theme, onboarding =
   const fixtureDate = payload.indexed_db.stores.expenses[0]?.date;
   if (fixtureDate) {
     await page.evaluate(async (date) => {
-      const proxy = document.querySelector('#app')?.__vue_app__?._instance?.proxy;
-      if (proxy?.store?.loadDay) await proxy.store.loadDay(date);
+      const proxy = globalThis.__rushdResolveParityProxy('loading the fixture date');
+      if (typeof proxy.store?.loadDay !== 'function') {
+        throw new Error('Mounted proxy has no Store.loadDay() for fixture loading.');
+      }
+      await proxy.store.loadDay(date);
     }, fixtureDate);
   }
   await page.waitForTimeout(100);
@@ -399,13 +424,15 @@ async function captureCharacterizedStates(page, rootUrl, fixture, language, them
   await seedFixture(page, rootUrl, fixture.empty, language, theme, true);
   await captureState(page, states, 'onboarding');
   await page.evaluate(() => {
-    const proxy = document.querySelector('#app')?.__vue_app__?._instance?.proxy;
-    if (proxy?.onboardingModal) proxy.onboardingModal.isLoading = true;
+    const proxy = globalThis.__rushdResolveParityProxy('showing the onboarding loading state');
+    if (!proxy.onboardingModal) throw new Error('Mounted proxy has no onboardingModal loading state.');
+    proxy.onboardingModal.isLoading = true;
   });
   await captureState(page, states, 'loading-onboarding');
   await page.evaluate(() => {
-    const proxy = document.querySelector('#app')?.__vue_app__?._instance?.proxy;
-    if (proxy?.onboardingModal) proxy.onboardingModal.isLoading = false;
+    const proxy = globalThis.__rushdResolveParityProxy('clearing the onboarding loading state');
+    if (!proxy.onboardingModal) throw new Error('Mounted proxy has no onboardingModal loading state.');
+    proxy.onboardingModal.isLoading = false;
   });
   const skipLabel = language === 'ar' ? 'تخطي الآن' : 'Skip for Now';
   await page.getByRole('button', { name: skipLabel, exact: true }).click();
@@ -416,16 +443,15 @@ async function captureCharacterizedStates(page, rootUrl, fixture, language, them
   await captureState(page, states, 'add-modal');
   await page.getByRole('button', { name: 'close', exact: true }).click();
   await page.evaluate((message) => {
-    const proxy = document.querySelector('#app')?.__vue_app__?._instance?.proxy;
-    if (!proxy) return;
+    const proxy = globalThis.__rushdResolveParityProxy('showing the error toast');
     proxy.toastMessage = message;
     proxy.toastVisible = true;
     clearTimeout(proxy._toastTimer);
   }, language === 'ar' ? 'فشل تجريبي — بيانات وهمية فقط' : 'Synthetic failure — fake data only');
+  await page.locator('.toast-notification').waitFor({ state: 'visible', timeout: 10_000 });
   await captureState(page, states, 'error-toast');
   await page.evaluate(() => {
-    const proxy = document.querySelector('#app')?.__vue_app__?._instance?.proxy;
-    if (proxy) proxy.toastVisible = false;
+    globalThis.__rushdResolveParityProxy('hiding the error toast').toastVisible = false;
   });
   await page.keyboard.press('Tab');
   await captureState(page, states, 'keyboard-focus-dashboard');
@@ -504,6 +530,7 @@ async function captureRoot(rootUrl, rootPath, cases, browser) {
       timezoneId: TIMEZONE
     });
     await addStableClock(context);
+    await addParityProxyResolver(context);
     const page = await context.newPage();
     const diagnostics = collectDiagnostics(page, rootUrl);
     try {

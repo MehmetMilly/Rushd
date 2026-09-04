@@ -97,6 +97,25 @@ async function close() {
   await page.waitForTimeout(1_500);
   assert.equal(await page.title(), 'رُشد | Rushd');
 
+  // P02's explicit bridge replaces reliance on Vue's production-private
+  // instance shape. Parity uses it for the characterized loading state; this
+  // focused build check proves the bridge reaches the mounted proxy and that
+  // its existing toast state still renders through the real template.
+  const bridgeProbe = await page.evaluate(() => {
+    if (typeof window.RushdDebug?.getAppProxy !== 'function') {
+      throw new Error('RushdDebug.getAppProxy() is unavailable in the production build.');
+    }
+    const proxy = window.RushdDebug.getAppProxy();
+    if (!proxy?.onboardingModal) throw new Error('RushdDebug returned no mounted application proxy.');
+    proxy.toastMessage = 'P02 debug bridge toast probe';
+    proxy.toastVisible = true;
+    clearTimeout(proxy._toastTimer);
+    return { hasOnboardingLoadingState: typeof proxy.onboardingModal.isLoading === 'boolean' };
+  });
+  assert.deepEqual(bridgeProbe, { hasOnboardingLoadingState: true });
+  await page.getByText('P02 debug bridge toast probe', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
+  await page.evaluate(() => { window.RushdDebug.getAppProxy().toastVisible = false; });
+
   if (process.env.RUSHD_SMOKE_INJECT_EXTERNAL === '1') {
     // A deterministic negative probe for the local-only gate. The route above
     // aborts this request; the final assertion reports its exact URL.

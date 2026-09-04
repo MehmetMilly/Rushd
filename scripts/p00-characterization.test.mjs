@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { lstat, readFile } from 'node:fs/promises';
+import { readProductionSource } from './production-source.mjs';
 
 const catalog = JSON.parse(await readFile('tests/characterization/p0-p1-cases.json', 'utf8'));
-const source = await readFile('index.html', 'utf8');
+const source = readProductionSource();
 const boundary = JSON.parse(await readFile('tests/fixtures/v1/boundary.json', 'utf8'));
 const legacyVault = JSON.parse(await readFile('tests/fixtures/v1/legacy-vault.json', 'utf8'));
 const paidGenerated = JSON.parse(await readFile('tests/fixtures/v1/paid-generated.json', 'utf8'));
@@ -101,7 +102,7 @@ assert.equal(Number('-1') < 0, true);
 assert.equal(Number('1.234'), 1.234);
 assert.equal(Number.isFinite(Number('Infinity')), false);
 assert.equal(Number('١٢٫٥٠'), Number.NaN);
-assert.match(source, /window\.RushdMoneyInput = \{ parseMoneyInput \}/);
+assert.match(source, /RushdMoneyInput: \{ parseMoneyInput: dataRuntime\.parseMoneyInput \}/);
 
 const weakCandidate = malformed.malformed_backup_candidates.find((item) => item.id === 'weak-schema-accepted').payload;
 assert.equal(Array.isArray(weakCandidate.expenses), true);

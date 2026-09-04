@@ -46,3 +46,42 @@ font CSS response and every downloaded WOFF2 file are hashed in
 `public/fonts/PROVENANCE.json`; applicable OFL and Apache 2.0 texts are included
 under `public/fonts/licenses/`. The browser smoke test blocks and reports every
 request outside its local test origin.
+
+## Task C modular split
+
+Task C reduces `index.html` from 560,927 bytes to a 2,854-byte Vite entry. Its
+pre-paint preference IIFE and the static cinema wrapper/backdrop remain in
+place. The exact root inner HTML, both style regions, six executable blocks,
+and their order were mapped with
+`parse5@7.3.0` before edits. The parser-backed map is
+[`P02_EXTRACTION_MAP.json`](P02_EXTRACTION_MAP.json); the extraction script is
+[`scripts/extract-p02-legacy.mjs`](../../scripts/extract-p02-legacy.mjs). Run it
+against the pinned pre-split source, never the thin final entry.
+
+`src/main.ts` imports the raw root template and CSS in former cascade order,
+then creates the app through Vite's full-compiler Vue alias. The controller,
+v1 Store and DB, components, i18n, shared Core, and styles now have explicit
+owners. The Node harness imports real production modules through the bootstrap
+factory while keeping its P01 return API and assertions.
+
+The only declared content changes are English `flexibleConsumption` =
+`Flexible spending` and `flexibleItemRequired` = `Choose a flexible item first.`
+The duplicate English `historicalBudgetUnknownShort` was removed while keeping
+its prior winning value, `Not recorded`. `tests/i18n-parity.test.mjs` gates
+locale parity and source duplicate keys.
+
+`npm run test:legacy-idb` seeds synthetic v1 data before the built app loads.
+It asserts name/version/stores, no reopen upgrade, and rendering of the seeded
+record. `src/application/debug-test-bridge.js` documents the temporary bridge:
+its read-only `RushdDebug.getAppProxy()` accessor preserves existing
+characterization controls without depending on Vue private fields. P04 owns its
+replacement. Vue router and SFC conversion are deferred to P04/P05 because this
+phase is a mechanical split, not navigation or visual redesign.
+
+The final full visual report has 228 states. 222 are pixel-identical to pinned
+`3215ca3c9380104b5bbc38b66b99e3df0ff44779`; the only six deltas are English
+`profile-modal` at dark/light × 390×844, 1024×1366, and 1440×900. They total
+670,075 differing pixels and are the direct reflow of the two declared English
+flexible-spending labels above. The comparator intentionally reports those as a
+non-passing strict result rather than masking or tolerating them. The quick
+matrix remains exact: 15/15 states and zero differing pixels.

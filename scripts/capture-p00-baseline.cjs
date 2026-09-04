@@ -58,6 +58,28 @@ const listen = () => new Promise((resolveListen) => server.listen(port, '127.0.0
 const closeServer = () => new Promise((resolveClose) => server.close(resolveClose));
 const sha256 = (value) => createHash('sha256').update(value).digest('hex');
 
+async function addP00ProxyResolver(page) {
+  await page.addInitScript(() => {
+    globalThis.__rushdResolveP00Proxy = (purpose) => {
+      const debugBridge = globalThis.RushdDebug;
+      if (debugBridge) {
+        if (typeof debugBridge.getAppProxy !== 'function') {
+          throw new Error(`P02 debug bridge has no getAppProxy() while ${purpose}.`);
+        }
+        const proxy = debugBridge.getAppProxy();
+        if (!proxy) throw new Error(`P02 debug bridge returned no mounted proxy while ${purpose}.`);
+        return proxy;
+      }
+
+      // Baseline capture normally runs against the pinned legacy app, which
+      // predates the explicit bridge and exposed this Vue-private shape.
+      const legacyProxy = document.querySelector('#app')?.__vue_app__?._instance?.proxy;
+      if (!legacyProxy) throw new Error(`Legacy reference mounted proxy is unavailable while ${purpose}.`);
+      return legacyProxy;
+    };
+  });
+}
+
 async function seedFixture(page, fixture, language, theme, onboarding = false, motion = 'full') {
   await page.goto(`${baseUrl}/__p00_seed__.html`, { waitUntil: 'load', timeout: 60_000 });
   const payload = JSON.parse(JSON.stringify(fixture));
@@ -116,7 +138,11 @@ async function seedFixture(page, fixture, language, theme, onboarding = false, m
   const fixtureDate = payload.indexed_db.stores.expenses[0]?.date;
   if (fixtureDate) {
     await page.evaluate(async (date) => {
-      await document.querySelector('#app').__vue_app__._instance.proxy.store.loadDay(date);
+      const proxy = globalThis.__rushdResolveP00Proxy('loading the fixture date');
+      if (typeof proxy.store?.loadDay !== 'function') {
+        throw new Error('Mounted proxy has no Store.loadDay() for fixture loading.');
+      }
+      await proxy.store.loadDay(date);
     }, fixtureDate);
   }
 }
@@ -206,15 +232,24 @@ async function captureMotion(browser, fixture, language, theme, viewport, direct
       for (const viewport of [{ width: 390, height: 844 }, { width: 1024, height: 1366 }, { width: 1440, height: 900 }]) {
         const context = await browser.newContext({ viewport, deviceScaleFactor: 1, locale: language === 'ar' ? 'ar-SA' : 'en-US', timezoneId: 'Asia/Riyadh' });
         const page = await context.newPage();
+        await addP00ProxyResolver(page);
         const directory = resolve(captureRoot, language, theme, `${viewport.width}x${viewport.height}`);
         const accessibility = [];
         await mkdir(directory, { recursive: true });
 
         await seedFixture(page, empty, language, theme, true);
         await captureState(page, directory, 'onboarding', accessibility, viewport);
-        await page.evaluate(() => { document.querySelector('#app').__vue_app__._instance.proxy.onboardingModal.isLoading = true; });
+        await page.evaluate(() => {
+          const proxy = globalThis.__rushdResolveP00Proxy('showing the onboarding loading state');
+          if (!proxy.onboardingModal) throw new Error('Mounted proxy has no onboardingModal loading state.');
+          proxy.onboardingModal.isLoading = true;
+        });
         await captureState(page, directory, 'loading-onboarding', accessibility, viewport);
-        await page.evaluate(() => { document.querySelector('#app').__vue_app__._instance.proxy.onboardingModal.isLoading = false; });
+        await page.evaluate(() => {
+          const proxy = globalThis.__rushdResolveP00Proxy('clearing the onboarding loading state');
+          if (!proxy.onboardingModal) throw new Error('Mounted proxy has no onboardingModal loading state.');
+          proxy.onboardingModal.isLoading = false;
+        });
         await page.getByRole('button', { name: language === 'ar' ? 'تخطي الآن' : 'Skip for Now', exact: true }).click();
         await captureScreens(page, directory, 'empty', accessibility, viewport);
         await navigate(page, 0);
@@ -222,13 +257,15 @@ async function captureMotion(browser, fixture, language, theme, viewport, direct
         await captureState(page, directory, 'add-modal', accessibility, viewport);
         await page.getByRole('button', { name: 'close', exact: true }).click();
         await page.evaluate((message) => {
-          const vm = document.querySelector('#app').__vue_app__._instance.proxy;
+          const vm = globalThis.__rushdResolveP00Proxy('showing the error toast');
           vm.toastMessage = message;
           vm.toastVisible = true;
           clearTimeout(vm._toastTimer);
         }, language === 'ar' ? 'فشل تجريبي — بيانات وهمية فقط' : 'Synthetic failure — fake data only');
         await captureState(page, directory, 'error-toast', accessibility, viewport);
-        await page.evaluate(() => { document.querySelector('#app').__vue_app__._instance.proxy.toastVisible = false; });
+        await page.evaluate(() => {
+          globalThis.__rushdResolveP00Proxy('hiding the error toast').toastVisible = false;
+        });
         await page.keyboard.press('Tab');
         await captureState(page, directory, 'keyboard-focus-dashboard', accessibility, viewport);
 

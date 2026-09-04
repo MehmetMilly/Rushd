@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
 import { verifyFontLicenseProvenance } from './font-license-guard.mjs';
+import { listProductionSourceFiles, readProductionSource } from './production-source.mjs';
 
 const requiredFiles = [
   'index.html',
@@ -34,7 +34,15 @@ const requiredFiles = [
   'postcss.config.cjs',
   'vite.config.mjs',
   'tsconfig.json',
-  'eslint.config.js'
+  'eslint.config.cjs',
+  'src/main.ts',
+  'src/app/root-template.html',
+  'src/app/root-controller.js',
+  'src/app/i18n/translations.js',
+  'src/data/legacy-v1/runtime.js',
+  'src/application/bootstrap.js',
+  'src/application/debug-test-bridge.js',
+  'src/shared/core.js'
 ];
 
 const missing = requiredFiles.filter((file) => !existsSync(file));
@@ -45,17 +53,20 @@ if (missing.length) {
 const html = readFileSync('index.html', 'utf8');
 const requiredHtmlMarkers = [
   '<html lang="ar" dir="rtl">',
-  'Vue.createApp',
-  'indexedDB.open',
-  'exportData',
-  'importData',
-  'factoryReset',
-  'Rushd'
+  '<div id="app" v-cloak></div>',
+  '<script type="module" src="/src/main.ts"></script>'
 ];
 
 const missingMarkers = requiredHtmlMarkers.filter((marker) => !html.includes(marker));
 if (missingMarkers.length) {
   throw new Error(`index.html is missing expected markers: ${missingMarkers.join(', ')}`);
+}
+
+const productionSource = readProductionSource();
+const requiredProductionMarkers = ['Vue.createApp', 'indexedDB.open', 'exportData', 'importData', 'factoryReset', 'Rushd'];
+const missingProductionMarkers = requiredProductionMarkers.filter((marker) => !productionSource.includes(marker));
+if (missingProductionMarkers.length) {
+  throw new Error(`P02 module source is missing expected markers: ${missingProductionMarkers.join(', ')}`);
 }
 
 const externalHtmlAssets = [...html.matchAll(/\b(?:src|href)\s*=\s*["'](https?:\/\/[^"']+)/gi)].map((match) => match[1]);
@@ -91,18 +102,7 @@ for (const stylesheet of localFontStylesheets) {
 const fontProvenance = JSON.parse(readFileSync('public/fonts/PROVENANCE.json', 'utf8'));
 verifyFontLicenseProvenance(fontProvenance);
 
-const sourceFiles = ['index.html'];
-function collectSourceFiles(directory) {
-  for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    const filePath = join(directory, entry.name);
-    if (entry.isDirectory()) {
-      collectSourceFiles(filePath);
-    } else if (/\.(?:html|js|mjs|ts|vue)$/.test(entry.name)) {
-      sourceFiles.push(filePath);
-    }
-  }
-}
-if (existsSync('src')) collectSourceFiles('src');
+const sourceFiles = listProductionSourceFiles();
 
 // Tailwind's build-time scanner only sees literal class tokens.  Keep this
 // guard intentionally narrow: the feasibility spike found only custom

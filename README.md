@@ -16,12 +16,13 @@ Rushd is a Vite-built web app for students and regular users who want a simple w
 
 ## Tech Stack
 
-The current product UI remains structurally single-file while the delivery foundation is being migrated:
+P02 separates the existing UI into a modular compatibility layout:
 
-- HTML
+- Thin Vite `index.html` entry plus `src/main.ts`
+- Raw root/component templates and moved controller in `src/app` and `src/components`
+- Legacy v1 Store, IndexedDB access, normalizers, and backup validation in `src/data/legacy-v1`
 - CSS with pinned Tailwind CSS 3.4.17 utilities generated at build time
-- JavaScript
-- Vue 3.5.42 global/compiler build served locally from `public/vendor`
+- Vue 3.5.42's local full ESM compiler build, selected through the Vite alias
 - Self-hosted Google Fonts CSS and WOFF2 assets for the Arabic/Latin families plus Material Symbols Rounded
 - Vite build/dev/preview shell
 - IndexedDB for app data
@@ -60,11 +61,16 @@ npm run typecheck
 npm test
 npm run build
 npm run test:browser
+npm run test:legacy-idb
 npm run parity:self-test
 npm run parity:quick
+npm run parity:full
 ```
 
-The current test command checks repository structure, key app markers, and extracted finance-rule examples.
+`npm test` checks repository structure, source coverage, translation parity and
+duplicate keys, P00/P01 production behavior, local font-license safety, and
+finance-rule examples. `npm run test:legacy-idb` proves the built modular app
+opens and renders synthetic `MicroSaveOS_DB` v1 data without a schema upgrade.
 
 Optional browser smoke test:
 
@@ -89,7 +95,11 @@ Users should avoid entering sensitive real financial data unless they understand
 
 ## Project Status
 
-Active prototype / in development. The current priority is making the single-file app easier to review, test, document, and eventually refactor safely.
+Active prototype / in development. The P02 mechanical-split candidate is ready
+for independent review; its legacy database contract, runtime templates,
+temporary debug/test bridge, and router/SFC deferrals remain deliberate
+compatibility boundaries. This does not add a PWA, cloud sync, accounts, AI,
+remote CI execution, or production security guarantees.
 
 ## Roadmap
 
