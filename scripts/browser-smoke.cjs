@@ -1,10 +1,12 @@
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const { mkdir, readFile } = require('node:fs/promises');
-const { extname, join } = require('node:path');
+const { extname, join, resolve } = require('node:path');
 const { chromium } = require('playwright');
 
-const root = process.cwd();
+// The smoke test is intentionally pointed at the Vite output by npm scripts. A
+// caller may still provide a different static root for focused diagnostics.
+const root = resolve(process.env.RUSHD_SMOKE_ROOT || process.cwd());
 const port = Number(process.env.RUSHD_SMOKE_PORT || 4173);
 const baseUrl = `http://127.0.0.1:${port}`;
 
@@ -48,9 +50,11 @@ async function close() {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const page = await context.newPage();
   const messages = [];
+  const requests = [];
 
   page.on('console', (message) => messages.push({ type: message.type(), text: message.text() }));
   page.on('pageerror', (error) => messages.push({ type: 'pageerror', text: error.message }));
+  page.on('request', (request) => requests.push(request.url()));
 
   const expenseName = 'قهوة اختبار';
 
@@ -86,6 +90,7 @@ async function close() {
     return ['error', 'warning', 'pageerror'].includes(message.type);
   });
   assert.deepEqual(relevantMessages, []);
+  assert.equal(requests.some((url) => url.includes('unpkg.com/vue')), false, 'built output must not request Vue from a CDN');
 
   await mkdir('test-results/browser-smoke', { recursive: true });
   await page.screenshot({ path: 'test-results/browser-smoke/dashboard-with-expense.png', fullPage: false });

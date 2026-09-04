@@ -6,3 +6,5 @@
 *.gif binary
 *.webp binary
 *.apk binary
+
+public/vendor/vue.global.js -whitespace

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 
 const requiredFiles = [
@@ -13,7 +14,12 @@ const requiredFiles = [
   'docs/privacy-notes.md',
   'docs/codex-use-cases.md',
   'docs/application-summary.md',
-  'docs/manual-qa.md'
+  'docs/manual-qa.md',
+  'public/vendor/vue.global.js',
+  'public/vendor/vue.global.js.sha256',
+  'vite.config.mjs',
+  'tsconfig.json',
+  'eslint.config.js'
 ];
 
 const missing = requiredFiles.filter((file) => !existsSync(file));
@@ -35,6 +41,20 @@ const requiredHtmlMarkers = [
 const missingMarkers = requiredHtmlMarkers.filter((marker) => !html.includes(marker));
 if (missingMarkers.length) {
   throw new Error(`index.html is missing expected markers: ${missingMarkers.join(', ')}`);
+}
+
+if (html.includes('unpkg.com/vue')) {
+  throw new Error('index.html still references the unpinned Vue CDN.');
+}
+
+const localVue = readFileSync('public/vendor/vue.global.js');
+if (!localVue.includes('vue v3.5.42')) {
+  throw new Error('public/vendor/vue.global.js is not the pinned Vue 3.5.42 global build.');
+}
+const localVueHash = createHash('sha256').update(localVue).digest('hex');
+const recordedVueHash = readFileSync('public/vendor/vue.global.js.sha256', 'utf8').trim().split(/\s+/)[0];
+if (localVueHash !== recordedVueHash) {
+  throw new Error(`Pinned Vue hash mismatch: expected ${recordedVueHash}, got ${localVueHash}.`);
 }
 
 if (html.includes('\\r\\n')) {

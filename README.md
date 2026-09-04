@@ -2,7 +2,7 @@
 
 Arabic-first personal finance assistant for tracking expenses, budgets, goals, and spending insights.
 
-Rushd is a static web app for students and regular users who want a simple way to understand where their money goes, especially in an Arabic RTL interface with Saudi riyal amounts. It is an active prototype and should not be treated as financial advice.
+Rushd is a Vite-built web app for students and regular users who want a simple way to understand where their money goes, especially in an Arabic RTL interface with Saudi riyal amounts. It is an active prototype and should not be treated as financial advice.
 
 ## What It Does
 
@@ -16,12 +16,13 @@ Rushd is a static web app for students and regular users who want a simple way t
 
 ## Tech Stack
 
-Rushd is currently a single-file static app:
+The current product UI remains structurally single-file while the delivery foundation is being migrated:
 
 - HTML
 - CSS with Tailwind CDN utilities
 - JavaScript
-- Vue 3 from CDN
+- Vue 3.5.42 global/compiler build served locally from `public/vendor`
+- Vite build/dev/preview shell
 - IndexedDB for app data
 - localStorage for preferences and deferred prompts
 
@@ -41,18 +42,25 @@ These screenshots are captured from the current local app with default local dat
 
 ## Run Locally
 
-Open `index.html` directly in a browser, or serve the folder locally:
+Install dependencies and start the Vite development server:
 
 ```bash
-python -m http.server 8000
+npm install
+npm run dev
 ```
 
-Then open `http://localhost:8000`.
+Then open `http://127.0.0.1:5173`.
 
-Optional checks:
+Useful local checks:
 
 ```bash
+npm run lint
+npm run typecheck
 npm test
+npm run build
+npm run test:browser
+npm run parity:self-test
+npm run parity:quick
 ```
 
 The current test command checks repository structure, key app markers, and extracted finance-rule examples.
@@ -64,7 +72,7 @@ npm install
 npm run test:browser
 ```
 
-The browser smoke test serves the static app locally, adds a fake expense, verifies it persists after refresh, and refreshes `docs/assets/screenshots/dashboard-with-expense.png`.
+The browser smoke test builds first, serves `dist/`, adds a fake expense, and verifies it persists after refresh. The visual parity commands compare the built output to the pinned pre-P02 commit without committing a second screenshot archive. Full command/profile details live in [`docs/implementation/P02_BUILD_FOUNDATION.md`](docs/implementation/P02_BUILD_FOUNDATION.md).
 
 ## Deployment
 
