@@ -33,6 +33,7 @@ The working target is a feature-complete build ready for private founder use wit
 - Preserve Codex capacity for Development Master continuity. External models should handle most implementation, testing, and routine independent review when they can do so reliably.
 - High-consequence finance, migration, sync, security, AI-write, release, and major visual work receives independent review. Ordinary low-risk changes receive direct Master review. Sol High is not the automatic reviewer for every high-risk task.
 - When practical, worker and reviewer come from different model families.
+- For P02, use fresh Codex worktree tasks for implementation and review. Workers report back to the Development Master task; corrections return to the same worker task, and the next task starts only after the reviewed commit is integrated.
 - Tests cover production behavior and the important failure boundary. Full matrices run at integration or phase gates rather than after every small edit.
 - No receipt ceremony, patch manifest, lifecycle transcript, or manual state transition is part of normal development.
 
@@ -41,9 +42,9 @@ The working target is a feature-complete build ready for private founder use wit
 Routing changes when pricing, resets, free windows, or model availability changes. The founder will report those changes and the Development Master will adjust upcoming work.
 
 - **GPT 6 Astra:** rare high-leverage work such as acceleration planning, major architecture review, difficult integration recovery, and P08, P09, or P12 audits. Do not spend it on routine implementation.
-- **GPT 5.6 Sol:** Development Master, ambiguous technical decisions, difficult diagnosis, and integration. Sol Medium can review substantial bounded work. Sol High is reserved for architecture-critical disputes, severe recovery, and final gates.
-- **GPT 5.6 Terra:** Codex implementation or review when external cheaper capacity is unsuitable. Terra xHigh is a strong cost-conscious reviewer for complex but well-bounded changes.
-- **GPT 5.6 Luna:** exploration, focused tests, fixtures, mechanical changes, and quick verification support.
+- **GPT 5.6 Sol:** Development Master, ambiguous technical decisions, difficult diagnosis, and integration. Use it for delegated work only when the task is genuinely hard: Medium for bounded substantial review, High for architecture-critical disputes, severe recovery, and final gates. Do not use Max.
+- **GPT 5.6 Terra:** harder implementation and review that needs a higher tier of intelligence. Choose Medium, High, or xHigh from task risk; do not use Max.
+- **GPT 5.6 Luna:** default Codex worker for clear, well-defined implementation, testing, fixtures, mechanical migration, and focused review. Prefer Max when task breadth or integration risk benefits from deeper checking; use xHigh when Max is unnecessary.
 - **GLM 5.3 Flash:** large bounded implementation or test work during temporary free-token windows. Its free pool is a literal token allowance including cached input and may expire within 10 to 12 hours, so use one compact task context and avoid repeated large-history loading. Prioritize it while a short free window is active.
 - **Muse Spark 1.3:** near-zero-cost external worker and reviewer for well-defined implementation and testing. Start with bounded tasks, then expand its role if repository results and independent reviews remain strong. Use High for normal multi-file work and xHigh for difficult logic, finance/data review, or broad integration.
 - **Gemini 3.8 Flash:** fallback for straightforward, tightly specified work that needs many tokens and has deterministic validation. Do not use it for ambiguous implementation, architecture, finance decisions, or final review. Its benchmark strength does not outweigh weak results on real Rushd tasks.
@@ -58,7 +59,7 @@ Choose reasoning from task shape rather than model prestige:
 - **Medium:** narrow implementation or test work with one clear code path and limited edge cases.
 - **High:** normal multi-file product work, debugging, migrations, financial behavior, or tasks with several interacting requirements.
 - **xHigh:** architecture, unclear root causes, concurrency, sync conflicts, difficult integration, or reviews where missing one interaction would be costly.
-- **Maximum tiers:** exceptional recovery or final-audit work only. High or xHigh should be the normal ceiling.
+- **Maximum tiers:** Luna Max is allowed for demanding, clearly bounded work. Terra Max and Sol Max are excluded; High or xHigh is their normal ceiling.
 
 Weak or unfamiliar models may need a higher reasoning level for the same task. A higher tier is useful only when it improves decisions; it should not compensate for an unsuitable model or an unclear prompt.
 

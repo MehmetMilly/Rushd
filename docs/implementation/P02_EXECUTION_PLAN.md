@@ -34,9 +34,9 @@ The comparison tool supports:
 
 Capture or compare against the pre-P02 state at `3215ca3`. The P00 images remain historical evidence from `b56c80b`, not the zero-diff comparator after P01.
 
-**Worker:** Muse Spark 1.3 High.
+**Worker:** GPT 5.6 Luna Max. This is a bounded but broad tooling task and also serves as a real capability test for Luna Max.
 
-**Review:** Development Master direct.
+**Review:** fresh GPT 5.6 Terra High task, followed by Development Master integration. Keep the review focused on the commit, objective gates, visual determinism, and any weakened checks.
 
 **Gate:** repository tests, browser smoke on the built output, build/lint/typecheck, deterministic self-compare, deliberate-difference detection, and zero unexplained quick-profile drift.
 
@@ -46,9 +46,9 @@ Replace Tailwind Play CDN, Google Fonts, and Material Symbols runtime requests w
 
 Use Tailwind v3-compatible configuration for the mechanical migration. A later design phase may reconsider the styling system. Check source coverage for utility classes; avoid a complex rendered-class oracle unless a real dynamic-class failure appears.
 
-**Worker:** Muse Spark 1.3 High.
+**Worker:** GPT 5.6 Luna Max. The migration is mechanically bounded, but font loading and stylesheet order justify the deeper reasoning budget.
 
-**Review:** Development Master direct when parity is clean; independent review only for accepted unexplained visual drift.
+**Review:** fresh GPT 5.6 Terra High task. Keep it proportional: confirm local-only assets, licensing, request behavior, and parity; investigate pixels deeply only when drift exists.
 
 **Gate:** no external runtime requests, browser smoke, repository/build checks, and zero unexplained quick-profile drift. Run the full visual profile if font or cascade behavior remains uncertain.
 
@@ -67,15 +67,17 @@ Perform the parser-based structural split as one controlled integration task:
 
 Use a narrow browser-environment seam for data and testability. Do not force every UI use of `document` or `navigator` through a new abstraction during this mechanical phase. Avoid a generic `src/legacy/**` dumping ground; place compatibility code where P03–P06 can own or retire it.
 
-**Worker:** Grok 4.6 xHigh if available; otherwise Muse Spark 1.3 xHigh.
+**Worker:** GPT 5.6 Terra xHigh. This is P02's hardest integration task and needs stronger cross-module reasoning; Terra Max is intentionally excluded.
 
-**Review:** independent xHigh reviewer from a different model family. Prefer Muse when Grok writes, or Terra when Muse writes.
+**Review:** fresh GPT 5.6 Sol Medium task. This is a legitimate hard-task use of Sol, but the bounded review does not justify High or Max. Development Master makes the final integration decision.
 
 **Gate:** every P02 required command, unchanged P01 production-path assertions, local-assets proof, full pre-P02 visual comparison with only declared translation drift, legacy database reopen/read proof, module ownership review, and no unexplained runtime warnings.
 
 ## Closure
 
 P02 closes after Task C passes independent review and the Development Master verifies every P02 acceptance outcome. Documentation and the final attribution report are part of Task C or the closure review, not a separate paperwork task.
+
+Each task runs in a fresh Codex worktree task. The worker commits one coherent change and sends its final report to the Development Master task. The Development Master launches a fresh review task at the exact commit; corrections return to the same worker task. A passing commit is integrated before the next task starts.
 
 CI configuration can be committed and tested locally without pushing. Before public or private remote execution becomes a release claim, the founder decides whether to push. Pre-P02 reference images remain reproducible from the pinned commit and need not be duplicated permanently in Git.
 

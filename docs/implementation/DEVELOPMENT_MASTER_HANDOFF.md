@@ -40,6 +40,8 @@ The final master plan defines product scope. The phase plan defines acceptance o
 - Use an independent reviewer for expensive mistakes or subjective quality, not by default.
 - Keep reviews read-only. The implementation worker owns corrections.
 - Keep each task in one clear commit and leave unrelated changes out.
+- For P02, run each worker and reviewer in fresh Codex tasks. Have them send concise results to Development Master task `01a02647-0425-7833-aee2-8e4c7bdeff29`; return corrections to the original worker task.
+- Prefer Luna Max for clear demanding tasks, Terra up to xHigh for harder intelligence-heavy work, and Sol Medium/High only when the task is legitimately hard. Never route delegated work to Terra Max or Sol Max.
 - Do not push unless the founder asks.
 - Preserve the master plan's full feature scope. Speed comes from better task sizing, model routing, and parallel preparation—not from cutting approved features.
 
