@@ -85,7 +85,7 @@ Tailwind, fonts, icons, and Vue are local runtime assets in the built app. Font 
 
 ## Deployment
 
-The app is prepared for static hosting. GitHub Pages can serve `index.html` from the repository root once Pages is enabled for the repository. A Pages workflow can be added later by a token/user with GitHub `workflow` permission.
+The app is prepared for static hosting of the built `dist/` directory. A deployment workflow must run `npm run build` and publish that output; serving the repository root unchanged will not load the Vite module graph. A Pages workflow can be added later by a token/user with GitHub `workflow` permission.
 
 ## Privacy Notes
 

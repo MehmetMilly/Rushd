@@ -1,6 +1,11 @@
 // Temporary P02 bridge for existing debug tools and production-path tests.
 // P04 owns retirement or replacement of the legacy data globals and this
 // mounted-proxy accessor.
+/**
+ * @param {typeof globalThis} environment
+ * @param {import('../data/legacy-v1/runtime.js').LegacyDataRuntime} dataRuntime
+ * @param {unknown} mountedProxy
+ */
 export function installLegacyDebugBridge(environment, dataRuntime, mountedProxy) {
     const RushdDebug = Object.freeze({
         // Read-only access for existing characterization controls. It does not

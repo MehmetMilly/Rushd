@@ -13,6 +13,9 @@ export interface LegacyDataRuntime {
   Core: unknown;
   Store: unknown;
   DB: unknown;
+  validateBackupPayload: (payload: unknown) => unknown;
+  parseMoneyInput: (value: unknown) => unknown;
+  [key: string]: unknown;
 }
 
 export function createLegacyApplication(options: {

@@ -2,13 +2,14 @@
 
 Thanks for considering a contribution to Rushd / رُشد.
 
-Rushd is currently a static web app. Open `index.html` directly or run:
+Rushd uses Vite. Install dependencies and start the development server:
 
 ```bash
-python -m http.server 8000
+npm install
+npm run dev
 ```
 
-Then open `http://localhost:8000`.
+For a production-shaped local check, use `npm run build` and `npm run preview`.
 
 Before opening a pull request, run:
 

@@ -2,11 +2,11 @@
 
 ## Project Overview
 
-Rushd / رُشد is a bilingual personal-finance assistant for younger people managing one dominant spending pool. The current app is a static single-file Vue 3 prototype in `index.html`. The approved destination is an offline-capable, account-synced PWA with deterministic financial logic, deeply integrated AI, and a premium Arabic/English experience.
+Rushd / رُشد is a bilingual personal-finance assistant for younger people managing one dominant spending pool. The current app is a Vite-built modular Vue 3 prototype. The approved destination is an offline-capable, account-synced PWA with deterministic financial logic, deeply integrated AI, and a premium Arabic/English experience.
 
 ## Source Of Truth
 
-The repository entry point is `index.html`.
+The Vite entry is `index.html`; `src/main.ts` is the application composition root.
 
 Product and implementation authority, in order:
 
@@ -28,13 +28,14 @@ Do not edit or delete that local historical file unless the user explicitly asks
 
 ## Run And Validate
 
-Serve locally with:
+Install dependencies, then run the Vite development server:
 
 ```bash
-python -m http.server 8000
+npm install
+npm run dev
 ```
 
-Then open `http://localhost:8000`.
+For a production-shaped local check, run `npm run build` followed by `npm run preview`.
 
 Run the lightweight repository and finance-rule checks:
 
@@ -53,7 +54,9 @@ Manual QA checklist lives in `docs/manual-qa.md`.
 
 ## Important Files
 
-- `index.html`: the app UI, styles, Vue components, storage wrapper, and business logic.
+- `index.html`: thin Vite host, metadata, font links, pre-paint boot, and static cinema shell.
+- `src/main.ts`: app composition root and ordered style/template imports.
+- `src/app/`, `src/components/`, `src/data/legacy-v1/`, `src/shared/`, `src/styles/`: owned P02 compatibility modules.
 - `README.md`: reviewer-facing project overview.
 - `docs/architecture.md`: app structure and data flow.
 - `docs/data-model.md`: implemented and planned entities.
@@ -72,7 +75,7 @@ Manual QA checklist lives in `docs/manual-qa.md`.
 
 ## Coding Guidelines
 
-Keep migration changes conservative and phase-bounded. Protect the current data and characterized behavior before restructuring; do not preserve a known bug as the final product. Refactor the single HTML file only through the approved phase gates and browser/data checks.
+Keep migration changes conservative and phase-bounded. Protect the current data and characterized behavior before restructuring; do not preserve a known bug as the final product. Refactor P02 compatibility modules only through the approved phase gates and browser/data checks.
 
 Arabic and English are equal-quality launch languages. Preserve the current Arabic fonts subject to license verification. Preserve RTL layout, use `dir="ltr"`, `bdi`, or `unicode-bidi: isolate` for numeric/currency fragments when needed, and design English/LTR intentionally rather than as an afterthought.
 

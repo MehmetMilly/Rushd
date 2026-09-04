@@ -4,15 +4,22 @@ import { join } from 'node:path';
 // Static guards read the exact production entry and every source module in a
 // deterministic order. Keeping this list explicit makes an omitted ownership
 // file a test failure instead of an accidental false pass after P02.
-const requiredProductionFiles = [
+export const ownedProductionFiles = Object.freeze([
     'index.html',
     'src/main.ts',
     'src/app/root-template.html',
+    'src/app/root-controller.d.ts',
     'src/app/root-controller.js',
+    'src/app/i18n/contracts.ts',
     'src/app/i18n/translations.js',
+    'src/application/bootstrap.d.ts',
     'src/application/bootstrap.js',
     'src/application/debug-test-bridge.js',
+    'src/data/legacy-v1/contracts.ts',
+    'src/data/legacy-v1/runtime.d.ts',
     'src/data/legacy-v1/runtime.js',
+    'src/shared/contracts.ts',
+    'src/shared/core.d.ts',
     'src/shared/core.js',
     'src/styles/legacy-foundation.css',
     'src/styles/tailwind.css',
@@ -24,9 +31,11 @@ const requiredProductionFiles = [
     'src/components/ms-stat-ring.js',
     'src/components/ms-modal.js',
     'src/components/ms-profile-overlay.js',
+    'src/components/register-legacy-components.d.ts',
     'src/components/register-legacy-components.js',
-    'src/components/register-profile-overlay.js'
-];
+    'src/components/register-profile-overlay.js',
+    'src/types/vite-env.d.ts'
+]);
 
 function collect(directory, files) {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -37,11 +46,13 @@ function collect(directory, files) {
 }
 
 export function listProductionSourceFiles() {
-    const missing = requiredProductionFiles.filter((file) => !existsSync(file));
+    const missing = ownedProductionFiles.filter((file) => !existsSync(file));
     if (missing.length) throw new Error(`P02 production source coverage is incomplete: ${missing.join(', ')}`);
-    const files = ['index.html'];
-    collect('src', files);
-    return [...new Set(files)].sort();
+    const discovered = ['index.html'];
+    collect('src', discovered);
+    const unexpected = discovered.filter((file) => !ownedProductionFiles.includes(file));
+    if (unexpected.length) throw new Error(`P02 production source manifest has unowned files: ${unexpected.sort().join(', ')}`);
+    return [...ownedProductionFiles].sort();
 }
 
 export function readProductionSource() {
