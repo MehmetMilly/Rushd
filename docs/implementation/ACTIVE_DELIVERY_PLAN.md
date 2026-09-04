@@ -20,6 +20,7 @@ The working target is a feature-complete build ready for private founder use wit
 - A follow-up correction closed independently reproduced import, settlement, reset, decimal, and IndexedDB test-harness defects. A fresh Sol review returned PASS.
 - P01 Task 3 and its corrections close the remaining local-date, historical-budget, weekly-pace, scheduling, assignment, stale-state, mock-analytics, and harmful-gamification problems. The final commit `075317e` passed an independent Muse Spark 1.3 xHigh production-path review with no blocking findings.
 - P01 is closed. Two harmless cleanup notes remain for nearby future work: remove one duplicate English translation key and align the display-only monthly-day validity check with the production helper.
+- P02 architecture is decided in `docs/implementation/P02_EXECUTION_PLAN.md`: proof/build foundation, local assets, then one controlled modular split. Work begins without waiting for Astra.
 
 ## Working method
 
@@ -64,8 +65,8 @@ Weak or unfamiliar models may need a higher reasoning level for the same task. A
 ## Acceleration plan
 
 1. P01 is closed at reviewed commit `075317e`.
-2. If Astra is available, use it once before P02 for an acceleration and dependency review. It should preserve the full product scope rather than propose a reduced alpha.
-3. Correct the remaining conflict where the master plan and phase plan still mention mandatory per-phase review and old state transitions. Keep all product acceptance outcomes.
+2. Start P02 Task A without waiting for Astra. Follow `docs/implementation/P02_EXECUTION_PLAN.md`.
+3. Use Astra before the critical modular split if it arrives in time; otherwise use it at the P02/P03 boundary.
 4. Keep the foundation spine mostly sequential: P02 modular foundation, P03 finance domain, then P04 local data and PWA.
 5. After P02 creates stable module boundaries, allow at most two isolated product writers. Start design foundations, provider preparation, AI schemas, eval assets, and release preparation early when they do not depend on unfinished production interfaces.
 6. Integrate through the Development Master. Use short-lived branches or isolated worktrees for parallel writers and keep one integration owner.

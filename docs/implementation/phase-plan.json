@@ -105,7 +105,7 @@
       "objective": "Replace the single-file delivery mechanism with a buildable modular Vue/Vite/TypeScript foundation while preserving behavior and legacy data access.",
       "depends_on": ["P01"],
       "risk": "medium",
-      "allowed_paths": ["index.html", "src/**", "public/**", "tests/**", "scripts/**", ".github/workflows/**", "package.json", "package-lock.json", "vite.config.*", "tsconfig*.json", "eslint.config.*", "playwright.config.*", "docs/**", ".gitignore"],
+      "allowed_paths": ["index.html", "src/**", "public/**", "tests/**", "scripts/**", ".github/workflows/**", "package.json", "package-lock.json", "vite.config.*", "tsconfig*.json", "eslint.config.*", "playwright.config.*", "docs/**", "AGENTS.md", "README.md", ".gitignore"],
       "acceptance": [
         {"id": "P02-A1", "text": "Production build uses local Vue/assets, a lockfile, lint, typecheck, tests, and CI without runtime CDNs."},
         {"id": "P02-A2", "text": "Template, styles, storage compatibility, and business logic no longer live as one 10k-line source file."},
