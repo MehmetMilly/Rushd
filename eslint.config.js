@@ -14,7 +14,7 @@ module.exports = [
   },
   js.configs.recommended,
   {
-    files: ['eslint.config.js', 'scripts/visual-parity.cjs', 'scripts/browser-smoke.cjs'],
+    files: ['eslint.config.js', 'tailwind.config.cjs', 'postcss.config.cjs', 'scripts/visual-parity.cjs', 'scripts/browser-smoke.cjs'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'commonjs',

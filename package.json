@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint eslint.config.js vite.config.mjs scripts/visual-parity.cjs scripts/browser-smoke.cjs scripts/smoke-check.mjs",
+    "lint": "eslint eslint.config.js tailwind.config.cjs postcss.config.cjs vite.config.mjs scripts/visual-parity.cjs scripts/browser-smoke.cjs scripts/smoke-check.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node scripts/smoke-check.mjs && node scripts/finance-rules.test.mjs && node scripts/p00-fixtures.test.mjs && node scripts/p00-characterization.test.mjs && node tests/p01-dangerous-mutations.test.mjs && node tests/p01-stability.test.mjs && node scripts/p00-artifact-guards.test.mjs && node scripts/verify-p00-baseline.mjs",
     "test:p01": "node tests/p01-dangerous-mutations.test.mjs && node tests/p01-stability.test.mjs",
@@ -24,10 +24,13 @@
   "devDependencies": {
     "@axe-core/playwright": "4.12.1",
     "@eslint/js": "9.35.0",
+    "autoprefixer": "10.4.20",
     "eslint": "9.35.0",
     "globals": "16.3.0",
     "playwright": "1.62.1",
     "pngjs": "7.0.0",
+    "postcss": "8.4.47",
+    "tailwindcss": "3.4.17",
     "typescript": "5.9.2",
     "vite": "5.4.21"
   },

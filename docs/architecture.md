@@ -1,6 +1,7 @@
 # Architecture
 
-Rushd is currently a single-file static web app served from `index.html`.
+Rushd is currently a Vite-built legacy web app whose UI and behavior still live in
+`index.html`.
 
 ## Structure
 
@@ -8,7 +9,10 @@ Rushd is currently a single-file static web app served from `index.html`.
 - CSS: design tokens, responsive layout, RTL styling, animation profiles, app shell, cards, modals, vault, plans, and statistics styles.
 - JavaScript: utility functions, translations, normalization helpers, IndexedDB wrapper, reactive store, Vue components, and view methods.
 
-The app uses Vue 3 from a CDN and Tailwind from a CDN. There is no build step.
+The app is built with Vite. Vue 3.5.42, Tailwind CSS 3.4.17 output, font CSS/WOFF2
+files, and Material Symbols Rounded are served from the repository; no runtime CDN
+is required. The legacy templates and scripts remain inline until the P02
+mechanical split.
 
 ## Main Screens
 
@@ -32,9 +36,11 @@ The app recalculates statistics from stored expenses, templates, settings, vault
 
 ## Current Limitations
 
-- Single large HTML file is hard to test and review.
-- External CDN dependencies mean full offline use is not guaranteed on first load.
-- No automated browser tests yet.
+- The single large HTML file is still hard to test and review; P02's modular split
+  will move ownership boundaries without changing the legacy data contract.
+- The P02 browser smoke test rejects external runtime requests and covers a
+  representative capture/reload flow. Broader language, viewport, and device
+  coverage remains in the parity and later UI gates.
 - No cloud sync or authentication.
 - No model-backed assistant integration.
 

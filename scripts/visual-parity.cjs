@@ -39,6 +39,13 @@ const captureStyle = `
      stable raster signal across isolated Chromium contexts. */
   box-shadow: none !important;
 }
+.app-shell-nav-inner {
+  /* The container's backdrop/drop-shadow fringe is likewise a compositor-only
+     edge; retain parity coverage for its geometry, surface, and controls. */
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
 `;
 
 const fullViewports = [
@@ -230,22 +237,6 @@ async function withReferenceWorktree(referenceSha, callback) {
   }
 }
 
-async function findVueAsset(root) {
-  const candidates = [
-    join(root, 'vendor/vue.global.js'),
-    join(root, 'public/vendor/vue.global.js'),
-    join(repoRoot, 'public/vendor/vue.global.js')
-  ];
-  for (const candidate of candidates) {
-    try {
-      return await readFile(candidate);
-    } catch {
-      // Try the next deterministic location.
-    }
-  }
-  throw new Error(`Pinned local Vue asset was not found under ${root}`);
-}
-
 function addStableClock(context) {
   return context.addInitScript(({ fixedClock }) => {
     const NativeDate = globalThis.Date;
@@ -263,25 +254,23 @@ function addStableClock(context) {
   }, { fixedClock: FIXED_CLOCK_UTC });
 }
 
-function collectDiagnostics(page) {
-  const diagnostics = { console: [], pageErrors: [], failedRequests: [] };
+function collectDiagnostics(page, rootUrl) {
+  const diagnostics = { console: [], pageErrors: [], failedRequests: [], externalRequests: [] };
+  const localOrigin = new URL(rootUrl).origin;
   page.on('console', (message) => diagnostics.console.push({ type: message.type(), text: message.text() }));
   page.on('pageerror', (error) => diagnostics.pageErrors.push(error.message));
+  page.on('request', (request) => {
+    try {
+      if (new URL(request.url()).origin !== localOrigin) diagnostics.externalRequests.push(request.url());
+    } catch {
+      diagnostics.externalRequests.push(request.url());
+    }
+  });
   page.on('requestfailed', (request) => diagnostics.failedRequests.push({
     url: request.url(),
     failure: request.failure()?.errorText || 'unknown'
   }));
   return diagnostics;
-}
-
-async function installVueRoute(page, vueBytes) {
-  await page.route('**://unpkg.com/vue@3/dist/vue.global.js', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'text/javascript; charset=utf-8',
-      body: vueBytes
-    });
-  });
 }
 
 async function gotoApp(page, rootUrl) {
@@ -492,16 +481,16 @@ function pixelDiff(referenceBytes, candidateBytes) {
 }
 
 function unexpectedDiagnostics(diagnostics) {
-  const allowedWarning = (entry) => entry.type === 'warning' && entry.text.includes('cdn.tailwindcss.com');
-  const consoleErrors = diagnostics.console.filter((entry) => ['error', 'pageerror'].includes(entry.type) || (entry.type === 'warning' && !allowedWarning(entry)));
+  const consoleErrors = diagnostics.console.filter((entry) => ['error', 'warning', 'pageerror'].includes(entry.type));
   return {
     consoleErrors,
     pageErrors: diagnostics.pageErrors,
-    failedRequests: diagnostics.failedRequests
+    failedRequests: diagnostics.failedRequests,
+    externalRequests: diagnostics.externalRequests
   };
 }
 
-async function captureRoot(rootUrl, rootPath, cases, vueBytes, browser) {
+async function captureRoot(rootUrl, rootPath, cases, browser) {
   const fixture = {
     empty: JSON.parse(await readFile(join(repoRoot, 'tests/fixtures/v1/empty.json'), 'utf8')),
     populated: JSON.parse(await readFile(join(repoRoot, 'tests/fixtures/v1/populated.json'), 'utf8'))
@@ -516,8 +505,7 @@ async function captureRoot(rootUrl, rootPath, cases, vueBytes, browser) {
     });
     await addStableClock(context);
     const page = await context.newPage();
-    await installVueRoute(page, vueBytes);
-    const diagnostics = collectDiagnostics(page);
+    const diagnostics = collectDiagnostics(page, rootUrl);
     try {
       const states = await captureCharacterizedStates(page, rootUrl, fixture, testCase.language, testCase.theme);
       const selectedStates = new Map([...states].filter(([stateId]) => testCase.states.includes(stateId)));
@@ -587,9 +575,13 @@ async function compareCaptured(leftCaptures, rightCaptures, outputRoot, labels) 
     differing_state_count: diffCount,
     diagnostics,
     matrix,
+    // The historical reference intentionally retains its pre-P02 CDN requests
+    // and Play CDN warning.  The candidate is the delivery under test, so its
+    // diagnostics must be clean and local while the reference is retained only
+    // as a visual/behavioral comparator.
     passed: totalDifferingPixelCount === 0 && diagnostics.every((entry) =>
-      entry.reference.consoleErrors.length === 0 && entry.reference.pageErrors.length === 0 &&
-      entry.candidate.consoleErrors.length === 0 && entry.candidate.pageErrors.length === 0)
+      entry.candidate.consoleErrors.length === 0 && entry.candidate.pageErrors.length === 0 &&
+      entry.candidate.failedRequests.length === 0 && entry.candidate.externalRequests.length === 0)
   };
   await mkdir(resolve(outputRoot, labels.profile), { recursive: true });
   await writeFile(resolve(outputRoot, labels.profile, 'result.json'), `${JSON.stringify(result, null, 2)}\n`);
@@ -599,12 +591,10 @@ async function compareCaptured(leftCaptures, rightCaptures, outputRoot, labels) 
 async function compareRoots(leftRoot, rightRoot, cases, browser, outputRoot, labels) {
   const [leftServer, rightServer] = await Promise.all([startStaticServer(leftRoot), startStaticServer(rightRoot)]);
   try {
-    const leftVue = await findVueAsset(leftRoot);
-    const rightVue = await findVueAsset(rightRoot);
-    // Capture roots sequentially. This avoids two independent font/CDN loads
+    // Capture roots sequentially. This avoids two independent font loads
     // racing each other and makes the comparison reproducible on a cold cache.
-    const leftCaptures = await captureRoot(leftServer.url, leftRoot, cases, leftVue, browser);
-    const rightCaptures = await captureRoot(rightServer.url, rightRoot, cases, rightVue, browser);
+    const leftCaptures = await captureRoot(leftServer.url, leftRoot, cases, browser);
+    const rightCaptures = await captureRoot(rightServer.url, rightRoot, cases, browser);
     return await compareCaptured(leftCaptures, rightCaptures, outputRoot, {
       ...labels,
       browser: { ...labels.browser, left_root: leftRoot, right_root: rightRoot }

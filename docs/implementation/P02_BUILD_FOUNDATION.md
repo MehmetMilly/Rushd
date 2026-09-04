@@ -36,5 +36,13 @@ with `shasum -a 256 public/vendor/vue.global.js`. The legacy app continues to
 use runtime-compiled templates and the original seven classic inline script
 blocks in their original order.
 
-Task B intentionally still owns the Tailwind Play CDN, Google Fonts, and Material
-Symbols requests. The Vue runtime is the only CDN script replaced in Task A.
+The generated Tailwind sheet is linked after the first legacy `<style>` block
+(where the Play CDN injected its sheet) and before the second body style block,
+so preflight and utility cascade order stay characterized.
+
+Task B replaces the remaining styling/runtime requests with a pinned Tailwind
+CSS `3.4.17` build and local Google Fonts/Material Symbols Rounded assets. The
+font CSS response and every downloaded WOFF2 file are hashed in
+`public/fonts/PROVENANCE.json`; applicable OFL and Apache 2.0 texts are included
+under `public/fonts/licenses/`. The browser smoke test blocks and reports every
+request outside its local test origin.

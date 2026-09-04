@@ -14,13 +14,14 @@ import { createIdbShim, LocalStorageShim } from './idb-shim.mjs';
 export async function loadRushdRuntime(options = {}) {
     const html = await readFile('index.html', 'utf8');
     const blocks = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((match) => match[1]);
-    if (blocks.length < 7) {
-        throw new Error(`Expected at least 7 inline script blocks in index.html, found ${blocks.length}`);
+    if (blocks.length < 6) {
+        throw new Error(`Expected at least 6 inline script blocks in index.html, found ${blocks.length}`);
     }
-    // Block 0 is the tailwind config, block 1 the boot-theme IIFE; both are
-    // presentation-only. Blocks 2..6 are Core, i18n, helpers+DB+Store, app
-    // shell, and the main controller.
-    const source = blocks.slice(2).join('\n;\n');
+    // Before P02 Task B, block 0 was the Tailwind Play configuration and block
+    // 1 the boot-theme IIFE. Tailwind is now generated at build time, so the
+    // boot IIFE is the first block and the production blocks start at 1.
+    const hasLegacyTailwindConfig = blocks[0].includes('tailwind.config');
+    const source = blocks.slice(hasLegacyTailwindConfig ? 2 : 1).join('\n;\n');
 
     const shim = createIdbShim();
     const localStorageShim = new LocalStorageShim(options.localStorage || {});

@@ -19,9 +19,10 @@ Rushd is a Vite-built web app for students and regular users who want a simple w
 The current product UI remains structurally single-file while the delivery foundation is being migrated:
 
 - HTML
-- CSS with Tailwind CDN utilities
+- CSS with pinned Tailwind CSS 3.4.17 utilities generated at build time
 - JavaScript
 - Vue 3.5.42 global/compiler build served locally from `public/vendor`
+- Self-hosted Google Fonts CSS and WOFF2 assets for the Arabic/Latin families plus Material Symbols Rounded
 - Vite build/dev/preview shell
 - IndexedDB for app data
 - localStorage for preferences and deferred prompts
@@ -73,6 +74,8 @@ npm run test:browser
 ```
 
 The browser smoke test builds first, serves `dist/`, adds a fake expense, and verifies it persists after refresh. The visual parity commands compare the built output to the pinned pre-P02 commit without committing a second screenshot archive. Full command/profile details live in [`docs/implementation/P02_BUILD_FOUNDATION.md`](docs/implementation/P02_BUILD_FOUNDATION.md).
+
+Tailwind, fonts, icons, and Vue are local runtime assets in the built app. Font provenance, source response hashes, pinned upstream versions, and license files live under [`public/fonts`](public/fonts); the smoke/browser checks reject external runtime URLs.
 
 ## Deployment
 

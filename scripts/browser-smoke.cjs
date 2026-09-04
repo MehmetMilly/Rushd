@@ -15,6 +15,8 @@ const contentTypes = {
   '.js': 'text/javascript; charset=utf-8',
   '.mjs': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
   '.png': 'image/png',
   '.json': 'application/json; charset=utf-8'
 };
@@ -51,16 +53,61 @@ async function close() {
   const page = await context.newPage();
   const messages = [];
   const requests = [];
+  const externalRequests = new Set();
+  const badResponses = [];
+  const localOrigin = new URL(baseUrl).origin;
 
   page.on('console', (message) => messages.push({ type: message.type(), text: message.text() }));
   page.on('pageerror', (error) => messages.push({ type: 'pageerror', text: error.message }));
-  page.on('request', (request) => requests.push(request.url()));
+  page.on('request', (request) => {
+    const url = request.url();
+    requests.push(url);
+    try {
+      if (new URL(url).origin !== localOrigin) externalRequests.add(url);
+    } catch {
+      externalRequests.add(url);
+    }
+  });
+  page.on('response', (response) => {
+    if (response.status() >= 400) badResponses.push(`${response.status()} ${response.url()}`);
+  });
+
+  // Block external origins as soon as they are attempted. This makes an
+  // accidental runtime dependency fail deterministically and leaves the exact
+  // offending URL in the assertion below.
+  await page.route('**/*', async (route) => {
+    const url = route.request().url();
+    let isLocal = false;
+    try {
+      isLocal = new URL(url).origin === localOrigin;
+    } catch {
+      // Non-HTTP URLs are not valid runtime assets for this app.
+    }
+    if (!isLocal) {
+      externalRequests.add(url);
+      await route.abort('blockedbyclient');
+      return;
+    }
+    await route.continue();
+  });
 
   const expenseName = 'قهوة اختبار';
 
   await page.goto(baseUrl, { waitUntil: 'networkidle', timeout: 60_000 });
   await page.waitForTimeout(1_500);
   assert.equal(await page.title(), 'رُشد | Rushd');
+
+  if (process.env.RUSHD_SMOKE_INJECT_EXTERNAL === '1') {
+    // A deterministic negative probe for the local-only gate. The route above
+    // aborts this request; the final assertion reports its exact URL.
+    await page.evaluate(async () => {
+      try {
+        await fetch('https://example.com/rushd-smoke-external-probe');
+      } catch {
+        // The rejection is expected; the request remains recorded by the gate.
+      }
+    });
+  }
 
   const skipOnboarding = page.getByText('تخطي الآن', { exact: true });
   if (await skipOnboarding.isVisible({ timeout: 2_000 }).catch(() => false)) {
@@ -85,12 +132,12 @@ async function close() {
   await page.waitForTimeout(1_500);
   assert.ok((await page.locator('body').innerText()).includes(expenseName), 'expense should persist after refresh');
 
+  assert.deepEqual([...externalRequests], [], `built app attempted external runtime request(s): ${[...externalRequests].join(', ')}`);
+  assert.deepEqual(badResponses, [], `built app returned failed local asset request(s): ${badResponses.join(', ')}`);
   const relevantMessages = messages.filter((message) => {
-    if (message.type === 'warning' && message.text.includes('cdn.tailwindcss.com')) return false;
     return ['error', 'warning', 'pageerror'].includes(message.type);
   });
   assert.deepEqual(relevantMessages, []);
-  assert.equal(requests.some((url) => url.includes('unpkg.com/vue')), false, 'built output must not request Vue from a CDN');
 
   await mkdir('test-results/browser-smoke', { recursive: true });
   await page.screenshot({ path: 'test-results/browser-smoke/dashboard-with-expense.png', fullPage: false });
