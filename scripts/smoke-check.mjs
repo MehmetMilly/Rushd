@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { join } from 'node:path';
+import { verifyFontLicenseProvenance } from './font-license-guard.mjs';
 
 const requiredFiles = [
   'index.html',
@@ -88,28 +89,7 @@ for (const stylesheet of localFontStylesheets) {
 }
 
 const fontProvenance = JSON.parse(readFileSync('public/fonts/PROVENANCE.json', 'utf8'));
-const declaredLicenses = [
-  ...fontProvenance.families.map((family) => ({ owner: family.family, ...family.license })),
-  { owner: fontProvenance.icon_font.family, ...fontProvenance.icon_font.license }
-];
-const licenseRoot = resolve('public/fonts');
-for (const license of declaredLicenses) {
-  if (!license.path || !license.sha256) {
-    throw new Error(`Font provenance is missing a local license path or SHA-256 for ${license.owner}.`);
-  }
-  const licensePath = resolve(licenseRoot, license.path);
-  const relativeLicensePath = relative(licenseRoot, licensePath);
-  if (!relativeLicensePath || relativeLicensePath.startsWith('..')) {
-    throw new Error(`Font provenance license path escapes public/fonts: ${license.path}.`);
-  }
-  if (!existsSync(licensePath)) {
-    throw new Error(`Font provenance license file is missing for ${license.owner}: ${license.path}.`);
-  }
-  const actualLicenseHash = createHash('sha256').update(readFileSync(licensePath)).digest('hex');
-  if (actualLicenseHash !== license.sha256) {
-    throw new Error(`Font license SHA-256 mismatch for ${license.owner} (${license.path}): expected ${license.sha256}, got ${actualLicenseHash}.`);
-  }
-}
+verifyFontLicenseProvenance(fontProvenance);
 
 const sourceFiles = ['index.html'];
 function collectSourceFiles(directory) {

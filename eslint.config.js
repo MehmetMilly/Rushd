@@ -25,7 +25,7 @@ module.exports = [
     }
   },
   {
-    files: ['scripts/smoke-check.mjs'],
+    files: ['scripts/smoke-check.mjs', 'scripts/font-license-guard.mjs', 'tests/font-license-guard.test.mjs'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
