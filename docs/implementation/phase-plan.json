@@ -122,7 +122,7 @@
       "objective": "Implement the deterministic, currency-aware, cycle-aware financial domain and the single command/action boundary used by UI, import, sync, and AI.",
       "depends_on": ["P02"],
       "risk": "hard",
-      "allowed_paths": ["src/domain/**", "src/application/**", "src/shared/**", "tests/domain/**", "tests/property/**", "docs/data-model.md", "docs/architecture.md", "package.json", "package-lock.json"],
+      "allowed_paths": ["src/domain/**", "src/application/**", "src/shared/**", "tests/domain/**", "tests/property/**", "docs/data-model.md", "docs/architecture.md", "package.json", "package-lock.json", "scripts/production-source.mjs", "tests/p02-build-contract.test.mjs", "eslint.config.cjs", "tsconfig.json", "vitest.config.ts"],
       "acceptance": [
         {"id": "P03-A1", "text": "Money uses checked integer ISO minor units; local civil dates and payday/calendar cycles are explicit."},
         {"id": "P03-A2", "text": "Availability, mid-cycle boundary, pool/classification completeness, shortfall, pacing, partial/residual obligations, multiple payments, returns, signed reconciliation adjustments, and allocations match the final plan."},

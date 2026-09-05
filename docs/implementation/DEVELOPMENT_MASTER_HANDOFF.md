@@ -21,14 +21,7 @@ The final master plan defines product scope. The phase plan defines acceptance o
 
 ## Current position
 
-- Branch: `codex/rushd-rebuild-plan`
-- P00 is closed; keep its useful fixtures, baselines, and regressions.
-- P01 is closed at reviewed product commit `075317ebebd1aa4f366a2ac6fd3f715f748d54fe`.
-- P01's final independent Muse Spark 1.3 xHigh review found no blocking issue. Repository, P01, browser-smoke, and focused production-path checks passed.
-- Two harmless cleanup notes may be folded into nearby work: remove the duplicate English `historicalBudgetUnknownShort` translation key and align the display-only monthly-day validity check with the production helper.
-- Nothing has been pushed.
-- The next product phase is P02.
-- P02's chosen architecture and three-task execution shape are in `P02_EXECUTION_PLAN.md`.
+Use `ACTIVE_DELIVERY_PLAN.md` for the current commit, phase, available models, expiry times, and next action. It is the single status record. Verify Git status before work; preserve existing changes. Proposals awaiting discussion are not implementation dispatches.
 
 ## Delivery rules
 
@@ -40,17 +33,21 @@ The final master plan defines product scope. The phase plan defines acceptance o
 - Use an independent reviewer for expensive mistakes or subjective quality, not by default.
 - Keep reviews read-only. The implementation worker owns corrections.
 - Keep each task in one clear commit and leave unrelated changes out.
-- For P02, run each worker and reviewer in fresh Codex tasks. Have them send concise results to Development Master task `01a02647-0425-7833-aee2-8e4c7bdeff29`; return corrections to the original worker task.
+- Use external workers and reviewers when reliable and cheaper. The founder transfers their prompts/results between apps; do not assume cross-app messaging. Use isolated worktrees for concurrent writers and keep one integration owner.
 - Prefer Luna Max for clear demanding tasks, Terra up to xHigh for harder intelligence-heavy work, and Sol Medium/High only when the task is legitimately hard. Never route delegated work to Terra Max or Sol Max.
 - Do not push unless the founder asks.
 - Preserve the master plan's full feature scope. Speed comes from better task sizing, model routing, and parallel preparation—not from cutting approved features.
 
 ## Immediate continuation
 
-Start P02 Task A from `P02_EXECUTION_PLAN.md` without waiting for Astra. If Astra arrives before Task C, use it for one compact challenge of the chosen plan; otherwise use it at the P02/P03 boundary.
+Resume the next action recorded in `ACTIVE_DELIVERY_PLAN.md`. Before ending a substantial management turn, update current status, meaningful decisions, unresolved issues, and resource changes there. Put task-specific interfaces and acceptance mapping in the relevant execution plan.
+
+The founder wants the full approved feature set in roughly one month, not a reduced local alpha. Preserve the distinction between implementation progress and external beta/release evidence. Be candid when actual throughput or external dependencies threaten that target.
 
 ## Evidence boundary
 
 Treat worker summaries as leads. Confirm the commit, diff, relevant tests, and important runtime behavior before closing a high-risk task. A clean tree or a claimed test result alone is not proof.
 
 Historical P00 authority artifacts remain audit history. They are not part of ordinary P02+ development unless the founder explicitly requests a governed run.
+
+The old phase-orchestrator skill and phase prompts also retain obsolete process and model-routing instructions. Workflow Lite and the founder's current preferences supersede those instructions. Product invariants and phase acceptance outcomes remain binding.

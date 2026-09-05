@@ -68,6 +68,7 @@ Manual QA checklist lives in `docs/manual-qa.md`.
 - `docs/RUSHD_MASTER_PLAN_FINAL.md`: canonical product and technical contract.
 - `docs/implementation/phase-plan.json`: machine-readable phases and acceptance gates.
 - `docs/implementation/ACTIVE_DELIVERY_PLAN.md`: current phase status, model routing, acceleration plan, and Astra handoff context.
+- When resuming Development Master work after a model change or compaction, read `docs/implementation/DEVELOPMENT_MASTER_HANDOFF.md`, then the active delivery plan. They hold current decisions and the next action; historical chat prompts may be stale.
 - `docs/implementation/P02_EXECUTION_PLAN.md`: chosen P02 architecture, task boundaries, model routing, and proportional gates.
 - `docs/RUSHD_EXECUTION_PROTOCOL.md`: manager/worker/reviewer state machine.
 - `.agents/skills/rushd-phase-orchestrator/SKILL.md`: reusable phase orchestration workflow.

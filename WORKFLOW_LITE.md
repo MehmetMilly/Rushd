@@ -126,4 +126,4 @@ No receipts, manifests, lifecycle transcripts, or state transitions are required
 
 P00 and P01 are closed. P01's reviewed product baseline is commit `075317ebebd1aa4f366a2ac6fd3f715f748d54fe`; its risk dispositions remain in `docs/baseline/P01-risk-matrix.json`.
 
-The next product phase is P02. Read its contract from `docs/implementation/phase-plan.json` and the current execution position from `docs/implementation/ACTIVE_DELIVERY_PLAN.md`. Ordinary development follows this workflow and does not use the retired P00 state machine.
+Read the current execution position from `docs/implementation/ACTIVE_DELIVERY_PLAN.md` and the relevant contract from `docs/implementation/phase-plan.json`. Ordinary development follows this workflow and does not use the retired P00 state machine.
