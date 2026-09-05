@@ -4,7 +4,9 @@ import { listProductionSourceFiles, ownedProductionFiles } from '../scripts/prod
 
 const requiredOwnedFiles = [
     'src/application/bootstrap.d.ts',
+    'src/application/commands/index.ts',
     'src/data/legacy-v1/contracts.ts',
+    'src/domain/primitives/money.ts',
     'src/shared/contracts.ts',
     'src/types/vite-env.d.ts'
 ];

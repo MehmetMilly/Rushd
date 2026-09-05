@@ -63,6 +63,40 @@ The app has smart/rule-based insights, but no model-backed insight entity exists
 
 Categories are currently defined in app code rather than managed as a separate persistent catalog.
 
+## P03 canonical model (Task A)
+
+The canonical engine under `src/domain/` stores nothing yet; these are the
+in-memory record shapes its commands produce, proven by the transactional
+in-memory adapter in tests. The legacy v1 model above is unchanged, and no
+legacy data has been migrated.
+
+- **Money**: `{ currency, minorUnits }` — checked safe-integer minor units of
+  an explicitly supported ISO currency (SAR/USD exponent 2, JPY 0, KWD 3).
+  Signed values are allowed; parsing rejects excess precision, malformed or
+  mixed-numeral input, and overflow instead of rounding.
+- **FinanceBook**: stable `id`, display name, one bound ISO currency, profile
+  IANA timezone, monthly cycle anchor (first-of-month or payday day 1–31),
+  and creation time/date/timezone. Currency never changes per book and no
+  foreign-exchange conversion exists.
+- **BookState**: the book plus a monotonic `revision` (new book starts at 1;
+  every committed command produces exactly revision + 1), its cycle records,
+  and its ledger entries.
+- **OpenCycleRecord**: one open full-cycle window with derived identity
+  `cyc:<bookId>:<startDate>`, inclusive `startDate`, exclusive
+  `endDateExclusive` (payday anchors clamp to short months), and non-negative
+  starting funds. Close/carry/reopen and closed settlements are later tasks.
+- **LedgerEntry**: `inflow` facts (positive amount, captured local date,
+  timezone, cycle identity, calculation version, source operation) and
+  `inflowReversal` facts (negated amount, `reversesEntryId`). Reversals
+  append linked facts; original history is never rewritten.
+- **OperationRecord**: the durable journal of committed commands — operation
+  ID, book, canonical command payload, and receipt (revision before/after,
+  commit instant, canonical digest, calculation version, effects). The
+  idempotency scope is the operation ID across the whole repository.
+- **OutboxEnvelope**: one pending replication entry per committed operation,
+  written in the same transaction as the state and receipt. Nothing drains it
+  yet; sync behavior is a later phase.
+
 ## P02 compatibility boundary
 
 `src/data/legacy-v1/contracts.ts` records the v1 database name, version,
