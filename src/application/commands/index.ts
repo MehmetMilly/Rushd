@@ -6,10 +6,13 @@
  *   openCycle, recordInflow, reverseInflow;
  * - checked integer money with a bilingual exact parser, strict civil dates,
  *   anchor-clamped monthly cycles, and instant-to-civil-date resolution in an
- *   explicit profile timezone;
+ *   explicit profile timezone (instants outside the platform-representable
+ *   range are typed rejections, never thrown errors);
  * - revision-checked, idempotent, retry-safe execution with typed failures,
  *   receipts, and outbox envelopes, proven against a transactional in-memory
- *   adapter under `tests/domain/support/`.
+ *   adapter under `tests/domain/support/`. Inflows and reversals bind their
+ *   financial date via `occurredAt` in the canonical payload, so the
+ *   confirmed date cannot drift with the clock between preview and execution.
  *
  * Not implemented yet (later P03 tasks): obligations and settlements,
  * allocations, availability/pacing/completeness, Reality Check and recovery,
@@ -48,8 +51,8 @@ export {
   type CommandReceipt,
   type CreateBookCommand,
   type FinanceCommand,
-  type InflowOccurredAt,
   type OpenCycleCommand,
+  type OccurredAt,
   type OperationRecord,
   type OutboxEnvelope,
   type RecordInflowCommand,
@@ -121,4 +124,4 @@ export {
   type MonthlyCycleAnchor,
   type MonthlyCycleWindow,
 } from '../../domain/primitives/monthly-cycle';
-export { isValidTimeZoneName, resolveCivilDate, resolveCivilDateTime, type TimeZoneName } from '../../domain/primitives/instant';
+export { isValidTimeZoneName, MAX_REPRESENTABLE_INSTANT_MS, MIN_REPRESENTABLE_INSTANT_MS, resolveCivilDate, resolveCivilDateTime, type TimeZoneName } from '../../domain/primitives/instant';

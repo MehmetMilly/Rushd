@@ -164,9 +164,16 @@ describe('create book → open cycle → record inflow → reverse inflow', () =
       ]);
     }
 
-    // 6. Reverse the first inflow; the original fact stays untouched.
+    // 6. Reverse the first inflow; the original fact stays untouched. The
+    // reversal's financial date is bound in the command, not taken from the clock.
     const beforeReversal = JSON.stringify(harness.repo.getBookState(bookId)?.entries[0]);
-    const reversal = { kind: 'reverseInflow', bookId: BOOK_ID, inflowEntryId: 'inflow-0001', note: 'خطأ إدخال' };
+    const reversal = {
+      kind: 'reverseInflow',
+      bookId: BOOK_ID,
+      inflowEntryId: 'inflow-0001',
+      occurredAt: { kind: 'civilDate', localDate: '2026-09-05' },
+      note: 'خطأ إدخال',
+    };
     const reversed = await run(harness, 'op-reverse-1', reversal);
     expect(reversed.result.ok).toBe(true);
     if (reversed.result.ok) {
@@ -322,7 +329,13 @@ describe('preview and execution rejections', () => {
     expect(preview.ok).toBe(false);
     if (!preview.ok) expect(preview.failure).toEqual({ kind: 'noOpenCycle', bookId: BOOK_ID });
 
-    const reversal = { kind: 'reverseInflow', bookId: BOOK_ID, inflowEntryId: 'inflow-0001', note: '' };
+    const reversal = {
+      kind: 'reverseInflow',
+      bookId: BOOK_ID,
+      inflowEntryId: 'inflow-0001',
+      occurredAt: { kind: 'civilDate', localDate: '2026-09-05' },
+      note: '',
+    };
     const reversalPreview = previewCommand(harness.repo, reversal, harness.context);
     expect(reversalPreview.ok).toBe(false);
     if (!reversalPreview.ok) expect(reversalPreview.failure.kind).toBe('noOpenCycle');

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canonicalJson, executeCommand, previewCommand, stableDigest } from '../../src/application/commands';
+import { canonicalJson, executeCommand, MAX_REPRESENTABLE_INSTANT_MS, previewCommand, stableDigest } from '../../src/application/commands';
 import { requireCommandContext, type CommandContext } from '../../src/application/commands/context';
 import { makeBookId, makeOperationId, type OperationId } from '../../src/domain/contracts/identity';
 import type { RepositoryTransaction } from '../../src/domain/contracts/repository';
@@ -260,6 +260,84 @@ describe('invalid runtime input and cross-book references', () => {
     expect(harness.repo.listOutbox().some((envelope) => envelope.operationId.startsWith('op-bad-'))).toBe(false);
   });
 
+  it('rejects instants the platform cannot represent without mutating anything', async () => {
+    const harness = await seededHarness();
+    const revisionBefore = harness.repo.getBookState(bookId)?.revision;
+    const entriesBefore = JSON.stringify(harness.repo.getBookState(bookId)?.entries);
+    const outboxBefore = harness.repo.listOutbox().length;
+
+    // Safe integers beyond the Date range fail validation before any state is
+    // touched, at preview and at execution.
+    for (const instantMs of [Number.MAX_SAFE_INTEGER, -Number.MAX_SAFE_INTEGER]) {
+      const rawCommand = {
+        kind: 'recordInflow',
+        bookId: BOOK_ID,
+        amount: { currency: 'SAR', minorUnits: 500 },
+        occurredAt: { kind: 'instant', instantMs },
+        note: '',
+      };
+      const preview = previewCommand(harness.repo, rawCommand, harness.context);
+      expect(preview.ok, String(instantMs)).toBe(false);
+      if (!preview.ok) {
+        expect(preview.failure.kind).toBe('invalidCommand');
+        if (preview.failure.kind === 'invalidCommand') {
+          expect(preview.failure.issues.some((issue) => issue.startsWith('occurredAt.instantMs:'))).toBe(true);
+        }
+      }
+      const result = await executeCommand(
+        harness.repo,
+        rawCommand,
+        { operationId: op(`op-range-${instantMs < 0 ? 'neg' : 'pos'}`), expectedRevision: 0, previewDigest: '0000000000000000' },
+        harness.context,
+      );
+      expect(result.ok, String(instantMs)).toBe(false);
+      if (!result.ok) expect(result.failure.kind).toBe('invalidCommand');
+      expect(harness.repo.getOperation(op(`op-range-${instantMs < 0 ? 'neg' : 'pos'}`))).toBeNull();
+    }
+
+    // A representable instant whose civil resolution falls outside the
+    // supported Gregorian range passes validation and fails in the handler
+    // with a typed failure — never a thrown RangeError.
+    const beyondCivilRange = {
+      kind: 'recordInflow',
+      bookId: BOOK_ID,
+      amount: { currency: 'SAR', minorUnits: 500 },
+      occurredAt: { kind: 'instant', instantMs: MAX_REPRESENTABLE_INSTANT_MS },
+      note: '',
+    };
+    const beyondPreview = previewCommand(harness.repo, beyondCivilRange, harness.context);
+    expect(beyondPreview.ok).toBe(false);
+    if (!beyondPreview.ok) expect(beyondPreview.failure.kind).toBe('invalidOccurredAt');
+
+    const revisionNow = harness.repo.getBookState(bookId)?.revision ?? 0;
+    const beyondExecute = await executeCommand(
+      harness.repo,
+      beyondCivilRange,
+      { operationId: op('op-range-civil'), expectedRevision: revisionNow, previewDigest: stableDigest(`${canonicalJson(beyondCivilRange)}\n${String(revisionNow)}`) },
+      harness.context,
+    );
+    expect(beyondExecute.ok).toBe(false);
+    if (!beyondExecute.ok) expect(beyondExecute.failure.kind).toBe('invalidOccurredAt');
+    expect(harness.repo.getOperation(op('op-range-civil'))).toBeNull();
+
+    // Every rejected attempt left state, journal, and outbox untouched.
+    expect(harness.repo.getBookState(bookId)?.revision).toBe(revisionBefore);
+    expect(JSON.stringify(harness.repo.getBookState(bookId)?.entries)).toBe(entriesBefore);
+    expect(harness.repo.listOutbox()).toHaveLength(outboxBefore);
+
+    // An ordinary valid timestamp still records normally after the rejections.
+    const validInstant = await previewAndExecute(harness, 'op-instant-valid', {
+      kind: 'recordInflow',
+      bookId: BOOK_ID,
+      amount: { currency: 'SAR', minorUnits: 700 },
+      occurredAt: { kind: 'instant', instantMs: Date.UTC(2026, 8, 10, 9, 0, 0) },
+      note: '',
+    });
+    expect(validInstant.ok).toBe(true);
+    expect(harness.repo.getBookState(bookId)?.entries).toHaveLength(2);
+    expect(harness.repo.listOutbox()).toHaveLength(outboxBefore + 1);
+  });
+
   it('rejects cross-book reversal references without mutating either book', async () => {
     const harness = await seededHarness();
     await previewAndExecute(harness, 'op-create-2', createBook2);
@@ -302,6 +380,7 @@ describe('invalid runtime input and cross-book references', () => {
       kind: 'reverseInflow',
       bookId: BOOK_ID,
       inflowEntryId: otherEntryId,
+      occurredAt: { kind: 'civilDate', localDate: '2026-09-10' },
       note: '',
     };
 

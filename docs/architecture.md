@@ -36,7 +36,10 @@ executable subsystem proven by tests, not a wired product surface.
   digits), strict Gregorian civil dates, first-of-month and payday-anchored
   monthly cycles with short-month clamping, and instant-to-civil-date
   resolution through an explicit IANA timezone via the platform `Intl`
-  database. No ambient clock, `Math.random`, or own timezone logic.
+  database. Instants outside the platform-representable `Date` range, or
+  resolving outside the supported Gregorian year range, are typed rejections
+  rather than thrown errors. No ambient clock, `Math.random`, or own timezone
+  logic.
 - `src/domain/contracts/`: branded identities (book/cycle/entry/operation),
   canonical JSON plus a non-cryptographic stable digest, immutable book,
   cycle, and ledger records (inflows and linked reversal facts only),
@@ -49,7 +52,10 @@ executable subsystem proven by tests, not a wired product surface.
   transaction, then commits state, receipt, and outbox together. Concrete
   handlers exist for `createBook`, `openCycle`, `recordInflow`, and
   `reverseInflow` (append-only, linked reversals; duplicate or cross-book
-  reversals are typed rejections).
+  reversals are typed rejections). Inflows and reversals carry an explicit
+  `occurredAt` (civil date or instant) in the canonical payload: the
+  confirmed financial date cannot drift with the clock between preview and
+  execution, while capture timestamps still reflect execution time.
 
 Command protocol: a caller previews against the current revision, confirms
 with `{ operationId, expectedRevision, previewDigest }`, and executes. The

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { isValidTimeZoneName, resolveCivilDate, resolveCivilDateTime, type TimeZoneName } from '../../src/domain/primitives/instant';
+import {
+  isValidTimeZoneName,
+  MAX_REPRESENTABLE_INSTANT_MS,
+  MIN_REPRESENTABLE_INSTANT_MS,
+  resolveCivilDate,
+  resolveCivilDateTime,
+  type TimeZoneName,
+} from '../../src/domain/primitives/instant';
 
 // Test-local branding of known-valid literals.
 const tz = (value: string) => value as TimeZoneName;
@@ -58,5 +65,28 @@ describe('instant to civil date resolution', () => {
     expect(resolveCivilDate(Number.NaN, tz('Asia/Riyadh')).ok).toBe(false);
     // One millisecond past 9999-12-31T23:59:59.999Z.
     expect(resolveCivilDate(253402300800000, tz('Asia/Riyadh')).ok).toBe(false);
+  });
+
+  it('rejects unrepresentable instants with typed failures instead of throwing', () => {
+    // Safe integers beyond the platform Date range must fail as data, not
+    // blow up formatting with a RangeError.
+    expect(resolveCivilDate(Number.MAX_SAFE_INTEGER, tz('Asia/Riyadh'))).toEqual({
+      ok: false,
+      failure: { reason: 'invalidInstant', instantMs: Number.MAX_SAFE_INTEGER },
+    });
+    expect(resolveCivilDate(-Number.MAX_SAFE_INTEGER, tz('Asia/Riyadh'))).toEqual({
+      ok: false,
+      failure: { reason: 'invalidInstant', instantMs: -Number.MAX_SAFE_INTEGER },
+    });
+    // Exactly representable extremes: formatting succeeds, but the resolved
+    // civil dates (year 275760, and a BC date) fall outside the supported
+    // Gregorian range and are rejected without normalization or era guessing.
+    expect(resolveCivilDate(MAX_REPRESENTABLE_INSTANT_MS, tz('Asia/Riyadh'))).toEqual({
+      ok: false,
+      failure: { reason: 'invalidInstant', instantMs: MAX_REPRESENTABLE_INSTANT_MS },
+    });
+    expect(resolveCivilDate(MIN_REPRESENTABLE_INSTANT_MS, tz('Asia/Riyadh')).ok).toBe(false);
+    // An ordinary timestamp still resolves normally.
+    expect(resolveCivilDate(Date.UTC(2026, 8, 5, 12, 0, 0), tz('Asia/Riyadh'))).toEqual({ ok: true, value: '2026-09-05' });
   });
 });

@@ -38,7 +38,7 @@ export {
   type CommandReceipt,
   type CreateBookCommand,
   type FinanceCommand,
-  type InflowOccurredAt,
+  type OccurredAt,
   type OpenCycleCommand,
   type OperationRecord,
   type OutboxEnvelope,

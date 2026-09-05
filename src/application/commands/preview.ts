@@ -32,11 +32,12 @@ function makeOrThrow(raw: string): OperationId {
 
 /**
  * Preview runs handlers with isolated provisional IDs so a preview never
- * consumes the caller's ID sequences. The caller's clock is used as-is: a
- * preview answers "what would happen now", so time-dependent stateful checks
- * (e.g., a reversal dated today against the open cycle) must see the real
- * current date. Provisional IDs and timestamps never enter returned effects;
- * the receipt is authoritative.
+ * consumes the caller's ID sequences. The caller's clock is used for
+ * provisional capture timestamps and clock-derived facts (e.g., a book's
+ * created date in preview effects); facts' financial dates come from the
+ * command's `occurredAt`, so a preview and the execution of its confirmation
+ * always agree on them. Provisional IDs and timestamps never enter returned
+ * effects; the receipt is authoritative.
  */
 function previewContext(context: CommandContext): CommandContext {
   let sequence = 0;

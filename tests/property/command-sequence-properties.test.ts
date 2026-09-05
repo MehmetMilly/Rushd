@@ -156,7 +156,15 @@ describe('command sequence properties (bounded, seeded)', () => {
           }
           case 'reverse': {
             const target = model.inflows[operation.index];
-            const rawCommand = { kind: 'reverseInflow', bookId: BOOK_ID, inflowEntryId: target?.entryId ?? 'missing-entry', note: '' };
+            // The reversal is bound to a mid-cycle date, inside the
+            // firstOfMonth September window, so only identity/state failures fire.
+            const rawCommand = {
+              kind: 'reverseInflow',
+              bookId: BOOK_ID,
+              inflowEntryId: target?.entryId ?? 'missing-entry',
+              occurredAt: { kind: 'civilDate', localDate: '2026-09-15' },
+              note: '',
+            };
             if (!model.opened) {
               await expectFailure(rawCommand, 'noOpenCycle');
             } else if (target === undefined) {

@@ -13,7 +13,7 @@ import { isSupportedCurrency } from '../../domain/primitives/currency';
 import { makeMoney, parseMoneyAmount, type Money } from '../../domain/primitives/money';
 import { parseCivilDate, type CivilDate } from '../../domain/primitives/civil-date';
 import { makeMonthlyCycleAnchor, type MonthlyCycleAnchor } from '../../domain/primitives/monthly-cycle';
-import { isValidTimeZoneName, type TimeZoneName } from '../../domain/primitives/instant';
+import { isValidTimeZoneName, MAX_REPRESENTABLE_INSTANT_MS, MIN_REPRESENTABLE_INSTANT_MS, type TimeZoneName } from '../../domain/primitives/instant';
 import {
   makeBookId,
   makeEntryId,
@@ -23,7 +23,7 @@ import {
 import type {
   CreateBookCommand,
   FinanceCommand,
-  InflowOccurredAt,
+  OccurredAt,
   OpenCycleCommand,
   RecordInflowCommand,
   ReverseInflowCommand,
@@ -208,7 +208,7 @@ function validateMoneyInput(value: unknown, path: string, sign: AmountSign, issu
   return money;
 }
 
-function validateOccurredAt(value: unknown, path: string, issues: ValidationIssue[]): InflowOccurredAt | null {
+function validateOccurredAt(value: unknown, path: string, issues: ValidationIssue[]): OccurredAt | null {
   const record = asRecord(value);
   if (record === null) {
     issues.push({ path, problem: 'must be an object' });
@@ -228,6 +228,13 @@ function validateOccurredAt(value: unknown, path: string, issues: ValidationIssu
     const instantMs = record['instantMs'];
     if (typeof instantMs !== 'number' || !Number.isSafeInteger(instantMs)) {
       issues.push({ path: `${path}.instantMs`, problem: 'must be a safe-integer epoch millisecond value' });
+      return null;
+    }
+    if (instantMs < MIN_REPRESENTABLE_INSTANT_MS || instantMs > MAX_REPRESENTABLE_INSTANT_MS) {
+      issues.push({
+        path: `${path}.instantMs`,
+        problem: `must be an epoch millisecond value the platform can represent (${MIN_REPRESENTABLE_INSTANT_MS} to ${MAX_REPRESENTABLE_INSTANT_MS})`,
+      });
       return null;
     }
     return { kind: 'instant', instantMs };
@@ -296,16 +303,17 @@ function validateRecordInflow(record: RawRecord): CommandValidation {
 
 function validateReverseInflow(record: RawRecord): CommandValidation {
   const issues: ValidationIssue[] = [];
-  requireKeys(record, ['kind', 'bookId', 'inflowEntryId', 'note'], issues);
+  requireKeys(record, ['kind', 'bookId', 'inflowEntryId', 'occurredAt', 'note'], issues);
   if (issues.length > 0) return { ok: false, issues };
 
   const bookId = validateId(record['bookId'], 'bookId', makeBookId, issues);
   const inflowEntryId = validateId(record['inflowEntryId'], 'inflowEntryId', makeEntryId, issues);
+  const occurredAt = validateOccurredAt(record['occurredAt'], 'occurredAt', issues);
   const note = validateShortText(record['note'], 'note', issues, true);
-  if (issues.length > 0 || bookId === null || inflowEntryId === null) {
+  if (issues.length > 0 || bookId === null || inflowEntryId === null || occurredAt === null) {
     return { ok: false, issues };
   }
-  const command: ReverseInflowCommand = { kind: 'reverseInflow', bookId, inflowEntryId, note };
+  const command: ReverseInflowCommand = { kind: 'reverseInflow', bookId, inflowEntryId, occurredAt, note };
   return { ok: true, command };
 }
 

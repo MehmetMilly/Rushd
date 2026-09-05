@@ -42,8 +42,13 @@ export interface OpenCycleCommand {
   readonly startDate: CivilDate;
 }
 
-/** Either the user names the civil date, or an instant is resolved in the book timezone. */
-export type InflowOccurredAt =
+/**
+ * The financial date a fact is attributed to: either the caller names the
+ * civil date, or names an instant that is resolved in the book timezone at
+ * apply time. The bound value is part of the canonical payload, so the
+ * confirmed financial date cannot drift between preview and execution.
+ */
+export type OccurredAt =
   | { readonly kind: 'civilDate'; readonly localDate: CivilDate }
   | { readonly kind: 'instant'; readonly instantMs: number };
 
@@ -52,7 +57,7 @@ export interface RecordInflowCommand {
   readonly bookId: BookId;
   /** Strictly positive book-currency amount. */
   readonly amount: Money;
-  readonly occurredAt: InflowOccurredAt;
+  readonly occurredAt: OccurredAt;
   readonly note: string;
 }
 
@@ -60,6 +65,13 @@ export interface ReverseInflowCommand {
   readonly kind: 'reverseInflow';
   readonly bookId: BookId;
   readonly inflowEntryId: EntryId;
+  /**
+   * The reversal's effective occurrence: the financial date the reversal is
+   * attributed to, subject to open-cycle validation. Capture timestamps still
+   * reflect execution time, but this confirmed date does not move with the
+   * clock between preview and execution.
+   */
+  readonly occurredAt: OccurredAt;
   readonly note: string;
 }
 

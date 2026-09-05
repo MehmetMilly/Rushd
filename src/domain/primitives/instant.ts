@@ -29,6 +29,15 @@ export type InstantResolutionFailure =
   | { readonly reason: 'invalidTimeZone'; readonly timeZone: string }
   | { readonly reason: 'invalidInstant'; readonly instantMs: number };
 
+/**
+ * The instant range a JavaScript `Date` can represent (±8.64e15 ms from the
+ * epoch). Instants outside it must be rejected before formatting: constructing
+ * or formatting an out-of-range `Date` throws a `RangeError` instead of
+ * producing a typed failure.
+ */
+export const MIN_REPRESENTABLE_INSTANT_MS = -8_640_000_000_000_000;
+export const MAX_REPRESENTABLE_INSTANT_MS = 8_640_000_000_000_000;
+
 export type CivilDateTimeResolution =
   | {
       readonly ok: true;
@@ -64,12 +73,20 @@ function formatterFor(timeZone: string): Intl.DateTimeFormat {
  * Resolves a UTC epoch millisecond instant to wall-clock civil date and time
  * in the given timezone. The instant itself is event-ordering data only; the
  * returned localDate is the civil date facts are captured against.
+ *
+ * Instants outside the representable `Date` range, or resolving to civil dates
+ * outside the supported Gregorian year range, return typed failures — they are
+ * never normalized, and era-shifted (BC) resolutions never pass as ordinary
+ * dates.
  */
 export function resolveCivilDateTime(instantMs: number, timeZone: TimeZoneName): CivilDateTimeResolution {
   if (!isValidTimeZoneName(timeZone)) {
     return { ok: false, failure: { reason: 'invalidTimeZone', timeZone: String(timeZone) } };
   }
   if (!Number.isSafeInteger(instantMs)) {
+    return { ok: false, failure: { reason: 'invalidInstant', instantMs } };
+  }
+  if (instantMs < MIN_REPRESENTABLE_INSTANT_MS || instantMs > MAX_REPRESENTABLE_INSTANT_MS) {
     return { ok: false, failure: { reason: 'invalidInstant', instantMs } };
   }
 

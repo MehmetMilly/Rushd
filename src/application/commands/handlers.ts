@@ -24,6 +24,7 @@ import type {
   CommandFailure,
   CreateBookCommand,
   FinanceCommand,
+  OccurredAt,
   OpenCycleCommand,
   RecordInflowCommand,
   ReverseInflowCommand,
@@ -275,11 +276,12 @@ function applyReverseInflow(
     };
   }
 
-  const nowMs = context.clock.nowMs();
-  const reversalDate = resolveCivilDate(nowMs, state.book.timeZone);
-  if (!reversalDate.ok) {
-    throw new TypeError('context clock produced an instant that cannot be resolved in the book timezone');
-  }
+  // The financial date is the confirmed `occurredAt` from the command, never
+  // the clock at execution: the preview and the execution of the same
+  // confirmation must attribute the reversal to the same day. Capture
+  // timestamps below still reflect execution time.
+  const reversalDate = resolveOccurredAt(command.occurredAt, state.book.timeZone, command.bookId);
+  if (!reversalDate.ok) return reversalDate;
   if (!isDateWithinMonthlyWindow(reversalDate.value, { startDate: cycle.startDate, endDateExclusive: cycle.endDateExclusive })) {
     return {
       ok: false,
@@ -303,7 +305,7 @@ function applyReverseInflow(
     amount: negated.value,
     reversesEntryId: target.entryId,
     note: command.note,
-    capturedAtInstantMs: nowMs,
+    capturedAtInstantMs: context.clock.nowMs(),
     capturedInTimeZone: state.book.timeZone,
     calculationVersion: context.calculationVersion,
     sourceOperationId: operationId,
@@ -338,7 +340,7 @@ function requireOpenCycle(state: BookState): { ok: true; value: OpenCycleRecord 
 }
 
 function resolveOccurredAt(
-  occurredAt: RecordInflowCommand['occurredAt'],
+  occurredAt: OccurredAt,
   timeZone: TimeZoneName,
   bookId: BookId,
 ): { ok: true; value: CivilDate } | { ok: false; failure: CommandFailure } {
