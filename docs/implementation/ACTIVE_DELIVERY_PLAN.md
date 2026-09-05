@@ -13,14 +13,14 @@ The working target is a feature-complete build ready for private founder use wit
 ## Current position
 
 - Branch: `codex/rushd-rebuild-plan`
-- Current reviewed commit: `075317ebebd1aa4f366a2ac6fd3f715f748d54fe`
+- Current reviewed commit: `5680c3f7309d37e1301a4cfeb36957457f0e7698`
 - P00 is closed. Its fixtures, visual baseline, and characterization tests remain useful; its old receipt and authority process is retired for ordinary work.
 - P01 Task 1 stopped dangerous financial mutations.
 - P01 Task 2 restored truthful available-money behavior.
 - A follow-up correction closed independently reproduced import, settlement, reset, decimal, and IndexedDB test-harness defects. A fresh Sol review returned PASS.
 - P01 Task 3 and its corrections close the remaining local-date, historical-budget, weekly-pace, scheduling, assignment, stale-state, mock-analytics, and harmful-gamification problems. The final commit `075317e` passed an independent Muse Spark 1.3 xHigh production-path review with no blocking findings.
 - P01 is closed. Two harmless cleanup notes remain for nearby future work: remove one duplicate English translation key and align the display-only monthly-day validity check with the production helper.
-- P02 architecture is decided in `docs/implementation/P02_EXECUTION_PLAN.md`: proof/build foundation, local assets, then one controlled modular split. Task C is the implementation candidate for independent review: it moves the app into owned modules while preserving `MicroSaveOS_DB` v1, runtime templates, and P01 production-path assertions.
+- P02 is closed. The app now has a Vite build, local runtime assets, owned modules, strict checks for new glue, preserved `MicroSaveOS_DB` v1 data, and verified visual parity apart from six documented English translation corrections.
 
 ## Working method
 
@@ -66,9 +66,9 @@ Weak or unfamiliar models may need a higher reasoning level for the same task. A
 ## Acceleration plan
 
 1. P01 is closed at reviewed commit `075317e`.
-2. Start P02 Task A without waiting for Astra. Follow `docs/implementation/P02_EXECUTION_PLAN.md`.
-3. Use Astra before the critical modular split if it arrives in time; otherwise use it at the P02/P03 boundary.
-4. Keep the foundation spine mostly sequential: P02 modular foundation, P03 finance domain, then P04 local data and PWA.
+2. P02 is closed at reviewed commit `5680c3f`.
+3. Use Astra at the P02/P03 boundary if available; otherwise start P03 with a focused architecture pass using the best suitable model.
+4. Keep the remaining foundation spine sequential: P03 finance domain, then P04 local data and PWA.
 5. After P02 creates stable module boundaries, allow at most two isolated product writers. Start design foundations, provider preparation, AI schemas, eval assets, and release preparation early when they do not depend on unfinished production interfaces.
 6. Integrate through the Development Master. Use short-lived branches or isolated worktrees for parallel writers and keep one integration owner.
 7. Treat P01 through P11 as the full feature build. P12 is integrated hardening and release-candidate work. P13 is real-world beta and public-release validation.
