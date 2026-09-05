@@ -71,6 +71,7 @@ export function validateFinanceCommand(raw: unknown): CommandValidation {
     case 'recordExpense':
     case 'correctExpense':
     case 'recordExpenseReturn':
+    case 'correctExpenseReturn':
       return validateActivityCommand(record);
     case 'createObligation':
     case 'recordObligationPayment':
@@ -79,6 +80,7 @@ export function validateFinanceCommand(raw: unknown): CommandValidation {
     case 'cancelObligation':
     case 'reopenObligation':
     case 'openObligationDispute':
+    case 'resolveObligationDispute':
     case 'releaseDisputedResidual':
       return validateObligationCommand(record);
     case 'createGoal':

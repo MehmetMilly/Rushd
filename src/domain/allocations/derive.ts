@@ -10,11 +10,19 @@
  * per-goal assigned balances always equals total funding minus total
  * releases. Goal progress is its own assigned balance, never a shared vault
  * total.
+ *
+ * One shared replay produces both the cross-cycle tracked-pool balances and
+ * the per-cycle spending-deduction delta, so the pool view and availability
+ * can never disagree about what reversals did. Funding counts toward its own
+ * record cycle; a release counts toward its named destination cycle; a
+ * reversal negates its *target's* attribution, never its own record cycle.
+ * Assignment, unassignment, and their reversals move money inside the tracked
+ * pool and never change any cycle's spending deduction.
  */
 
 import { makeMoney, subtractMoney, sumMoney, type Money } from '../primitives/money';
-import type { BookState, GoalRecord } from '../contracts/ledger';
-import type { GoalId } from '../contracts/identity';
+import type { AllocationRecord, BookState, GoalRecord } from '../contracts/ledger';
+import type { CycleId, GoalId } from '../contracts/identity';
 
 export interface GoalBalance {
   readonly goal: GoalRecord;
@@ -36,14 +44,22 @@ function zeroOf(currency: Money['currency']): Money {
   return made.value;
 }
 
+interface AllocationReplay {
+  readonly assigned: Map<string, Money>;
+  unallocated: Money;
+  /** Per-cycle spending deduction: effective funding minus effective releases. */
+  readonly cycleNet: Map<string, Money>;
+}
+
 /**
  * Replays allocation records in append order, applying each change and each
  * reversal's exact inverse. Amounts were validated at write time, so an
  * underflow here would mean stored state violates the write-time guards.
  */
-export function deriveTrackedPool(state: BookState): TrackedPoolView {
+function replayAllocationRecords(state: BookState): AllocationReplay {
   const currency = state.book.currency;
   const assigned = new Map<string, Money>();
+  const cycleNet = new Map<string, Money>();
   let unallocated = zeroOf(currency);
 
   const addTo = (map: Map<string, Money>, key: string, amount: Money): void => {
@@ -68,11 +84,26 @@ export function deriveTrackedPool(state: BookState): TrackedPoolView {
     if (!difference.ok) throw new TypeError(`tracked pool could not subtract amounts exactly (${difference.failure.reason})`);
     unallocated = difference.value;
   };
+  /** Reverse-release re-earmarks money; reverse-funding restores it. */
+  const unapplyCycleNet = (record: AllocationRecord): void => {
+    switch (record.change.type) {
+      case 'funding':
+        subtractFrom(cycleNet, record.cycleId, record.change.amount);
+        break;
+      case 'release':
+        addTo(cycleNet, record.change.destinationCycleId, record.change.amount);
+        break;
+      case 'assignment':
+      case 'unassignment':
+        break;
+    }
+  };
 
   for (const record of state.allocationRecords) {
     switch (record.change.type) {
       case 'funding':
         addUnallocated(record.change.amount);
+        addTo(cycleNet, record.cycleId, record.change.amount);
         break;
       case 'assignment':
         addTo(assigned, record.change.goalId, record.change.amount);
@@ -85,6 +116,7 @@ export function deriveTrackedPool(state: BookState): TrackedPoolView {
       case 'release':
         if (record.change.goalId === null) subtractUnallocated(record.change.amount);
         else subtractFrom(assigned, record.change.goalId, record.change.amount);
+        subtractFrom(cycleNet, record.change.destinationCycleId, record.change.amount);
         break;
       case 'reversal': {
         // Narrowing does not propagate into the find() closure, so capture
@@ -103,8 +135,9 @@ export function deriveTrackedPool(state: BookState): TrackedPoolView {
             addUnallocated(target.change.amount);
             break;
           case 'unassignment':
-            addUnallocated(target.change.amount);
-            subtractFrom(assigned, target.change.goalId, target.change.amount);
+            // Inverse of goal→unallocated: the money goes back to the goal.
+            subtractUnallocated(target.change.amount);
+            addTo(assigned, target.change.goalId, target.change.amount);
             break;
           case 'release':
             if (target.change.goalId === null) addUnallocated(target.change.amount);
@@ -113,10 +146,20 @@ export function deriveTrackedPool(state: BookState): TrackedPoolView {
           case 'reversal':
             throw new TypeError(`allocation reversal ${record.recordId} references another reversal`);
         }
+        // The reversal negates the target's cycle attribution, wherever that
+        // attribution landed — not the reversal record's own cycle.
+        unapplyCycleNet(target);
         break;
       }
     }
   }
+
+  return { assigned, unallocated, cycleNet };
+}
+
+export function deriveTrackedPool(state: BookState): TrackedPoolView {
+  const currency = state.book.currency;
+  const { assigned, unallocated } = replayAllocationRecords(state);
 
   const goals: GoalBalance[] = [];
   for (const goal of state.goals) {
@@ -133,6 +176,18 @@ export function deriveTrackedPool(state: BookState): TrackedPoolView {
   const total = sumMoney([unallocated, assignedTotal]);
   if (!total.ok) throw new TypeError('tracked pool total could not be summed exactly');
   return { unallocated, goals, total: total.value };
+}
+
+/**
+ * The effective spending deduction for one cycle: effective funding
+ * attributed to it minus effective releases destined to it, net of linked
+ * reversals. This is the availability leg; it is not the whole cross-cycle
+ * tracked balance, which `deriveTrackedPool` still owns.
+ */
+export function cycleAllocationNet(state: BookState, cycleId: CycleId): Money {
+  const currency = state.book.currency;
+  const { cycleNet } = replayAllocationRecords(state);
+  return cycleNet.get(cycleId) ?? zeroOf(currency);
 }
 
 /** The assigned balance of one goal (zero when the goal has no allocations). */

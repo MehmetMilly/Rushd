@@ -79,29 +79,40 @@ Task B extends the same command protocol with the engine's working money
 semantics. It is still backend-only: the legacy UI does not call it.
 
 - `src/domain/activity/`: derivations over actual movement. Expenses, linked
-  expense reversals, and expense returns are immutable ledger facts. Editing
-  a paid fact (`correctExpense`) atomically appends a reversal plus its
-  optional replacement; originals are preserved verbatim. Returns are actual
-  money received and can never exceed the linked returnable amount.
-  Category and flexible-definition links describe only.
+  expense reversals, expense returns, and linked return reversals are
+  immutable ledger facts. Editing a paid fact (`correctExpense`) atomically
+  appends a reversal plus its optional replacement; originals are preserved
+  verbatim. Correcting a return (`correctExpenseReturn`) works the same way
+  for standalone and obligation returns. Returns are actual money received
+  and can never exceed the linked returnable amount; the allowance is
+  computed across the whole correction family, so a new replacement ID never
+  resets it, and shrinking below standing refunds (or voiding while any
+  remain) is rejected. Category and flexible-definition links describe only.
 - `src/domain/obligations/`: expected items kept strictly separate from money
   movement. The residual reservation of an open obligation is
   `max(0, expected - unreversed net payments)`; payments are expenses linked
-  to the obligation (overpayment allowed, residual floors at zero). Final
-  settlement and confirmed cancellation release the residual; a return after
-  settlement never silently reopens; reopening is explicit. Dispute is an
-  independent overlay: posted disputed payments stay outflows, and a
+  to the obligation (overpayment allowed, residual floors at zero), counted
+  at their live replacement amount after corrections. Final settlement and
+  confirmed cancellation release the residual; a return after settlement
+  never silently reopens; reopening is explicit. Dispute is an independent
+  overlay that closes only through an explicit confirmed
+  `resolveObligationDispute` (optionally linked to its return) or a final
+  settlement/cancellation whose preview describes that effect: refunds and
+  reopenings never resolve it. Posted disputed payments stay outflows, and a
   previewed `releaseDisputedResidual` records unresolved uncertainty that
-  persists (and degrades completeness) until real movement or settlement
-  resolves it. Lifecycle history is append-only events, never mutations.
+  persists (and degrades completeness) until its own conditions resolve it.
+  Lifecycle history is append-only events, never mutations.
 - `src/domain/allocations/`: tracked-pool derivations. Funding moves
   spendable money into the pool exactly once; assignment divides
   already-funded money among goals with no second availability effect;
   unassignment returns to tracked-unallocated; release names its destination
   cycle and returns money to spending exactly once. Linked
   `reverseAllocationRecord` restores the prior state only when conservation
-  allows. Conservation holds: unallocated + assigned == funding - releases.
-  Goal progress is its own assigned balance.
+  allows. One shared replay produces both the pool balances and each cycle's
+  spending deduction with source/destination attribution, so reversing a
+  release re-earmarks money and reversing funding restores it in
+  availability as well as in the pool. Conservation holds: unallocated +
+  assigned == funding - releases. Goal progress is its own assigned balance.
 - `src/domain/calculations/`: pure queries. `computeAvailability` returns
   the signed amount, exact component breakdown, currency, data-as-of
   instant, calculation version, and both completeness dimensions; a negative
@@ -121,7 +132,7 @@ checks, atomic state+receipt+outbox commits, and the idempotency policy.
 
 Not implemented yet (later P03 tasks): Reality Check/recovery and observed
 boundaries, recurring plans and occurrences, cycle close/carry/reopen,
-obligation due dates, reversal of returns, persistent storage, and sync.
+obligation due dates, persistent storage, and sync.
 
 ## Main Screens
 

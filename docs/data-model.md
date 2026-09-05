@@ -105,16 +105,22 @@ immutable; state changes append linked facts.
 - **LedgerEntry additions**: `expense` (positive outflow with nullable
   `category`, `flexibleDefinitionId`, `linkedObligationId`, and
   `replacesEntryId` for correction replacements), `expenseReversal` (negated
-  amount, `reversesEntryId`), and `expenseReturn` (positive money received
-  back, linked to an expense or an obligation). Category and
-  flexible-definition links are descriptive only.
+  amount, `reversesEntryId`), `expenseReturn` (positive money received back,
+  linked to an expense or an obligation, with `replacesReturnEntryId` for
+  correction replacements), and `expenseReturnReversal` (negated amount,
+  `reversesEntryId`, inheriting the return's link). A return correction
+  appends the reversal plus its optional replacement atomically; reversed
+  returns stop counting everywhere (availability, net payments, refund
+  caps). Category and flexible-definition links are descriptive only.
 - **ObligationRecord** + **ObligationEvent**: the expected item (stable
   caller-supplied `obligationId`, due-cycle identity at creation, expected
   amount) is immutable; status transitions (`finalSettlement`,
-  `cancellation`, `reopening`), the dispute overlay (`disputeOpened`,
-  `disputeResolved` with its resolving action), and confirmed
-  disputed-residual releases (`residualReleased`) are append-only events.
-  Open obligations reserve `max(0, expected - unreversed net payments)`;
+  `cancellation`, `reopening`), the dispute overlay (`disputeOpened`, and
+  `disputeResolved` only via explicit resolution, final settlement, or
+  cancellation), and confirmed disputed-residual releases
+  (`residualReleased`) are append-only events. Open obligations reserve
+  `max(0, expected - unreversed net payments)` where payments count at live
+  replacement amounts and returns count effective (unreversed) amounts;
   a standing release decision suppresses the reservation while recording
   unresolved uncertainty, and is reset when the obligation is closed or
   explicitly reopened.
@@ -124,7 +130,11 @@ immutable; state changes append linked facts.
   `assignment` / `unassignment` (between tracked-unallocated and a goal, no
   availability effect), `release` (tracked pool → one named destination
   cycle, once), and `reversal` (linked inverse of an earlier record,
-  rejected when it would break conservation). Conservation invariant:
+  rejected when it would break conservation). One shared replay derives both
+  the pool balances and each cycle's spending deduction (funding attributed
+  to its record cycle, releases to their destination cycle, reversals
+  negating their target's attribution), so availability and the pool always
+  agree. Conservation invariant:
   unallocated + Σ assigned == funding − releases.
 - **BufferSetting**: the explicit buffer amount replacing the previous
   setting on each confirmed `setBuffer`; deducted once by the availability

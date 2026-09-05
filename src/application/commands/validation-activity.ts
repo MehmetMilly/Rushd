@@ -3,7 +3,8 @@
  */
 
 import { makeBookId, makeEntryId } from '../../domain/contracts/identity';
-import type { CorrectExpenseCommand, RecordExpenseCommand, RecordExpenseReturnCommand } from '../../domain/contracts/commands';
+import type { CivilDate } from '../../domain/primitives/civil-date';
+import type { CorrectExpenseCommand, CorrectExpenseReturnCommand, RecordExpenseCommand, RecordExpenseReturnCommand } from '../../domain/contracts/commands';
 import {
   DESCRIPTIVE_ABSENT,
   validateDescriptiveLink,
@@ -29,6 +30,8 @@ export function validateActivityCommand(record: Record<string, unknown>): Comman
       return validateCorrectExpense(record);
     case 'recordExpenseReturn':
       return validateRecordExpenseReturn(record);
+    case 'correctExpenseReturn':
+      return validateCorrectExpenseReturn(record);
     default:
       return { ok: false, issues: [{ path: 'kind', problem: 'unknown activity command kind' }] };
   }
@@ -135,5 +138,49 @@ function validateRecordExpenseReturn(record: Record<string, unknown>): CommandVa
     occurredAt,
     note,
   };
+  return { ok: true, command };
+}
+
+function validateCorrectExpenseReturn(record: Record<string, unknown>): CommandValidation {
+  const issues: ValidationIssue[] = [];
+  requireKeys(record, ['kind', 'bookId', 'returnEntryId', 'occurredAt', 'note', 'replacement'], issues);
+  if (issues.length > 0) return { ok: false, issues };
+
+  const bookId = validateId(record['bookId'], 'bookId', makeBookId, issues);
+  const returnEntryId = validateId(record['returnEntryId'], 'returnEntryId', makeEntryId, issues);
+  const occurredAt = validateOccurredAt(record['occurredAt'], 'occurredAt', issues);
+  const note = validateShortText(record['note'], 'note', issues, true);
+
+  let replacement: CorrectExpenseReturnCommand['replacement'] = null;
+  if (record['replacement'] !== null) {
+    const replacementRecord = asRecord(record['replacement']);
+    if (replacementRecord === null) {
+      issues.push({ path: 'replacement', problem: 'must be an object or null' });
+      return { ok: false, issues };
+    }
+    rejectUnknownKeys(replacementRecord, ['amount', 'localDate', 'note'], issues);
+    // Unlike an expense correction (which can carry the original amount
+    // over), a return replacement must state its amount: re-recording the
+    // identical refund would be a no-op. Null means void (reversal only).
+    const parsed = validateMoneyInput(replacementRecord['amount'], 'replacement.amount', 'positive', issues);
+    if (parsed === null) return { ok: false, issues };
+    let replacementLocalDate: CivilDate | undefined;
+    if (replacementRecord['localDate'] !== undefined) {
+      const localDate = validateCivilDateField(replacementRecord['localDate'], 'replacement.localDate', issues);
+      if (localDate === null) return { ok: false, issues };
+      replacementLocalDate = localDate;
+    }
+    let replacementNote: string | undefined;
+    if (replacementRecord['note'] !== undefined) {
+      replacementNote = validateShortText(replacementRecord['note'], 'replacement.note', issues, false);
+    }
+    if (issues.length > 0) return { ok: false, issues };
+    replacement = { amount: parsed, ...(replacementLocalDate !== undefined ? { localDate: replacementLocalDate } : {}), ...(replacementNote !== undefined ? { note: replacementNote } : {}) };
+  }
+
+  if (issues.length > 0 || bookId === null || returnEntryId === null || occurredAt === null) {
+    return { ok: false, issues };
+  }
+  const command: CorrectExpenseReturnCommand = { kind: 'correctExpenseReturn', bookId, returnEntryId, occurredAt, note, replacement };
   return { ok: true, command };
 }

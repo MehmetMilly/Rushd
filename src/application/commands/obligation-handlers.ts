@@ -10,11 +10,14 @@
  * (reopening is explicit). Dispute is an independent overlay: posted
  * disputed payments remain outflows, and releasing an unpaid disputed
  * residual is a separate previewed action that records unresolved
- * uncertainty.
+ * uncertainty. Only an explicit confirmed resolution — or a final
+ * settlement/cancellation whose preview describes that effect — closes the
+ * overlay; refunds and reopenings never do.
  */
 
 import type { OperationId } from '../../domain/contracts/identity';
 import type { BookState, ObligationEvent, ObligationRecord } from '../../domain/contracts/ledger';
+import { findEntryById } from '../../domain/contracts/ledger';
 import type {
   CancelObligationCommand,
   CommandEffect,
@@ -25,6 +28,7 @@ import type {
   RecordObligationReturnCommand,
   ReleaseDisputedResidualCommand,
   ReopenObligationCommand,
+  ResolveObligationDisputeCommand,
   SettleObligationFinallyCommand,
 } from '../../domain/contracts/commands';
 import type { CommandContext } from './context';
@@ -187,23 +191,12 @@ export function applyRecordObligationReturn(
   }
 
   // Allowed while open or after final settlement/cancellation: a real return
-  // is actual money received and never silently reopens the obligation.
-  const appended = appendObligationReturnEntry(command.bookId, command.occurredAt, command.amount, command.note, command.obligationId, state, context, operationId);
-  if (!appended.ok) return appended;
-  // Resolving a dispute through a real return links the resolution without
-  // overwriting the dispute history; any standing residual release decision
-  // is untouched by the return itself.
-  if (!view.value.disputeOpen) return appended;
-  const resolvedEvent = obligationEvent({ type: 'disputeResolved', via: 'return' }, command.obligationId, appended.nextState, context, operationId, '');
-  const nextState: BookState = {
-    ...appended.nextState,
-    obligationEvents: [...appended.nextState.obligationEvents, resolvedEvent],
-  };
-  return {
-    ok: true,
-    nextState,
-    effects: [...appended.effects, { kind: 'obligationDisputeResolved', obligationId: command.obligationId, via: 'return' }],
-  };
+  // is actual money received and never silently reopens the obligation. A
+  // return never resolves the dispute overlay on its own: even a full refund
+  // does not prove the disagreement is over. Resolution is explicit
+  // (resolveObligationDispute) or via a confirmed final
+  // settlement/cancellation whose preview describes that effect.
+  return appendObligationReturnEntry(command.bookId, command.occurredAt, command.amount, command.note, command.obligationId, state, context, operationId);
 }
 
 export function applySettleObligationFinally(
@@ -275,14 +268,11 @@ export function applyReopenObligation(
   // Reopening is explicit: the unpaid residual is reinstated from the same
   // expected amount minus unreversed net payments (the view's reservation is
   // zero while closed, so the unsuppressed remaining unpaid amount is used).
+  // Reopening alone never resolves the dispute overlay.
   const events: ObligationEvent[] = [obligationEvent({ type: 'reopening' }, command.obligationId, state, context, operationId, command.note)];
   const effects: CommandEffect[] = [
     { kind: 'obligationReopened', obligationId: command.obligationId, reinstatedResidual: view.remainingUnpaid },
   ];
-  if (view.disputeOpen) {
-    events.push(obligationEvent({ type: 'disputeResolved', via: 'reopening' }, command.obligationId, state, context, operationId, ''));
-    effects.push({ kind: 'obligationDisputeResolved', obligationId: command.obligationId, via: 'reopening' });
-  }
   return commitWithEvents(state, events, effects);
 }
 
@@ -306,6 +296,76 @@ export function applyOpenObligationDispute(
     state,
     [obligationEvent({ type: 'disputeOpened' }, command.obligationId, state, context, operationId, command.note)],
     [{ kind: 'obligationDisputeOpened', obligationId: command.obligationId }],
+  );
+}
+
+export function applyResolveObligationDispute(
+  command: ResolveObligationDisputeCommand,
+  state: BookState,
+  context: CommandContext,
+  operationId: OperationId,
+  refs: HandlerRefs,
+): ApplyResult {
+  const openCycle = requireOpenCycle(state);
+  if (!openCycle.ok) return openCycle;
+  const view = deriveObligationView(state, command.obligationId);
+  if (view === null) {
+    const located = refs.locateObligation(command.obligationId);
+    if (located !== null && located.bookId !== command.bookId) {
+      return {
+        ok: false,
+        failure: {
+          kind: 'crossBookObligation',
+          bookId: command.bookId,
+          obligationId: command.obligationId,
+          obligationBookId: located.bookId,
+        },
+      };
+    }
+    return unknownObligationFailure(state.book.id, command.obligationId);
+  }
+  if (view.status !== 'open') {
+    return { ok: false, failure: { kind: 'obligationNotOpen', bookId: command.bookId, obligationId: command.obligationId, status: view.status } };
+  }
+  if (!view.disputeOpen) {
+    return { ok: false, failure: { kind: 'disputeNotOpen', bookId: command.bookId, obligationId: command.obligationId } };
+  }
+
+  // The reason and the link are validated as a pair: a returnReceived reason
+  // must name a real return belonging to this obligation, and any other
+  // reason must not claim one.
+  if (command.resolution === 'returnReceived') {
+    if (command.linkedReturnEntryId === null) {
+      return {
+        ok: false,
+        failure: { kind: 'invalidCommand', issues: ['linkedReturnEntryId: required when resolution is returnReceived'] },
+      };
+    }
+    const linked = findEntryById(state, command.linkedReturnEntryId);
+    if (linked === null || linked.kind !== 'expenseReturn' || linked.linkedObligationId !== command.obligationId) {
+      return {
+        ok: false,
+        failure: {
+          kind: 'invalidCommand',
+          issues: [`linkedReturnEntryId: ${command.linkedReturnEntryId} is not a return of obligation ${command.obligationId}`],
+        },
+      };
+    }
+  } else if (command.linkedReturnEntryId !== null) {
+    return {
+      ok: false,
+      failure: { kind: 'invalidCommand', issues: ['linkedReturnEntryId: must be null unless resolution is returnReceived'] },
+    };
+  }
+
+  // Explicit resolution removes only the dispute reason: a standing
+  // residual-release decision and its completeness uncertainty persist until
+  // their own conditions (real movement, settlement, cancellation, or an
+  // explicit reopen) resolve them.
+  return commitWithEvents(
+    state,
+    [obligationEvent({ type: 'disputeResolved', via: 'explicitResolution' }, command.obligationId, state, context, operationId, command.note)],
+    [{ kind: 'obligationDisputeResolved', obligationId: command.obligationId, via: 'explicitResolution' }],
   );
 }
 

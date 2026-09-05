@@ -36,7 +36,7 @@ import {
   requireOpenCycle,
   resolveOccurredAt,
 } from './handler-support';
-import { applyCorrectExpense, applyRecordExpense, applyRecordExpenseReturn } from './activity-handlers';
+import { applyCorrectExpense, applyCorrectExpenseReturn, applyRecordExpense, applyRecordExpenseReturn } from './activity-handlers';
 import {
   applyCancelObligation,
   applyCreateObligation,
@@ -45,6 +45,7 @@ import {
   applyRecordObligationReturn,
   applyReleaseDisputedResidual,
   applyReopenObligation,
+  applyResolveObligationDispute,
   applySettleObligationFinally,
 } from './obligation-handlers';
 import {
@@ -104,6 +105,8 @@ export function dispatchApply(
       return applyCorrectExpense(command, state as BookState, context, operationId, refs);
     case 'recordExpenseReturn':
       return applyRecordExpenseReturn(command, state as BookState, context, operationId, refs);
+    case 'correctExpenseReturn':
+      return applyCorrectExpenseReturn(command, state as BookState, context, operationId, refs);
     case 'createObligation':
       return applyCreateObligation(command, state as BookState, context, operationId, refs);
     case 'recordObligationPayment':
@@ -118,6 +121,8 @@ export function dispatchApply(
       return applyReopenObligation(command, state as BookState, context, operationId);
     case 'openObligationDispute':
       return applyOpenObligationDispute(command, state as BookState, context, operationId);
+    case 'resolveObligationDispute':
+      return applyResolveObligationDispute(command, state as BookState, context, operationId, refs);
     case 'releaseDisputedResidual':
       return applyReleaseDisputedResidual(command, state as BookState, context, operationId);
     case 'createGoal':

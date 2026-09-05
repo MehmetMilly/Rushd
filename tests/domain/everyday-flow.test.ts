@@ -333,10 +333,10 @@ describe('partial payment and settlement (hand-calculated)', () => {
       residualReleased: true,
     });
 
-    // A real return of 40 resolves the dispute via the linked return. It
-    // adds the money back without reopening anything — but the standing
-    // release decision still leaves the unpaid 100 un-reserved, so the
-    // recorded uncertainty persists until the user closes the obligation.
+    // A real return of 40 does NOT resolve the dispute on its own — even a
+    // full refund does not prove the disagreement is over. It adds the money
+    // back without reopening anything, while the standing release decision
+    // still leaves the unpaid 100 un-reserved.
     await harness.run({
       kind: 'recordObligationReturn',
       bookId: BOOK_ID,
@@ -349,6 +349,28 @@ describe('partial payment and settlement (hand-calculated)', () => {
     const completenessAfter = computeCompleteness(harness.state(), { asOfInstantMs: harness.context.clock.nowMs(), calculationVersion: 'p03-task-b-1' });
     expect(completenessAfter.pool.state).toBe('needsAttention');
     expect(completenessAfter.pool.reasons).toEqual([
+      { type: 'openDisputedObligation', obligationId: 'obl-disputed', residualReleased: true },
+    ]);
+
+    // Explicit confirmed resolution removes only the dispute reason: the
+    // recorded release uncertainty persists until the obligation itself is
+    // closed.
+    await harness.run({
+      kind: 'resolveObligationDispute',
+      bookId: BOOK_ID,
+      obligationId: 'obl-disputed',
+      resolution: 'returnReceived',
+      linkedReturnEntryId: ((): string => {
+        const returns = harness.state().entries.filter((entry) => entry.kind === 'expenseReturn');
+        const last = returns[returns.length - 1];
+        if (last === undefined) throw new Error('expected a return entry');
+        return last.entryId;
+      })(),
+      note: 'chargeback settles the dispute',
+    });
+    const completenessResolved = computeCompleteness(harness.state(), { asOfInstantMs: harness.context.clock.nowMs(), calculationVersion: 'p03-task-b-1' });
+    expect(completenessResolved.pool.state).toBe('needsAttention');
+    expect(completenessResolved.pool.reasons).toEqual([
       { type: 'releasedResidualUncertainty', obligationId: 'obl-disputed', releasedUnpaid: { currency: 'SAR', minorUnits: 10_000 } },
     ]);
 

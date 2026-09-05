@@ -2,11 +2,12 @@
  * Runtime validators for obligation commands.
  */
 
-import { makeBookId, makeObligationId } from '../../domain/contracts/identity';
+import { makeBookId, makeEntryId, makeObligationId } from '../../domain/contracts/identity';
 import type {
   CreateObligationCommand,
   RecordObligationPaymentCommand,
   RecordObligationReturnCommand,
+  ResolveObligationDisputeCommand,
   SettleObligationFinallyCommand,
 } from '../../domain/contracts/commands';
 import {
@@ -37,6 +38,8 @@ export function validateObligationCommand(record: Record<string, unknown>): Comm
       return validateObligationReference(record, 'reopenObligation');
     case 'openObligationDispute':
       return validateObligationReference(record, 'openObligationDispute');
+    case 'resolveObligationDispute':
+      return validateResolveObligationDispute(record);
     case 'releaseDisputedResidual':
       return validateObligationReference(record, 'releaseDisputedResidual');
     default:
@@ -134,5 +137,35 @@ function validateObligationReference(
     return { ok: false, issues };
   }
   const command = { kind, bookId, obligationId, note } as SettleObligationFinallyCommand;
+  return { ok: true, command };
+}
+
+const DISPUTE_RESOLUTIONS = ['returnReceived', 'adjustedExternally', 'notOwed', 'other'] as const;
+
+function validateResolveObligationDispute(record: Record<string, unknown>): CommandValidation {
+  const issues: ValidationIssue[] = [];
+  requireKeys(record, ['kind', 'bookId', 'obligationId', 'resolution', 'linkedReturnEntryId', 'note'], issues);
+  if (issues.length > 0) return { ok: false, issues };
+
+  const bookId = validateId(record['bookId'], 'bookId', makeBookId, issues);
+  const obligationId = validateId(record['obligationId'], 'obligationId', makeObligationId, issues);
+  const rawResolution = record['resolution'];
+  const resolution = typeof rawResolution === 'string' && (DISPUTE_RESOLUTIONS as readonly string[]).includes(rawResolution)
+    ? (rawResolution as ResolveObligationDisputeCommand['resolution'])
+    : null;
+  if (resolution === null) {
+    issues.push({ path: 'resolution', problem: `must be one of ${DISPUTE_RESOLUTIONS.join(', ')}` });
+  }
+  // An explicit null names no return; otherwise it must be a valid entry id.
+  // The handler additionally requires the pair (reason/link) to agree and the
+  // linked return to belong to this obligation.
+  const linkedReturnEntryId = record['linkedReturnEntryId'] === null
+    ? null
+    : validateId(record['linkedReturnEntryId'], 'linkedReturnEntryId', makeEntryId, issues);
+  const note = validateShortText(record['note'], 'note', issues, true);
+  if (issues.length > 0 || bookId === null || obligationId === null || resolution === null) {
+    return { ok: false, issues };
+  }
+  const command: ResolveObligationDisputeCommand = { kind: 'resolveObligationDispute', bookId, obligationId, resolution, linkedReturnEntryId, note };
   return { ok: true, command };
 }

@@ -21,7 +21,8 @@
 import { negateMoney, sumMoney, type Money } from '../primitives/money';
 import type { BookState, OpenCycleRecord } from '../contracts/ledger';
 import { findOpenCycle } from '../contracts/ledger';
-import { liveExpenseEntries } from '../activity/derive';
+import { effectiveReturnAmounts, liveExpenseEntries } from '../activity/derive';
+import { cycleAllocationNet } from '../allocations/derive';
 import { deriveObligationViews } from '../obligations/derive';
 import { computeCompleteness, type CompletenessResult } from './completeness';
 
@@ -104,15 +105,16 @@ export function computeAvailability(
   const zeroMoney = zero(currency);
 
   const inflowParts: Money[] = [];
-  const returnParts: Money[] = [];
   for (const entry of state.entries) {
     if (entry.kind === 'inflow') inflowParts.push(entry.amount);
     else if (entry.kind === 'inflowReversal') inflowParts.push(entry.amount);
-    else if (entry.kind === 'expenseReturn') returnParts.push(entry.amount);
-    // expenseReversal facts only cancel their linked expense; the live-expense
-    // scan below already excludes reversed expenses.
+    // Returns and their reversals share one effective derivation with the
+    // refund caps and obligation net payments (see below); expenseReversal
+    // facts only cancel their linked expense, and the live-expense scan
+    // below already excludes reversed expenses.
   }
   const liveOutflows = liveExpenseEntries(state).map((entry) => entry.amount);
+  const returnParts = effectiveReturnAmounts(state);
 
   const netInflows = inflowParts.length === 0 ? zeroMoney : sumOrThrow(inflowParts, 'inflows could not be summed exactly');
   const netReturns = returnParts.length === 0 ? zeroMoney : sumOrThrow(returnParts, 'returns could not be summed exactly');
@@ -124,15 +126,12 @@ export function computeAvailability(
   const residualReservations =
     openResiduals.length === 0 ? zeroMoney : sumOrThrow(openResiduals, 'reservations could not be summed exactly');
 
-  const fundingParts: Money[] = [];
-  const releaseParts: Money[] = [];
-  for (const record of state.allocationRecords) {
-    if (record.change.type === 'funding') fundingParts.push(record.change.amount);
-    else if (record.change.type === 'release') releaseParts.push(record.change.amount);
-  }
-  const funding = fundingParts.length === 0 ? zeroMoney : sumOrThrow(fundingParts, 'funding could not be summed exactly');
-  const released = releaseParts.length === 0 ? zeroMoney : sumOrThrow(releaseParts, 'releases could not be summed exactly');
-  const netCycleAllocations = sumOrThrow([funding, negateOrThrow(released, 'releases could not be netted')], 'allocations could not be netted exactly');
+  // The cycle's spending deduction shares its derivation with the tracked
+  // pool: effective funding attributed to this cycle minus effective
+  // releases destined to it, net of linked reversals. Assignment and
+  // unassignment never appear here. This is deliberately not the whole
+  // cross-cycle tracked balance.
+  const netCycleAllocations = cycleAllocationNet(state, openCycle.cycleId);
 
   const buffer = state.buffer === null ? zeroMoney : state.buffer.amount;
 

@@ -42,6 +42,7 @@ export type CommandKind =
   | 'recordExpense'
   | 'correctExpense'
   | 'recordExpenseReturn'
+  | 'correctExpenseReturn'
   | 'createObligation'
   | 'recordObligationPayment'
   | 'recordObligationReturn'
@@ -49,6 +50,7 @@ export type CommandKind =
   | 'cancelObligation'
   | 'reopenObligation'
   | 'openObligationDispute'
+  | 'resolveObligationDispute'
   | 'releaseDisputedResidual'
   | 'createGoal'
   | 'fundAllocationPool'
@@ -154,6 +156,27 @@ export interface RecordExpenseReturnCommand {
   readonly note: string;
 }
 
+/**
+ * A linked correction of a return: appends a reversal fact and, when a
+ * replacement is supplied, its replacement return atomically in one command.
+ * The original return is never mutated. The replacement inherits the
+ * original's link (expense or obligation); the refund allowance is computed
+ * across the whole correction family, so a new ID never resets it.
+ */
+export interface CorrectExpenseReturnCommand {
+  readonly kind: 'correctExpenseReturn';
+  readonly bookId: BookId;
+  readonly returnEntryId: EntryId;
+  /** The correction's own financial date (both facts are validated on it). */
+  readonly occurredAt: OccurredAt;
+  readonly note: string;
+  readonly replacement: {
+    readonly amount: Money;
+    readonly localDate?: CivilDate;
+    readonly note?: string;
+  } | null;
+}
+
 export interface CreateObligationCommand {
   readonly kind: 'createObligation';
   readonly bookId: BookId;
@@ -211,6 +234,24 @@ export interface OpenObligationDisputeCommand {
   readonly kind: 'openObligationDispute';
   readonly bookId: BookId;
   readonly obligationId: ObligationId;
+  readonly note: string;
+}
+
+export type DisputeResolutionReason = 'returnReceived' | 'adjustedExternally' | 'notOwed' | 'other';
+
+/**
+ * Explicit, confirmed resolution of an open dispute. Plain refunds and
+ * reopenings never resolve the overlay; this command (or an explicit final
+ * settlement/cancellation whose preview describes the effect) does. When the
+ * reason is `returnReceived`, the linked return must exist and belong to
+ * this obligation; otherwise no link may be supplied.
+ */
+export interface ResolveObligationDisputeCommand {
+  readonly kind: 'resolveObligationDispute';
+  readonly bookId: BookId;
+  readonly obligationId: ObligationId;
+  readonly resolution: DisputeResolutionReason;
+  readonly linkedReturnEntryId: EntryId | null;
   readonly note: string;
 }
 
@@ -298,6 +339,7 @@ export type FinanceCommand =
   | RecordExpenseCommand
   | CorrectExpenseCommand
   | RecordExpenseReturnCommand
+  | CorrectExpenseReturnCommand
   | CreateObligationCommand
   | RecordObligationPaymentCommand
   | RecordObligationReturnCommand
@@ -305,6 +347,7 @@ export type FinanceCommand =
   | CancelObligationCommand
   | ReopenObligationCommand
   | OpenObligationDisputeCommand
+  | ResolveObligationDisputeCommand
   | ReleaseDisputedResidualCommand
   | CreateGoalCommand
   | FundAllocationPoolCommand
@@ -322,11 +365,14 @@ export type FinanceCommand =
  *   appending a linked reversal fact (inflow reversal; expense correction).
  * - reverseInflow/correctExpense: themselves linked corrections; they are
  *   never reversed, a new fact corrects them.
+ * - recordExpenseReturn/recordObligationReturn: reversible by appending a
+ *   linked return reversal, with an optional atomic replacement
+ *   (correctExpenseReturn), which is itself never reversed.
  * - obligations lifecycle, goals, buffer: managed by explicit previewed
- *   lifecycle commands rather than linked reversals.
+ *   lifecycle commands rather than linked reversals; dispute resolution is
+ *   explicit (resolveObligationDispute) or via confirmed final
+ *   settlement/cancellation.
  * - allocation records: reversible by appending a linked inverse record.
- * - expense/obligation returns: corrective receipts; a mistaken return is
- *   corrected by a later task's linked-correction path (not yet implemented).
  */
 export type ReversalPolicy =
   | 'lifecycleCorrectionLaterTask'
@@ -341,14 +387,16 @@ export const COMMAND_REVERSAL_POLICY: Readonly<Record<CommandKind, ReversalPolic
   reverseInflow: 'isALinkedReversal',
   recordExpense: 'appendsLinkedReversal',
   correctExpense: 'isALinkedReversal',
-  recordExpenseReturn: 'lifecycleCorrectionLaterTask',
+  recordExpenseReturn: 'appendsLinkedReversal',
+  correctExpenseReturn: 'isALinkedReversal',
   createObligation: 'managedByLifecycleCommands',
   recordObligationPayment: 'appendsLinkedReversal',
-  recordObligationReturn: 'lifecycleCorrectionLaterTask',
+  recordObligationReturn: 'appendsLinkedReversal',
   settleObligationFinally: 'managedByLifecycleCommands',
   cancelObligation: 'managedByLifecycleCommands',
   reopenObligation: 'managedByLifecycleCommands',
   openObligationDispute: 'managedByLifecycleCommands',
+  resolveObligationDispute: 'managedByLifecycleCommands',
   releaseDisputedResidual: 'managedByLifecycleCommands',
   createGoal: 'managedByLifecycleCommands',
   fundAllocationPool: 'appendsLinkedReversal',
@@ -370,7 +418,7 @@ export interface CommandConfirmation {
   readonly previewDigest: string;
 }
 
-export type ObligationDisputeResolution = 'return' | 'finalSettlement' | 'cancellation' | 'reopening';
+export type ObligationDisputeResolution = 'finalSettlement' | 'cancellation' | 'explicitResolution';
 
 export type CommandEffect =
   | {
@@ -422,6 +470,17 @@ export type CommandEffect =
   | {
       readonly kind: 'expenseReturnRecorded';
       readonly entryId: EntryId;
+      readonly cycleId: CycleId;
+      readonly localDate: CivilDate;
+      readonly amount: Money;
+      readonly linkedExpenseEntryId: EntryId | null;
+      readonly linkedObligationId: ObligationId | null;
+      readonly replacesReturnEntryId: EntryId | null;
+    }
+  | {
+      readonly kind: 'expenseReturnReversalRecorded';
+      readonly entryId: EntryId;
+      readonly reversesEntryId: EntryId;
       readonly cycleId: CycleId;
       readonly localDate: CivilDate;
       readonly amount: Money;
@@ -585,6 +644,7 @@ export type CommandFailure =
     }
   | { readonly kind: 'notAnInflow'; readonly bookId: BookId; readonly entryId: EntryId }
   | { readonly kind: 'notAnExpense'; readonly bookId: BookId; readonly entryId: EntryId }
+  | { readonly kind: 'notAReturn'; readonly bookId: BookId; readonly entryId: EntryId }
   | {
       readonly kind: 'returnExceedsReturnable';
       readonly bookId: BookId;
@@ -710,6 +770,8 @@ export function describeCommandFailure(failure: CommandFailure): string {
       return `entry ${failure.entryId} is not an inflow and cannot be reversed`;
     case 'notAnExpense':
       return `entry ${failure.entryId} is not an expense and cannot be corrected this way`;
+    case 'notAReturn':
+      return `entry ${failure.entryId} is not a return and cannot be corrected as one`;
     case 'returnExceedsReturnable':
       return `${failure.targetKind} ${failure.targetId} can only return ${failure.returnable.minorUnits} ${failure.returnable.currency}, not ${failure.requested.minorUnits}`;
     case 'unknownObligation':

@@ -119,6 +119,7 @@ export function appendObligationReturnEntry(
     amount,
     linkedExpenseEntryId: null,
     linkedObligationId,
+    replacesReturnEntryId: null,
     note,
     capturedAtInstantMs: context.clock.nowMs(),
     capturedInTimeZone: state.book.timeZone,
@@ -142,6 +143,7 @@ export function appendObligationReturnEntry(
         amount,
         linkedExpenseEntryId: null,
         linkedObligationId,
+        replacesReturnEntryId: null,
       },
     ],
   };

@@ -8,12 +8,15 @@
  *
  * Task B adds everyday financial behavior over the same protocol:
  * - actual activity: `recordExpense`, `correctExpense` (linked reversal +
- *   optional replacement, atomic), `recordExpenseReturn`;
+ *   optional replacement, atomic), `recordExpenseReturn`,
+ *   `correctExpenseReturn` (linked return reversal + optional replacement,
+ *   atomic, for standalone and obligation returns);
  * - obligations: `createObligation` (expected item, never money movement),
  *   `recordObligationPayment`, `recordObligationReturn`, explicit
  *   `settleObligationFinally` / `cancelObligation` / `reopenObligation`,
- *   dispute overlay (`openObligationDispute`) and previewed
- *   `releaseDisputedResidual` (records unresolved uncertainty);
+ *   dispute overlay (`openObligationDispute`, explicit
+ *   `resolveObligationDispute`) and previewed `releaseDisputedResidual`
+ *   (records unresolved uncertainty);
  * - goals and tracked allocations: `createGoal`, `fundAllocationPool`,
  *   `assignToGoal` (no second availability effect), `unassignFromGoal`,
  *   `releaseAllocation` (named destination cycle), and linked
@@ -23,10 +26,14 @@
  *   completeness dimensions), `computePacing` (explicit eligible dates,
  *   exact integer division with reported remainder), and
  *   `computeCompleteness` (deterministic reducer with typed reasons).
+ *   Effective funding/release attribution is shared between the tracked pool
+ *   and availability, so reversals move both together; refund allowance is
+ *   computed across correction families, so a new replacement ID never
+ *   resets it.
  *
  * Not implemented yet (later P03 tasks): Reality Check/recovery and observed
  * boundaries, recurring plans and occurrences, cycle close/carry/reopen,
- * obligation due dates, reversal of returns, persistent storage, and sync.
+ * obligation due dates, persistent storage, and sync.
  * Nothing here claims PWA, sync, account, security, or release readiness.
  *
  * Usage:
@@ -85,15 +92,23 @@ export {
 export {
   deriveObligationView,
   deriveObligationViews,
+  effectiveObligationReturns,
+  grossLivePaymentsFor,
   netPaymentsFor,
   type ObligationStatus,
   type ObligationView,
 } from '../../domain/obligations/derive';
-export { deriveTrackedPool, goalAssignedBalance, type GoalBalance, type TrackedPoolView } from '../../domain/allocations/derive';
+export { cycleAllocationNet, deriveTrackedPool, goalAssignedBalance, type GoalBalance, type TrackedPoolView } from '../../domain/allocations/derive';
 export {
+  effectiveFamilyRefunds,
+  effectiveReturnAmounts,
+  expenseCorrectionFamily,
   findExpenseEntry,
+  findExpenseReturnEntry,
   isExpenseLive,
+  isExpenseReturnLive,
   liveExpenseEntries,
+  liveExpenseReturns,
   returnableAmountForExpense,
 } from '../../domain/activity/derive';
 export {
@@ -111,9 +126,11 @@ export {
   type CommandPreviewResult,
   type CommandReceipt,
   type CorrectExpenseCommand,
+  type CorrectExpenseReturnCommand,
   type CreateBookCommand,
   type CreateGoalCommand,
   type CreateObligationCommand,
+  type DisputeResolutionReason,
   type FinanceCommand,
   type FundAllocationPoolCommand,
   type ObligationDisputeResolution,
@@ -130,6 +147,7 @@ export {
   type ReleaseAllocationCommand,
   type ReleaseDisputedResidualCommand,
   type ReopenObligationCommand,
+  type ResolveObligationDisputeCommand,
   type ReverseAllocationRecordCommand,
   type ReverseInflowCommand,
   type ReversalPolicy,
@@ -150,6 +168,7 @@ export {
   type BufferSetting,
   type ExpenseEntry,
   type ExpenseReturnEntry,
+  type ExpenseReturnReversalEntry,
   type ExpenseReversalEntry,
   type FinanceBook,
   type GoalRecord,

@@ -150,7 +150,9 @@ export interface ExpenseReversalEntry {
 /**
  * Actual money received back. An expected refund never creates this record;
  * only real receipts do. A return is linked either to a specific expense or
- * to an obligation (covering its payments, e.g. a chargeback).
+ * to an obligation (covering its payments, e.g. a chargeback). A corrected
+ * return carries `replacesReturnEntryId`; the original return stays immutable
+ * and its linked reversal cancels it.
  */
 export interface ExpenseReturnEntry {
   readonly kind: 'expenseReturn';
@@ -163,6 +165,8 @@ export interface ExpenseReturnEntry {
   readonly amount: Money;
   readonly linkedExpenseEntryId: EntryId | null;
   readonly linkedObligationId: ObligationId | null;
+  /** Set when this return is the replacement of a linked return correction. */
+  readonly replacesReturnEntryId: EntryId | null;
   readonly note: string;
   readonly capturedAtInstantMs: number;
   readonly capturedInTimeZone: TimeZoneName;
@@ -170,7 +174,32 @@ export interface ExpenseReturnEntry {
   readonly sourceOperationId: OperationId;
 }
 
-export type LedgerEntry = InflowEntry | InflowReversalEntry | ExpenseEntry | ExpenseReversalEntry | ExpenseReturnEntry;
+/**
+ * A linked reversal of a return: a new fact whose amount negates the
+ * original return (the money did not actually come back). Corrections never
+ * mutate or delete the original return; an optional replacement return is
+ * appended atomically in the same command.
+ */
+export interface ExpenseReturnReversalEntry {
+  readonly kind: 'expenseReturnReversal';
+  readonly entryId: EntryId;
+  readonly bookId: BookId;
+  readonly cycleId: CycleId;
+  readonly localDate: CivilDate;
+  readonly timeZone: TimeZoneName;
+  /** Negated copy of the reversed return amount. */
+  readonly amount: Money;
+  readonly reversesEntryId: EntryId;
+  readonly linkedExpenseEntryId: EntryId | null;
+  readonly linkedObligationId: ObligationId | null;
+  readonly note: string;
+  readonly capturedAtInstantMs: number;
+  readonly capturedInTimeZone: TimeZoneName;
+  readonly calculationVersion: string;
+  readonly sourceOperationId: OperationId;
+}
+
+export type LedgerEntry = InflowEntry | InflowReversalEntry | ExpenseEntry | ExpenseReversalEntry | ExpenseReturnEntry | ExpenseReturnReversalEntry;
 
 /**
  * An expected commitment, kept strictly separate from actual money movement.
@@ -198,7 +227,7 @@ export type ObligationChange =
   | { readonly type: 'cancellation' }
   | { readonly type: 'reopening' }
   | { readonly type: 'disputeOpened' }
-  | { readonly type: 'disputeResolved'; readonly via: 'return' | 'finalSettlement' | 'cancellation' | 'reopening' }
+  | { readonly type: 'disputeResolved'; readonly via: 'finalSettlement' | 'cancellation' | 'explicitResolution' }
   | { readonly type: 'residualReleased' };
 
 /**
