@@ -1,6 +1,6 @@
 # Rushd P03 Task A: exact primitives and executable command foundation
 
-Implement Task A in `/Users/mehmet/Desktop/Rushd` on `codex/rushd-rebuild-plan`. You are the implementation worker; Astra is the Development Master. Use GLM 5.3 Flash with High reasoning if exposed, otherwise the available thinking mode and report it. This task has explicit behavior and objective checks; resolve ordinary implementation choices yourself.
+Implement Task A in `/Users/mehmet/Desktop/Rushd` on `codex/rushd-rebuild-plan`. You are the implementation worker; Astra is the Development Master. Use GLM 5.3 Flash with Max reasoning, confirmed available by the founder, and report the actual selected mode. Exact arithmetic, revisions, and retry interactions justify this setting. This task has explicit behavior and objective checks; resolve ordinary implementation choices yourself.
 
 ## Outcome and context
 

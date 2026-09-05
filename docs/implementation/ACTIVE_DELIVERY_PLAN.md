@@ -21,7 +21,7 @@ The working target is a feature-complete build ready for private founder use wit
 - P01 Task 3 and its corrections close the remaining local-date, historical-budget, weekly-pace, scheduling, assignment, stale-state, mock-analytics, and harmful-gamification problems. The final commit `075317e` passed an independent Muse Spark 1.3 xHigh production-path review with no blocking findings.
 - P01 is closed. The duplicate English translation key was addressed in P02. The display-only monthly-day check remains a nearby cleanup candidate when that UI is changed.
 - P02 is closed. The app now has a Vite build, local runtime assets, owned modules, strict checks for new glue, preserved `MicroSaveOS_DB` v1 data, and verified visual parity apart from six documented English translation corrections.
-- P03 implementation has not started. The founder agreed to `P03_EXECUTION_PLAN.md`; Task A's ready-to-send prompt is `P03_TASK_A_PROMPT.md`. Its Reality Check decision uses the full tracked-pool amount, with Rushd deducting reservations and goal allocations.
+- P03 Task A is implemented at `557c556`, corrected at `51659e6`. Luna Max independently ran the original 50 domain tests, then 9 focused correction tests. Reversal-date binding and unrepresentable-instant rejection are fixed. A remaining BCE/year-zero-to-CE alias in `instant.ts` is a narrow prerequisite included in `P03_TASK_B_PROMPT.md`; proceed with B rather than opening another separate correction cycle. This was focused verification, not a full P03 review or phase PASS.
 
 ## Working method
 
@@ -49,7 +49,11 @@ Current founder-reported window: **300M GLM 5.3 Flash literal tokens until 6 Sep
 - **GPT 5.6 Terra:** harder implementation and review that needs a higher tier of intelligence. Choose Medium, High, or xHigh from task risk; do not use Max.
 - **GPT 5.6 Luna:** default Codex worker for clear, well-defined implementation, testing, fixtures, mechanical migration, and focused review. Prefer Max when task breadth or integration risk benefits from deeper checking; use xHigh when Max is unnecessary.
 - **GLM 5.3 Flash:** large bounded implementation or test work during temporary free-token windows. Its free pool is a literal token allowance including cached input and may expire within 10 to 12 hours, so use one compact task context and avoid repeated large-history loading. Prioritize it while a short free window is active.
-- **Muse Spark 1.3:** near-zero-cost external worker and reviewer for well-defined implementation and testing. Start with bounded tasks, then expand its role if repository results and independent reviews remain strong. Use High for normal multi-file work and xHigh for difficult logic, finance/data review, or broad integration.
+- **GLM reasoning disclosure:** the founder sees a Max option, but Task A's worker could only verify a single runtime thinking mode. Record the UI request separately from the served tier; Task A's actual tier is unverified. Do not describe it as independently verified Max execution.
+- **Muse Spark 1.3:** capable near-zero-cost external worker and reviewer, not merely a lightweight fallback. The founder rates it highly, though below Grok 4.6 overall. Use High for normal multi-file work and xHigh for difficult logic, finance/data review, or broad integration; judge task fit from actual results.
+- **Muse capacity:** free access is useful but limited, so do not plan unlimited work. The latest message called it "Azure Spark" through "OpenAI"; context suggests Muse/OpenCode, but that name/provider mapping remains an assumption. The founder also reports an optional contributor API tier around $0.10/M input and $0.20/M output. Pricing, eligibility, and provider are unverified; no paid API use has been requested. GLM remains first priority during its free window.
+
+Artificial Analysis's [v4.2 announcement](https://artificialanalysis.ai/articles/artificial-analysis-intelligence-index-v4-2), checked 5 September, adds realistic agentic/document tasks and increases private holdout weighting to 40%. It places Muse Spark 1.3 behind Fable 5.1, Opus 5, and Astra on AA-Briefcase. This supports assigning Muse substantial work; it does not establish Rushd coding reliability or prove performance in OpenCode's specific configuration. Compare like reasoning settings and index versions.
 - **Gemini 3.8 Flash:** fallback for straightforward, tightly specified work that needs many tokens and has deterministic validation. Do not use it for ambiguous implementation, architecture, finance decisions, or final review. Its benchmark strength does not outweigh weak results on real Rushd tasks.
 - **Claude Opus 4.6:** product writing, bilingual copy critique, founder-facing explanations, and qualitative review.
 - **Grok 4.6 through Cursor:** preferred external route for harder implementation and independent finance review. Use High for clear multi-file work and the highest exposed setting for difficult reconciliation/concurrency review. Do not assume Cursor exposes xHigh; report the actual selected setting. Do not pause current work for a future release.
@@ -72,7 +76,7 @@ If an external app does not expose the suggested setting, use its highest suitab
 
 1. P01 is closed at reviewed commit `075317e`.
 2. P02 is closed at `f80cfc9`.
-3. P03's execution plan is agreed. Deliver `P03_TASK_A_PROMPT.md` to GLM, then inspect its result before assigning dependent work.
+3. P03's execution plan is agreed. Task A's focused correction check is complete. Issue B to GLM with the small date-era correction included.
 4. Keep the remaining foundation spine sequential: P03 finance domain, then P04 local data and PWA.
 5. After P02 creates stable module boundaries, allow at most two isolated product writers. Start design foundations, provider preparation, AI schemas, eval assets, and release preparation early when they do not depend on unfinished production interfaces.
 6. Integrate through the Development Master. Use short-lived branches or isolated worktrees for parallel writers and keep one integration owner.
@@ -80,7 +84,7 @@ If an external app does not expose the suggested setting, use its highest suitab
 
 ## Next action and continuity
 
-The founder should open `/Users/mehmet/Desktop/Rushd` in the external coding app and give a fresh GLM 5.3 Flash chat `P03_TASK_A_PROMPT.md`, using High if available. Task A is prepared, not confirmed running. On receiving its report, inspect the actual diff and command API before dispatching B. Keep broad independent finance review at the A–C integration point; bring forward a focused check only for an unresolved foundational concern. P02 research is historical context; the implemented architecture and P03 contract govern the next work.
+Send `P03_TASK_B_PROMPT.md` to a fresh GLM 5.3 Flash chat in the same repository. Request Max if available; report only the actual exposed thinking setting. The prompt includes one small era-validation correction followed by the full everyday-finance slice. B is ready to send, not confirmed running. Inspect its result before C; keep broad independent finance review at the A–C integration point. Deterministic cycle IDs and synchronous repository methods remain C/D design seams, not blockers by themselves. P02 research is historical context; the implemented architecture and P03 contract govern the next work.
 
 Keep current status and resource changes in this file, and task interfaces in the phase execution plan. `DEVELOPMENT_MASTER_HANDOFF.md` explains how to resume after compaction. No additional personal AGENTS file is needed.
 

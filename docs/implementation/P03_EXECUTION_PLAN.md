@@ -2,7 +2,7 @@
 
 **Date:** 5 September 2026
 **Assessment base:** `f80cfc9`
-**Status:** Founder agreed to the execution proposal and delegated the Reality Check input choice. Decision recorded below. No P03 implementation dispatched yet.
+**Status:** Execution agreed. Task A is committed with corrections at `51659e6`; current status and remaining issues live in `ACTIVE_DELIVERY_PLAN.md`. Task B's prompt includes the narrow remaining era-validation fix.
 
 ## Outcome
 
@@ -83,7 +83,7 @@ Required examples: an unchanged 1,000 observation with a 200 goal allocation and
 
 ### A. Checked primitives and executable command foundation
 
-**Worker:** GLM 5.3 Flash, High if exposed. Clear interfaces and deterministic checks make this a useful first use of the expiring pool.
+**Worker:** GLM 5.3 Flash, Max, confirmed available by the founder. The interactions between exact arithmetic, revisions, and retry behavior justify deeper reasoning within the expiring pool.
 
 Build checked money/currency/date/cycle primitives; book and identity types; runtime-validated command envelopes; transaction port; preview/revision/idempotency/receipt behavior; and a minimal real start-book/start-cycle/inflow path. Add the domain/property runner and lint/source coverage in this same task.
 
@@ -91,7 +91,7 @@ Own `src/domain/primitives/**`, `src/domain/contracts/**`, `src/application/comm
 
 ### B. Everyday financial behavior
 
-**Worker:** GLM High if Task A demonstrates reliable results and the window remains; otherwise Grok 4.6 High. This is larger work, but the formulas and state transitions can be specified precisely.
+**Worker:** GLM 5.3 Flash, request Max if exposed; record the actual available thinking mode. Task A's useful implementation and targeted fixes justify continuing within the free window, and B's interacting financial states warrant deeper reasoning. Grok High is the fallback when the GLM window ends.
 
 Build actual expenses/returns/corrections; obligations with partial/final settlement, dispute and reservation release; allocations; availability breakdown; pacing; and completeness. Exercise these through A's command API. Include deterministic examples where an 80 commitment paid by 30 still consumes 80 until final settlement, and where assigning funded money to a goal has no second cost.
 
