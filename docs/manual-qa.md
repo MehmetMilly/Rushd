@@ -2,7 +2,7 @@
 
 Use this checklist before publishing changes.
 
-- App opens at `index.html` or local server URL without a blank screen.
+- Start the app with `npm run dev`, or run `npm run build` then `npm run preview`; verify the Vite URL opens without a blank screen.
 - Screenshots in `docs/assets/screenshots/` are refreshed after visible UI changes.
 - Optional browser smoke test passes with `npm run test:browser`.
 - Browser console has no relevant app errors.
