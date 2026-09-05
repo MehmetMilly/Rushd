@@ -112,7 +112,11 @@ export async function executeCommand(
       }
     }
 
-    const applied = dispatchApply(command, state, context, confirmed.operationId, (entryId) => transaction.locateEntry(entryId));
+    const applied = dispatchApply(command, state, context, confirmed.operationId, {
+      locateEntry: (entryId) => transaction.locateEntry(entryId),
+      locateObligation: (obligationId) => transaction.locateObligation(obligationId),
+      locateGoal: (goalId) => transaction.locateGoal(goalId),
+    });
     if (!applied.ok) {
       return { ok: false, failure: applied.failure };
     }

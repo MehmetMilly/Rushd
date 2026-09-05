@@ -12,12 +12,18 @@ declare const cycleIdBrand: unique symbol;
 declare const entryIdBrand: unique symbol;
 declare const operationIdBrand: unique symbol;
 declare const outboxIdBrand: unique symbol;
+declare const obligationIdBrand: unique symbol;
+declare const goalIdBrand: unique symbol;
+declare const allocationRecordIdBrand: unique symbol;
 
 export type BookId = string & { readonly [bookIdBrand]: true };
 export type CycleId = string & { readonly [cycleIdBrand]: true };
 export type EntryId = string & { readonly [entryIdBrand]: true };
 export type OperationId = string & { readonly [operationIdBrand]: true };
 export type OutboxId = string & { readonly [outboxIdBrand]: true };
+export type ObligationId = string & { readonly [obligationIdBrand]: true };
+export type GoalId = string & { readonly [goalIdBrand]: true };
+export type AllocationRecordId = string & { readonly [allocationRecordIdBrand]: true };
 
 export type EntityIdFailure = { readonly reason: 'invalidId'; readonly provided: unknown; readonly detail: string };
 
@@ -57,6 +63,18 @@ export function makeOperationId(value: unknown): EntityIdResult<OperationId> {
 
 export function makeOutboxId(value: unknown): EntityIdResult<OutboxId> {
   return makeBrandedId<OutboxId>(value);
+}
+
+export function makeObligationId(value: unknown): EntityIdResult<ObligationId> {
+  return makeBrandedId<ObligationId>(value);
+}
+
+export function makeGoalId(value: unknown): EntityIdResult<GoalId> {
+  return makeBrandedId<GoalId>(value);
+}
+
+export function makeAllocationRecordId(value: unknown): EntityIdResult<AllocationRecordId> {
+  return makeBrandedId<AllocationRecordId>(value);
 }
 
 /**

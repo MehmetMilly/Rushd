@@ -63,6 +63,10 @@ function formatterFor(timeZone: string): Intl.DateTimeFormat {
       minute: '2-digit',
       second: '2-digit',
       hourCycle: 'h23',
+      // The era must be requested and inspected: `Intl` renders BCE years as a
+      // positive year-of-era (astronomical year 0 becomes "1" with era BC), so
+      // without the era check a BCE instant would alias onto a CE civil date.
+      era: 'short',
     });
     formatterCache.set(timeZone, formatter);
   }
@@ -101,6 +105,16 @@ export function resolveCivilDateTime(instantMs: number, timeZone: TimeZoneName):
   const hour = read('hour');
   const minute = read('minute');
   const second = read('second');
+
+  // Reject BCE resolutions before constructing a civil date: the formatter
+  // reports a positive year-of-era for them, and accepting it would alias
+  // year-zero/negative-year instants onto ordinary CE dates. The en-US
+  // formatter spells the before-common era "BC" (some ICU builds "BCE").
+  const eraPart = parts.find((candidate) => candidate.type === 'era');
+  const eraText = eraPart?.value ?? '';
+  if (eraText.startsWith('B')) {
+    return { ok: false, failure: { reason: 'invalidInstant', instantMs } };
+  }
 
   const civilDate = makeCivilDate(year, month, day);
   if (!civilDate.ok) {

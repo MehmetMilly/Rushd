@@ -97,6 +97,46 @@ legacy data has been migrated.
   written in the same transaction as the state and receipt. Nothing drains it
   yet; sync behavior is a later phase.
 
+## P03 canonical model additions (Task B)
+
+Task B extends the same in-memory canonical model. All records stay
+immutable; state changes append linked facts.
+
+- **LedgerEntry additions**: `expense` (positive outflow with nullable
+  `category`, `flexibleDefinitionId`, `linkedObligationId`, and
+  `replacesEntryId` for correction replacements), `expenseReversal` (negated
+  amount, `reversesEntryId`), and `expenseReturn` (positive money received
+  back, linked to an expense or an obligation). Category and
+  flexible-definition links are descriptive only.
+- **ObligationRecord** + **ObligationEvent**: the expected item (stable
+  caller-supplied `obligationId`, due-cycle identity at creation, expected
+  amount) is immutable; status transitions (`finalSettlement`,
+  `cancellation`, `reopening`), the dispute overlay (`disputeOpened`,
+  `disputeResolved` with its resolving action), and confirmed
+  disputed-residual releases (`residualReleased`) are append-only events.
+  Open obligations reserve `max(0, expected - unreversed net payments)`;
+  a standing release decision suppresses the reservation while recording
+  unresolved uncertainty, and is reset when the obligation is closed or
+  explicitly reopened.
+- **GoalRecord**: stable caller-supplied `goalId`, name, and positive target
+  amount. Progress is the goal's assigned balance, never a shared total.
+- **AllocationRecord**: `funding` (spendable → tracked pool, once),
+  `assignment` / `unassignment` (between tracked-unallocated and a goal, no
+  availability effect), `release` (tracked pool → one named destination
+  cycle, once), and `reversal` (linked inverse of an earlier record,
+  rejected when it would break conservation). Conservation invariant:
+  unallocated + Σ assigned == funding − releases.
+- **BufferSetting**: the explicit buffer amount replacing the previous
+  setting on each confirmed `setBuffer`; deducted once by the availability
+  calculation.
+- **Derived queries** (pure, not stored): availability (signed amount,
+  component breakdown, currency, data-as-of, calculation version,
+  completeness), pacing (explicit eligible dates, exact integer division
+  with a reported remainder), and completeness (pool and classification
+  dimensions with typed reasons: `noPoolBasis`,
+  `openDisputedObligation`, `releasedResidualUncertainty`,
+  `unclassifiedExpenseMovements`).
+
 ## P02 compatibility boundary
 
 `src/data/legacy-v1/contracts.ts` records the v1 database name, version,

@@ -26,10 +26,12 @@ import type {
   OutboxEnvelope,
 } from '../../../src/domain/contracts/commands';
 import type { BookState } from '../../../src/domain/contracts/ledger';
-import type { BookId, EntryId, OperationId } from '../../../src/domain/contracts/identity';
+import type { BookId, EntryId, GoalId, ObligationId, OperationId } from '../../../src/domain/contracts/identity';
 import type {
   EntryLocation,
   FinanceReadModel,
+  GoalLocation,
+  ObligationLocation,
   RepositoryTransaction,
   TransactionalRepository,
 } from '../../../src/domain/contracts/repository';
@@ -43,6 +45,8 @@ interface CommittedStore {
   operations: Map<string, OperationRecord>;
   outbox: OutboxEnvelope[];
   entryIndex: Map<string, EntryLocation>;
+  obligationIndex: Map<string, ObligationLocation>;
+  goalIndex: Map<string, GoalLocation>;
 }
 
 function cloneValue<T>(value: T): T {
@@ -67,7 +71,14 @@ function frozenCopy<T>(value: T): T {
 }
 
 export class InMemoryFinanceRepository implements TransactionalRepository, FinanceReadModel {
-  private readonly store: CommittedStore = { books: new Map(), operations: new Map(), outbox: [], entryIndex: new Map() };
+  private readonly store: CommittedStore = {
+    books: new Map(),
+    operations: new Map(),
+    outbox: [],
+    entryIndex: new Map(),
+    obligationIndex: new Map(),
+    goalIndex: new Map(),
+  };
   private injectedFailure: { method: WriteMethodName; remaining: number } | null = null;
 
   /** Simulates an adapter crash on the next N calls to the given write method. */
@@ -82,6 +93,16 @@ export class InMemoryFinanceRepository implements TransactionalRepository, Finan
 
   locateEntry(entryId: EntryId): EntryLocation | null {
     const location = this.store.entryIndex.get(entryId);
+    return location === undefined ? null : { ...location };
+  }
+
+  locateObligation(obligationId: ObligationId): ObligationLocation | null {
+    const location = this.store.obligationIndex.get(obligationId);
+    return location === undefined ? null : { ...location };
+  }
+
+  locateGoal(goalId: GoalId): GoalLocation | null {
+    const location = this.store.goalIndex.get(goalId);
     return location === undefined ? null : { ...location };
   }
 
@@ -121,6 +142,12 @@ export class InMemoryFinanceRepository implements TransactionalRepository, Finan
     for (const entry of state.entries) {
       this.store.entryIndex.set(entry.entryId, { bookId: entry.bookId, entryId: entry.entryId, kind: entry.kind });
     }
+    for (const obligation of state.obligations) {
+      this.store.obligationIndex.set(obligation.obligationId, { bookId: obligation.bookId, obligationId: obligation.obligationId });
+    }
+    for (const goal of state.goals) {
+      this.store.goalIndex.set(goal.goalId, { bookId: goal.bookId, goalId: goal.goalId });
+    }
   }
 }
 
@@ -158,6 +185,30 @@ class InMemoryTransaction implements RepositoryTransaction {
       }
     }
     const location = this.store.entryIndex.get(entryId);
+    return location === undefined ? null : { ...location };
+  }
+
+  locateObligation(obligationId: ObligationId): ObligationLocation | null {
+    this.assertActive();
+    for (const state of this.bookWrites.values()) {
+      const obligation = state.obligations.find((candidate) => candidate.obligationId === obligationId);
+      if (obligation !== undefined) {
+        return { bookId: obligation.bookId, obligationId: obligation.obligationId };
+      }
+    }
+    const location = this.store.obligationIndex.get(obligationId);
+    return location === undefined ? null : { ...location };
+  }
+
+  locateGoal(goalId: GoalId): GoalLocation | null {
+    this.assertActive();
+    for (const state of this.bookWrites.values()) {
+      const goal = state.goals.find((candidate) => candidate.goalId === goalId);
+      if (goal !== undefined) {
+        return { bookId: goal.bookId, goalId: goal.goalId };
+      }
+    }
+    const location = this.store.goalIndex.get(goalId);
     return location === undefined ? null : { ...location };
   }
 
@@ -223,6 +274,12 @@ class InMemoryTransaction implements RepositoryTransaction {
     for (const state of this.bookWrites.values()) {
       for (const entry of state.entries) {
         this.store.entryIndex.set(entry.entryId, { bookId: entry.bookId, entryId: entry.entryId, kind: entry.kind });
+      }
+      for (const obligation of state.obligations) {
+        this.store.obligationIndex.set(obligation.obligationId, { bookId: obligation.bookId, obligationId: obligation.obligationId });
+      }
+      for (const goal of state.goals) {
+        this.store.goalIndex.set(goal.goalId, { bookId: goal.bookId, goalId: goal.goalId });
       }
     }
     this.active = false;

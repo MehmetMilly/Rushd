@@ -73,9 +73,55 @@ conflicts, rollback on injected failure) used to prove the protocol and to
 give P04's persistent adapter a conformance target. This proves one-process
 protocol behavior; it is not evidence of crash-safe browser durability.
 
-Not implemented yet (later P03 tasks): obligations and settlements,
-allocations, availability/pacing/completeness, Reality Check and recovery,
-recurring plans, cycle close/carry/reopen, persistent storage, and sync.
+## Everyday financial behavior (P03 Task B)
+
+Task B extends the same command protocol with the engine's working money
+semantics. It is still backend-only: the legacy UI does not call it.
+
+- `src/domain/activity/`: derivations over actual movement. Expenses, linked
+  expense reversals, and expense returns are immutable ledger facts. Editing
+  a paid fact (`correctExpense`) atomically appends a reversal plus its
+  optional replacement; originals are preserved verbatim. Returns are actual
+  money received and can never exceed the linked returnable amount.
+  Category and flexible-definition links describe only.
+- `src/domain/obligations/`: expected items kept strictly separate from money
+  movement. The residual reservation of an open obligation is
+  `max(0, expected - unreversed net payments)`; payments are expenses linked
+  to the obligation (overpayment allowed, residual floors at zero). Final
+  settlement and confirmed cancellation release the residual; a return after
+  settlement never silently reopens; reopening is explicit. Dispute is an
+  independent overlay: posted disputed payments stay outflows, and a
+  previewed `releaseDisputedResidual` records unresolved uncertainty that
+  persists (and degrades completeness) until real movement or settlement
+  resolves it. Lifecycle history is append-only events, never mutations.
+- `src/domain/allocations/`: tracked-pool derivations. Funding moves
+  spendable money into the pool exactly once; assignment divides
+  already-funded money among goals with no second availability effect;
+  unassignment returns to tracked-unallocated; release names its destination
+  cycle and returns money to spending exactly once. Linked
+  `reverseAllocationRecord` restores the prior state only when conservation
+  allows. Conservation holds: unallocated + assigned == funding - releases.
+  Goal progress is its own assigned balance.
+- `src/domain/calculations/`: pure queries. `computeAvailability` returns
+  the signed amount, exact component breakdown, currency, data-as-of
+  instant, calculation version, and both completeness dimensions; a negative
+  result stays negative. `computePacing` divides availability over explicit
+  caller-supplied eligible dates with exact integer arithmetic and a
+  reported remainder (duplicate/empty/out-of-cycle days are typed
+  unavailable results, never skewed divisions). `computeCompleteness`
+  derives pool and classification dimensions independently from recorded
+  evidence with typed reasons; a disputed or released-residual reason does
+  not disappear because transactions got categories, and vice versa.
+
+Handler and validator code is split per domain (`activity-handlers`,
+`obligation-handlers`, `allocation-handlers`, and matching `validation-*`
+modules) behind the unchanged `previewCommand`/`executeCommand` hub, so
+every new mutation keeps runtime validation, preview/confirmation, revision
+checks, atomic state+receipt+outbox commits, and the idempotency policy.
+
+Not implemented yet (later P03 tasks): Reality Check/recovery and observed
+boundaries, recurring plans and occurrences, cycle close/carry/reopen,
+obligation due dates, reversal of returns, persistent storage, and sync.
 
 ## Main Screens
 

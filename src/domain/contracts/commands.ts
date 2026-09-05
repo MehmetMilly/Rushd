@@ -20,9 +20,43 @@ import type { Money } from '../primitives/money';
 import type { CivilDate } from '../primitives/civil-date';
 import type { TimeZoneName } from '../primitives/instant';
 import type { MonthlyCycleAnchor } from '../primitives/monthly-cycle';
-import type { BookId, CycleId, EntryId, OperationId } from './identity';
+import type {
+  AllocationRecordId,
+  BookId,
+  CycleId,
+  EntryId,
+  GoalId,
+  ObligationId,
+  OperationId,
+} from './identity';
+import type { AllocationChange } from './ledger';
 
-export type CommandKind = 'createBook' | 'openCycle' | 'recordInflow' | 'reverseInflow';
+/** The change types an allocation record can carry. */
+export type AllocationChangeType = AllocationChange['type'];
+
+export type CommandKind =
+  | 'createBook'
+  | 'openCycle'
+  | 'recordInflow'
+  | 'reverseInflow'
+  | 'recordExpense'
+  | 'correctExpense'
+  | 'recordExpenseReturn'
+  | 'createObligation'
+  | 'recordObligationPayment'
+  | 'recordObligationReturn'
+  | 'settleObligationFinally'
+  | 'cancelObligation'
+  | 'reopenObligation'
+  | 'openObligationDispute'
+  | 'releaseDisputedResidual'
+  | 'createGoal'
+  | 'fundAllocationPool'
+  | 'assignToGoal'
+  | 'unassignFromGoal'
+  | 'releaseAllocation'
+  | 'reverseAllocationRecord'
+  | 'setBuffer';
 
 export interface CreateBookCommand {
   readonly kind: 'createBook';
@@ -75,23 +109,254 @@ export interface ReverseInflowCommand {
   readonly note: string;
 }
 
-export type FinanceCommand = CreateBookCommand | OpenCycleCommand | RecordInflowCommand | ReverseInflowCommand;
+export interface RecordExpenseCommand {
+  readonly kind: 'recordExpense';
+  readonly bookId: BookId;
+  /** Strictly positive book-currency amount that left the pool. */
+  readonly amount: Money;
+  readonly occurredAt: OccurredAt;
+  readonly note: string;
+  /** Descriptive only; never affects availability. */
+  readonly category: string | null;
+  /** Descriptive flexible-plan link; never affects availability. */
+  readonly flexibleDefinitionId: string | null;
+}
+
+/**
+ * A linked correction of a paid expense: appends a reversal fact and, when a
+ * replacement is supplied, its replacement expense atomically in one command.
+ * Unspecified replacement fields carry over from the original; an explicit
+ * `null` category/flexibleDefinitionId clears the link.
+ */
+export interface CorrectExpenseCommand {
+  readonly kind: 'correctExpense';
+  readonly bookId: BookId;
+  readonly expenseEntryId: EntryId;
+  /** The correction's own financial date (both facts are validated on it). */
+  readonly occurredAt: OccurredAt;
+  readonly note: string;
+  readonly replacement: {
+    readonly amount?: Money;
+    readonly localDate?: CivilDate;
+    readonly note?: string;
+    readonly category?: string | null;
+    readonly flexibleDefinitionId?: string | null;
+  } | null;
+}
+
+export interface RecordExpenseReturnCommand {
+  readonly kind: 'recordExpenseReturn';
+  readonly bookId: BookId;
+  readonly expenseEntryId: EntryId;
+  /** Strictly positive book-currency amount actually received back. */
+  readonly amount: Money;
+  readonly occurredAt: OccurredAt;
+  readonly note: string;
+}
+
+export interface CreateObligationCommand {
+  readonly kind: 'createObligation';
+  readonly bookId: BookId;
+  /** Caller-supplied stable identity, so retries and sync dedupe cleanly. */
+  readonly obligationId: ObligationId;
+  /** Strictly positive expected amount; reserves intent, not money movement. */
+  readonly expectedAmount: Money;
+  readonly note: string;
+  readonly category: string | null;
+}
+
+export interface RecordObligationPaymentCommand {
+  readonly kind: 'recordObligationPayment';
+  readonly bookId: BookId;
+  readonly obligationId: ObligationId;
+  /** Strictly positive book-currency amount actually paid. */
+  readonly amount: Money;
+  readonly occurredAt: OccurredAt;
+  readonly note: string;
+  readonly category: string | null;
+}
+
+export interface RecordObligationReturnCommand {
+  readonly kind: 'recordObligationReturn';
+  readonly bookId: BookId;
+  readonly obligationId: ObligationId;
+  /** Strictly positive book-currency amount actually received back. */
+  readonly amount: Money;
+  readonly occurredAt: OccurredAt;
+  readonly note: string;
+}
+
+export interface SettleObligationFinallyCommand {
+  readonly kind: 'settleObligationFinally';
+  readonly bookId: BookId;
+  readonly obligationId: ObligationId;
+  readonly note: string;
+}
+
+export interface CancelObligationCommand {
+  readonly kind: 'cancelObligation';
+  readonly bookId: BookId;
+  readonly obligationId: ObligationId;
+  readonly note: string;
+}
+
+export interface ReopenObligationCommand {
+  readonly kind: 'reopenObligation';
+  readonly bookId: BookId;
+  readonly obligationId: ObligationId;
+  readonly note: string;
+}
+
+export interface OpenObligationDisputeCommand {
+  readonly kind: 'openObligationDispute';
+  readonly bookId: BookId;
+  readonly obligationId: ObligationId;
+  readonly note: string;
+}
+
+/**
+ * Previewed release of an open disputed obligation's unpaid residual. It
+ * records unresolved uncertainty: the money never came back, so completeness
+ * degrades until a real return, payment, or settlement resolves it.
+ */
+export interface ReleaseDisputedResidualCommand {
+  readonly kind: 'releaseDisputedResidual';
+  readonly bookId: BookId;
+  readonly obligationId: ObligationId;
+  readonly note: string;
+}
+
+export interface CreateGoalCommand {
+  readonly kind: 'createGoal';
+  readonly bookId: BookId;
+  readonly goalId: GoalId;
+  readonly name: string;
+  /** Strictly positive target in the book currency. */
+  readonly targetAmount: Money;
+}
+
+export interface FundAllocationPoolCommand {
+  readonly kind: 'fundAllocationPool';
+  readonly bookId: BookId;
+  /** Strictly positive amount moved from spendable into the tracked pool. */
+  readonly amount: Money;
+  readonly occurredAt: OccurredAt;
+  readonly note: string;
+}
+
+export interface AssignToGoalCommand {
+  readonly kind: 'assignToGoal';
+  readonly bookId: BookId;
+  readonly goalId: GoalId;
+  /** Strictly positive amount of already-funded tracked money. */
+  readonly amount: Money;
+  readonly note: string;
+}
+
+export interface UnassignFromGoalCommand {
+  readonly kind: 'unassignFromGoal';
+  readonly bookId: BookId;
+  readonly goalId: GoalId;
+  /** Strictly positive amount returned to tracked-unallocated. */
+  readonly amount: Money;
+  readonly note: string;
+}
+
+export interface ReleaseAllocationCommand {
+  readonly kind: 'releaseAllocation';
+  readonly bookId: BookId;
+  /** Null releases from tracked-unallocated; a goal releases from that goal. */
+  readonly goalId: GoalId | null;
+  /** Strictly positive amount returned to spending exactly once. */
+  readonly amount: Money;
+  /** The named cycle the money returns to as spendable funds. */
+  readonly destinationCycleId: CycleId;
+  readonly occurredAt: OccurredAt;
+  readonly note: string;
+}
+
+export interface ReverseAllocationRecordCommand {
+  readonly kind: 'reverseAllocationRecord';
+  readonly bookId: BookId;
+  readonly allocationRecordId: AllocationRecordId;
+  readonly note: string;
+}
+
+export interface SetBufferCommand {
+  readonly kind: 'setBuffer';
+  readonly bookId: BookId;
+  /** Non-negative book-currency buffer; zero clears it. */
+  readonly buffer: Money;
+  readonly note: string;
+}
+
+export type FinanceCommand =
+  | CreateBookCommand
+  | OpenCycleCommand
+  | RecordInflowCommand
+  | ReverseInflowCommand
+  | RecordExpenseCommand
+  | CorrectExpenseCommand
+  | RecordExpenseReturnCommand
+  | CreateObligationCommand
+  | RecordObligationPaymentCommand
+  | RecordObligationReturnCommand
+  | SettleObligationFinallyCommand
+  | CancelObligationCommand
+  | ReopenObligationCommand
+  | OpenObligationDisputeCommand
+  | ReleaseDisputedResidualCommand
+  | CreateGoalCommand
+  | FundAllocationPoolCommand
+  | AssignToGoalCommand
+  | UnassignFromGoalCommand
+  | ReleaseAllocationCommand
+  | ReverseAllocationRecordCommand
+  | SetBufferCommand;
 
 /**
  * Declared reversal policy per command kind:
- * - createBook/openCycle: no reversal exists yet in Task A (later P03 tasks
- *   add previewed lifecycle corrections).
- * - recordInflow: reversible by appending a linked reversal fact.
- * - reverseInflow: itself a linked reversal; it is never reversed, a new
- *   inflow corrects it.
+ * - createBook/openCycle: lifecycle corrections arrive with cycle close in a
+ *   later P03 task.
+ * - recordInflow/recordExpense/recordObligationPayment: reversible by
+ *   appending a linked reversal fact (inflow reversal; expense correction).
+ * - reverseInflow/correctExpense: themselves linked corrections; they are
+ *   never reversed, a new fact corrects them.
+ * - obligations lifecycle, goals, buffer: managed by explicit previewed
+ *   lifecycle commands rather than linked reversals.
+ * - allocation records: reversible by appending a linked inverse record.
+ * - expense/obligation returns: corrective receipts; a mistaken return is
+ *   corrected by a later task's linked-correction path (not yet implemented).
  */
-export type ReversalPolicy = 'lifecycleCorrectionLaterTask' | 'appendsLinkedReversal' | 'isALinkedReversal';
+export type ReversalPolicy =
+  | 'lifecycleCorrectionLaterTask'
+  | 'appendsLinkedReversal'
+  | 'isALinkedReversal'
+  | 'managedByLifecycleCommands';
 
 export const COMMAND_REVERSAL_POLICY: Readonly<Record<CommandKind, ReversalPolicy>> = Object.freeze({
   createBook: 'lifecycleCorrectionLaterTask',
   openCycle: 'lifecycleCorrectionLaterTask',
   recordInflow: 'appendsLinkedReversal',
   reverseInflow: 'isALinkedReversal',
+  recordExpense: 'appendsLinkedReversal',
+  correctExpense: 'isALinkedReversal',
+  recordExpenseReturn: 'lifecycleCorrectionLaterTask',
+  createObligation: 'managedByLifecycleCommands',
+  recordObligationPayment: 'appendsLinkedReversal',
+  recordObligationReturn: 'lifecycleCorrectionLaterTask',
+  settleObligationFinally: 'managedByLifecycleCommands',
+  cancelObligation: 'managedByLifecycleCommands',
+  reopenObligation: 'managedByLifecycleCommands',
+  openObligationDispute: 'managedByLifecycleCommands',
+  releaseDisputedResidual: 'managedByLifecycleCommands',
+  createGoal: 'managedByLifecycleCommands',
+  fundAllocationPool: 'appendsLinkedReversal',
+  assignToGoal: 'appendsLinkedReversal',
+  unassignFromGoal: 'appendsLinkedReversal',
+  releaseAllocation: 'appendsLinkedReversal',
+  reverseAllocationRecord: 'isALinkedReversal',
+  setBuffer: 'managedByLifecycleCommands',
 });
 
 /**
@@ -104,6 +369,8 @@ export interface CommandConfirmation {
   readonly expectedRevision: number;
   readonly previewDigest: string;
 }
+
+export type ObligationDisputeResolution = 'return' | 'finalSettlement' | 'cancellation' | 'reopening';
 
 export type CommandEffect =
   | {
@@ -134,6 +401,112 @@ export type CommandEffect =
       readonly cycleId: CycleId;
       readonly localDate: CivilDate;
       readonly amount: Money;
+    }
+  | {
+      readonly kind: 'expenseRecorded';
+      readonly entryId: EntryId;
+      readonly cycleId: CycleId;
+      readonly localDate: CivilDate;
+      readonly amount: Money;
+      readonly linkedObligationId: ObligationId | null;
+      readonly replacesEntryId: EntryId | null;
+    }
+  | {
+      readonly kind: 'expenseReversalRecorded';
+      readonly entryId: EntryId;
+      readonly reversesEntryId: EntryId;
+      readonly cycleId: CycleId;
+      readonly localDate: CivilDate;
+      readonly amount: Money;
+    }
+  | {
+      readonly kind: 'expenseReturnRecorded';
+      readonly entryId: EntryId;
+      readonly cycleId: CycleId;
+      readonly localDate: CivilDate;
+      readonly amount: Money;
+      readonly linkedExpenseEntryId: EntryId | null;
+      readonly linkedObligationId: ObligationId | null;
+    }
+  | {
+      readonly kind: 'obligationCreated';
+      readonly obligationId: ObligationId;
+      readonly cycleId: CycleId;
+      readonly expectedAmount: Money;
+    }
+  | {
+      readonly kind: 'obligationFinallySettled';
+      readonly obligationId: ObligationId;
+      readonly releasedResidual: Money;
+    }
+  | {
+      readonly kind: 'obligationCancelled';
+      readonly obligationId: ObligationId;
+      readonly releasedResidual: Money;
+    }
+  | {
+      readonly kind: 'obligationReopened';
+      readonly obligationId: ObligationId;
+      readonly reinstatedResidual: Money;
+    }
+  | {
+      readonly kind: 'obligationDisputeOpened';
+      readonly obligationId: ObligationId;
+    }
+  | {
+      readonly kind: 'obligationDisputeResolved';
+      readonly obligationId: ObligationId;
+      readonly via: ObligationDisputeResolution;
+    }
+  | {
+      readonly kind: 'obligationResidualReleased';
+      readonly obligationId: ObligationId;
+      readonly releasedResidual: Money;
+    }
+  | {
+      readonly kind: 'goalCreated';
+      readonly goalId: GoalId;
+      readonly targetAmount: Money;
+    }
+  | {
+      readonly kind: 'allocationFunded';
+      readonly recordId: AllocationRecordId;
+      readonly cycleId: CycleId;
+      readonly localDate: CivilDate;
+      readonly amount: Money;
+    }
+  | {
+      readonly kind: 'allocationAssigned';
+      readonly recordId: AllocationRecordId;
+      readonly goalId: GoalId;
+      readonly amount: Money;
+    }
+  | {
+      readonly kind: 'allocationUnassigned';
+      readonly recordId: AllocationRecordId;
+      readonly goalId: GoalId;
+      readonly amount: Money;
+    }
+  | {
+      readonly kind: 'allocationReleased';
+      readonly recordId: AllocationRecordId;
+      readonly cycleId: CycleId;
+      readonly localDate: CivilDate;
+      readonly destinationCycleId: CycleId;
+      readonly goalId: GoalId | null;
+      readonly amount: Money;
+    }
+  | {
+      readonly kind: 'allocationRecordReversed';
+      readonly recordId: AllocationRecordId;
+      readonly reversesRecordId: AllocationRecordId;
+      readonly reversedChange: Exclude<AllocationChangeType, 'reversal'>;
+      readonly amount: Money;
+    }
+  | {
+      readonly kind: 'bufferSet';
+      readonly amount: Money;
+      readonly previousAmount: Money | null;
     };
 
 export interface CommandReceipt {
@@ -210,7 +583,71 @@ export type CommandFailure =
       readonly entryId: EntryId;
       readonly existingReversalEntryId: EntryId;
     }
-  | { readonly kind: 'notAnInflow'; readonly bookId: BookId; readonly entryId: EntryId };
+  | { readonly kind: 'notAnInflow'; readonly bookId: BookId; readonly entryId: EntryId }
+  | { readonly kind: 'notAnExpense'; readonly bookId: BookId; readonly entryId: EntryId }
+  | {
+      readonly kind: 'returnExceedsReturnable';
+      readonly bookId: BookId;
+      readonly targetKind: 'expense' | 'obligation';
+      readonly targetId: string;
+      readonly requested: Money;
+      readonly returnable: Money;
+    }
+  | { readonly kind: 'unknownObligation'; readonly bookId: BookId; readonly obligationId: ObligationId }
+  | {
+      readonly kind: 'crossBookObligation';
+      readonly bookId: BookId;
+      readonly obligationId: ObligationId;
+      readonly obligationBookId: BookId;
+    }
+  | { readonly kind: 'unknownGoal'; readonly bookId: BookId; readonly goalId: GoalId }
+  | {
+      readonly kind: 'crossBookGoal';
+      readonly bookId: BookId;
+      readonly goalId: GoalId;
+      readonly goalBookId: BookId;
+    }
+  | { readonly kind: 'goalAlreadyExists'; readonly bookId: BookId; readonly goalId: GoalId }
+  | {
+      readonly kind: 'obligationNotOpen';
+      readonly bookId: BookId;
+      readonly obligationId: ObligationId;
+      readonly status: 'finallySettled' | 'cancelled';
+    }
+  | {
+      readonly kind: 'obligationNotClosed';
+      readonly bookId: BookId;
+      readonly obligationId: ObligationId;
+      readonly status: 'open';
+    }
+  | { readonly kind: 'disputeAlreadyOpen'; readonly bookId: BookId; readonly obligationId: ObligationId }
+  | { readonly kind: 'disputeNotOpen'; readonly bookId: BookId; readonly obligationId: ObligationId }
+  | {
+      readonly kind: 'residualNotReleasable';
+      readonly bookId: BookId;
+      readonly obligationId: ObligationId;
+      readonly detail: string;
+    }
+  | { readonly kind: 'unknownAllocationRecord'; readonly bookId: BookId; readonly recordId: AllocationRecordId }
+  | {
+      readonly kind: 'invalidAllocationReversal';
+      readonly bookId: BookId;
+      readonly recordId: AllocationRecordId;
+      readonly detail: string;
+    }
+  | {
+      readonly kind: 'insufficientTrackedFunds';
+      readonly bookId: BookId;
+      readonly pool: { readonly kind: 'unallocated' } | { readonly kind: 'goal'; readonly goalId: GoalId };
+      readonly requested: Money;
+      readonly available: Money;
+    }
+  | {
+      readonly kind: 'invalidReleaseDestination';
+      readonly bookId: BookId;
+      readonly requestedCycleId: CycleId;
+      readonly openCycleId: CycleId;
+    };
 
 export type CommandPreviewResult =
   | { readonly ok: true; readonly preview: CommandPreview }
@@ -271,5 +708,37 @@ export function describeCommandFailure(failure: CommandFailure): string {
       return `entry ${failure.entryId} is already reversed by ${failure.existingReversalEntryId}`;
     case 'notAnInflow':
       return `entry ${failure.entryId} is not an inflow and cannot be reversed`;
+    case 'notAnExpense':
+      return `entry ${failure.entryId} is not an expense and cannot be corrected this way`;
+    case 'returnExceedsReturnable':
+      return `${failure.targetKind} ${failure.targetId} can only return ${failure.returnable.minorUnits} ${failure.returnable.currency}, not ${failure.requested.minorUnits}`;
+    case 'unknownObligation':
+      return `obligation ${failure.obligationId} is unknown in book ${failure.bookId}`;
+    case 'crossBookObligation':
+      return `obligation ${failure.obligationId} belongs to book ${failure.obligationBookId}, not book ${failure.bookId}`;
+    case 'unknownGoal':
+      return `goal ${failure.goalId} is unknown in book ${failure.bookId}`;
+    case 'crossBookGoal':
+      return `goal ${failure.goalId} belongs to book ${failure.goalBookId}, not book ${failure.bookId}`;
+    case 'goalAlreadyExists':
+      return `goal ${failure.goalId} already exists in book ${failure.bookId}`;
+    case 'obligationNotOpen':
+      return `obligation ${failure.obligationId} is ${failure.status}, not open`;
+    case 'obligationNotClosed':
+      return `obligation ${failure.obligationId} is still open and cannot be reopened`;
+    case 'disputeAlreadyOpen':
+      return `obligation ${failure.obligationId} already has an open dispute`;
+    case 'disputeNotOpen':
+      return `obligation ${failure.obligationId} has no open dispute`;
+    case 'residualNotReleasable':
+      return `disputed residual of ${failure.obligationId} cannot be released: ${failure.detail}`;
+    case 'unknownAllocationRecord':
+      return `allocation record ${failure.recordId} is unknown in book ${failure.bookId}`;
+    case 'invalidAllocationReversal':
+      return `allocation record ${failure.recordId} cannot be reversed: ${failure.detail}`;
+    case 'insufficientTrackedFunds':
+      return `tracked pool ${failure.pool.kind === 'goal' ? failure.pool.goalId : 'unallocated'} has ${failure.available.minorUnits}, not ${failure.requested.minorUnits}`;
+    case 'invalidReleaseDestination':
+      return `release destination ${failure.requestedCycleId} is not the open cycle ${failure.openCycleId}`;
   }
 }

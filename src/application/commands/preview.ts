@@ -67,13 +67,18 @@ export function previewCommand(
 
   let expectedRevision: number;
   let effects: readonly CommandEffect[];
+  const refs = {
+    locateEntry: (entryId: Parameters<FinanceReadModel['locateEntry']>[0]) => readModel.locateEntry(entryId),
+    locateObligation: (obligationId: Parameters<FinanceReadModel['locateObligation']>[0]) => readModel.locateObligation(obligationId),
+    locateGoal: (goalId: Parameters<FinanceReadModel['locateGoal']>[0]) => readModel.locateGoal(goalId),
+  };
   if (command.kind === 'createBook') {
     const existing = readModel.getBookState(command.bookId);
     if (existing !== null) {
       return { ok: false, failure: { kind: 'bookAlreadyExists', bookId: command.bookId } };
     }
     expectedRevision = 0;
-    const applied = dispatchApply(command, null, provisional, PREVIEW_OPERATION_ID, (entryId) => readModel.locateEntry(entryId));
+    const applied = dispatchApply(command, null, provisional, PREVIEW_OPERATION_ID, refs);
     if (!applied.ok) return { ok: false, failure: applied.failure };
     effects = applied.effects;
   } else {
@@ -82,7 +87,7 @@ export function previewCommand(
       return { ok: false, failure: { kind: 'unknownBook', bookId: command.bookId } };
     }
     expectedRevision = state.revision;
-    const applied = dispatchApply(command, state, provisional, PREVIEW_OPERATION_ID, (entryId) => readModel.locateEntry(entryId));
+    const applied = dispatchApply(command, state, provisional, PREVIEW_OPERATION_ID, refs);
     if (!applied.ok) return { ok: false, failure: applied.failure };
     effects = applied.effects;
   }

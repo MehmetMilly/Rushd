@@ -20,12 +20,22 @@
 
 import type { BookState, LedgerEntry } from './ledger';
 import type { OperationRecord, OutboxEnvelope } from './commands';
-import type { BookId, EntryId, OperationId } from './identity';
+import type { BookId, EntryId, GoalId, ObligationId, OperationId } from './identity';
 
 export interface EntryLocation {
   readonly bookId: BookId;
   readonly entryId: EntryId;
   readonly kind: LedgerEntry['kind'];
+}
+
+export interface ObligationLocation {
+  readonly bookId: BookId;
+  readonly obligationId: ObligationId;
+}
+
+export interface GoalLocation {
+  readonly bookId: BookId;
+  readonly goalId: GoalId;
 }
 
 /**
@@ -35,6 +45,8 @@ export interface EntryLocation {
 export interface FinanceReadModel {
   getBookState(bookId: BookId): BookState | null;
   locateEntry(entryId: EntryId): EntryLocation | null;
+  locateObligation(obligationId: ObligationId): ObligationLocation | null;
+  locateGoal(goalId: GoalId): GoalLocation | null;
 }
 
 export interface RepositoryTransaction extends FinanceReadModel {
