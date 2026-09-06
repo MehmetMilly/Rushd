@@ -18,6 +18,7 @@
 import type { OperationId } from '../../domain/contracts/identity';
 import type { BookState, ObligationEvent, ObligationRecord } from '../../domain/contracts/ledger';
 import { findEntryById } from '../../domain/contracts/ledger';
+import { isExpenseReturnLive } from '../../domain/activity/derive';
 import type {
   CancelObligationCommand,
   CommandEffect,
@@ -348,6 +349,15 @@ export function applyResolveObligationDispute(
         failure: {
           kind: 'invalidCommand',
           issues: [`linkedReturnEntryId: ${command.linkedReturnEntryId} is not a return of obligation ${command.obligationId}`],
+        },
+      };
+    }
+    if (!isExpenseReturnLive(state, linked.entryId)) {
+      return {
+        ok: false,
+        failure: {
+          kind: 'invalidCommand',
+          issues: [`linkedReturnEntryId: ${command.linkedReturnEntryId} was corrected and no longer evidences a received return`],
         },
       };
     }

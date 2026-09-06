@@ -887,4 +887,113 @@ describe('F4: disputes resolve only when explicitly resolved', () => {
     const reopened = await harness.run({ kind: 'reopenObligation', bookId: BOOK_ID, obligationId: 'obl-f4b', note: '' });
     expect(reopened.receipt.effects.map((effect) => effect.kind)).toEqual(['obligationReopened']);
   });
+
+  it('returnReceived rejects a replaced original without writes and accepts the live replacement', async () => {
+    const harness = makeHarness();
+    await seedStandardBook(harness);
+    await harness.run({ kind: 'createObligation', bookId: BOOK_ID, obligationId: 'obl-f4c', expectedAmount: SAR(8_000), note: '', category: null });
+    await harness.run({
+      kind: 'recordObligationPayment',
+      bookId: BOOK_ID,
+      obligationId: 'obl-f4c',
+      amount: SAR(3_000),
+      occurredAt: { kind: 'civilDate', localDate: '2026-09-05' },
+      note: '',
+      category: null,
+    });
+    await harness.run({ kind: 'openObligationDispute', bookId: BOOK_ID, obligationId: 'obl-f4c', note: '' });
+    const refund = await harness.run({
+      kind: 'recordObligationReturn',
+      bookId: BOOK_ID,
+      obligationId: 'obl-f4c',
+      amount: SAR(3_000),
+      occurredAt: { kind: 'civilDate', localDate: '2026-09-06' },
+      note: '',
+    });
+    const originalId = effectRecordId(refund.receipt, 'expenseReturnRecorded');
+    const correction = await harness.run({
+      kind: 'correctExpenseReturn',
+      bookId: BOOK_ID,
+      returnEntryId: originalId,
+      occurredAt: { kind: 'civilDate', localDate: '2026-09-07' },
+      note: '',
+      replacement: { amount: SAR(2_000) },
+    });
+    const replacementId = effectRecordId(correction.receipt, 'expenseReturnRecorded');
+    const revisionBefore = harness.state().revision;
+    const entriesBefore = harness.state().entries.length;
+    expect(harness.previewFail({
+      kind: 'resolveObligationDispute',
+      bookId: BOOK_ID,
+      obligationId: 'obl-f4c',
+      resolution: 'returnReceived',
+      linkedReturnEntryId: originalId,
+      note: '',
+    }).kind).toBe('invalidCommand');
+    expect(harness.state().revision).toBe(revisionBefore);
+    expect(harness.state().entries).toHaveLength(entriesBefore);
+    await harness.run({
+      kind: 'resolveObligationDispute',
+      bookId: BOOK_ID,
+      obligationId: 'obl-f4c',
+      resolution: 'returnReceived',
+      linkedReturnEntryId: replacementId,
+      note: '',
+    });
+    expect(deriveObligationView(harness.state(), obligationId('obl-f4c'))?.disputeOpen).toBe(false);
+  });
+
+  it('a voided return cannot evidence returnReceived while other reasons still resolve', async () => {
+    const harness = makeHarness();
+    await seedStandardBook(harness);
+    await harness.run({ kind: 'createObligation', bookId: BOOK_ID, obligationId: 'obl-f4d', expectedAmount: SAR(8_000), note: '', category: null });
+    await harness.run({
+      kind: 'recordObligationPayment',
+      bookId: BOOK_ID,
+      obligationId: 'obl-f4d',
+      amount: SAR(3_000),
+      occurredAt: { kind: 'civilDate', localDate: '2026-09-05' },
+      note: '',
+      category: null,
+    });
+    await harness.run({ kind: 'openObligationDispute', bookId: BOOK_ID, obligationId: 'obl-f4d', note: '' });
+    const refund = await harness.run({
+      kind: 'recordObligationReturn',
+      bookId: BOOK_ID,
+      obligationId: 'obl-f4d',
+      amount: SAR(3_000),
+      occurredAt: { kind: 'civilDate', localDate: '2026-09-06' },
+      note: '',
+    });
+    const originalId = effectRecordId(refund.receipt, 'expenseReturnRecorded');
+    await harness.run({
+      kind: 'correctExpenseReturn',
+      bookId: BOOK_ID,
+      returnEntryId: originalId,
+      occurredAt: { kind: 'civilDate', localDate: '2026-09-07' },
+      note: 'never arrived',
+      replacement: null,
+    });
+    const revisionBefore = harness.state().revision;
+    const entriesBefore = harness.state().entries.length;
+    expect(harness.previewFail({
+      kind: 'resolveObligationDispute',
+      bookId: BOOK_ID,
+      obligationId: 'obl-f4d',
+      resolution: 'returnReceived',
+      linkedReturnEntryId: originalId,
+      note: '',
+    }).kind).toBe('invalidCommand');
+    expect(harness.state().revision).toBe(revisionBefore);
+    expect(harness.state().entries).toHaveLength(entriesBefore);
+    await harness.run({
+      kind: 'resolveObligationDispute',
+      bookId: BOOK_ID,
+      obligationId: 'obl-f4d',
+      resolution: 'notOwed',
+      linkedReturnEntryId: null,
+      note: '',
+    });
+    expect(deriveObligationView(harness.state(), obligationId('obl-f4d'))?.disputeOpen).toBe(false);
+  });
 });
