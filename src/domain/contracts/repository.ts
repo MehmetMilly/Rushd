@@ -19,7 +19,7 @@
  */
 
 import type { BookState, LedgerEntry } from './ledger';
-import type { OperationRecord, OutboxEnvelope } from './commands';
+import type { OperationRecord, OutboxDeliveryState, OutboxEnvelope } from './commands';
 import type { DeviceId, RepositoryScopeId } from '../sync/scope';
 import type {
   BookId,
@@ -89,6 +89,22 @@ export interface RepositoryTransaction extends FinanceReadModel {
   putBookState(next: BookState): void;
   putOperation(record: OperationRecord): void;
   putOutboxEntry(envelope: OutboxEnvelope): void;
+  /**
+   * Reads persisted delivery metadata inside the transaction, recording
+   * its version for the commit guard. Returns null when no delivery
+   * record exists yet for the operation.
+   */
+  getDeliveryState(operationId: OperationId): OutboxDeliveryState | null;
+  /**
+   * Stages a delivery-metadata write. The write commits only when the
+   * committed version still equals the version read in this transaction
+   * (absent reads require continued absence) and the staged record
+   * advances exactly one version — first-committer-wins, so concurrent
+   * delivery workers serialize or fail explicitly instead of losing
+   * updates. Like every write, a delivery write without a prior read in
+   * the same transaction fails.
+   */
+  putDeliveryState(next: OutboxDeliveryState): void;
   /**
    * Allocates the next monotonic durable enqueue sequence for this
    * identity-scoped repository. The executor calls it once per committed

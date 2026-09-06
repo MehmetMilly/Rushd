@@ -225,6 +225,74 @@ export class InMemoryFinanceRepository implements TransactionalRepository, Finan
     return frozenCopy(this.store.outbox);
   }
 
+  /**
+   * Test-adapter-specific restore of a `snapshotBytes()` snapshot. The
+   * checkpoint store uses it to roll back finance effects when a pulled
+   * batch fails midway, proving atomic finance-plus-checkpoint
+   * application. P04 implements the same boundary as a real database
+   * transaction instead of snapshot/restore.
+   */
+  restoreSnapshot(bytes: string): void {
+    const snapshot = JSON.parse(bytes) as {
+      books: BookState[];
+      operations: OperationRecord[];
+      outbox: OutboxEnvelope[];
+      delivery: OutboxDeliveryState[];
+      enqueueSequence: number;
+    };
+    if (!Array.isArray(snapshot.books) || !Array.isArray(snapshot.operations) || !Array.isArray(snapshot.outbox)) {
+      throw new Error('refusing to restore a malformed finance snapshot');
+    }
+    if (!Number.isSafeInteger(snapshot.enqueueSequence) || snapshot.enqueueSequence < 0) {
+      throw new Error('refusing to restore a finance snapshot with an invalid sequence counter');
+    }
+    this.store.books.clear();
+    for (const state of snapshot.books) {
+      this.store.books.set(state.book.id, cloneValue(state));
+    }
+    this.store.operations.clear();
+    for (const record of snapshot.operations) {
+      this.store.operations.set(record.operationId, cloneValue(record));
+    }
+    this.store.outbox.length = 0;
+    this.store.outbox.push(...snapshot.outbox.map((envelope) => cloneValue(envelope)));
+    this.store.delivery.clear();
+    for (const delivery of snapshot.delivery ?? []) {
+      this.store.delivery.set(delivery.operationId as string, cloneValue(delivery));
+    }
+    this.store.enqueueSequence = snapshot.enqueueSequence;
+    this.store.entryIndex.clear();
+    this.store.obligationIndex.clear();
+    this.store.goalIndex.clear();
+    this.store.observationIndex.clear();
+    this.store.planIndex.clear();
+    this.store.occurrenceIndex.clear();
+    this.store.settlementIndex.clear();
+    for (const state of this.store.books.values()) {
+      for (const entry of state.entries) {
+        this.store.entryIndex.set(entry.entryId, { bookId: entry.bookId, entryId: entry.entryId, kind: entry.kind });
+      }
+      for (const obligation of state.obligations) {
+        this.store.obligationIndex.set(obligation.obligationId, { bookId: obligation.bookId, obligationId: obligation.obligationId });
+      }
+      for (const goal of state.goals) {
+        this.store.goalIndex.set(goal.goalId, { bookId: goal.bookId, goalId: goal.goalId });
+      }
+      for (const observation of state.observations) {
+        this.store.observationIndex.set(observation.observationId, { bookId: observation.bookId, observationId: observation.observationId });
+      }
+      for (const plan of state.plans) {
+        this.store.planIndex.set(plan.planId, { bookId: plan.bookId, planId: plan.planId });
+      }
+      for (const occurrence of state.planOccurrences) {
+        this.store.occurrenceIndex.set(occurrence.occurrenceId, { bookId: occurrence.bookId, occurrenceId: occurrence.occurrenceId });
+      }
+      for (const settlement of state.settlements) {
+        this.store.settlementIndex.set(settlement.settlementId, { bookId: settlement.bookId, settlementId: settlement.settlementId });
+      }
+    }
+  }
+
   /** Test-adapter-specific accessor to persisted delivery metadata. */
   getDeliveryState(operationId: OperationId): OutboxDeliveryState | null {
     const state = this.store.delivery.get(operationId);
@@ -234,25 +302,28 @@ export class InMemoryFinanceRepository implements TransactionalRepository, Finan
   /**
    * Test-adapter-specific delivery persistence boundary: records one
    * transport attempt for a committed operation inside its own atomic
-   * transaction. The conformance suite injects `putDeliveryState` failures
-   * here to prove byte-identical rollback and exactly-one retry. Unknown
-   * operations throw: delivery metadata never exists without its intent.
+   * transaction, reading through the transaction so concurrent workers
+   * serialize or fail explicitly. The conformance suite injects
+   * `putDeliveryState` failures here to prove byte-identical rollback and
+   * exactly-one retry. Unknown operations throw: delivery metadata never
+   * exists without its intent.
    */
   async updateDeliveryState(operationId: OperationId, outcome: DeliveryAttemptOutcome): Promise<OutboxDeliveryState> {
     return this.runTransaction((transaction) => {
-      const committed = this.store.delivery.get(operationId);
-      let current: OutboxDeliveryState;
-      if (committed !== undefined) {
-        current = committed;
+      const tx = transaction as InMemoryTransaction;
+      const current = tx.getDeliveryState(operationId);
+      let base: OutboxDeliveryState;
+      if (current !== null) {
+        base = current;
       } else {
         const intent = this.store.outbox.find((envelope) => (envelope.operationId as string) === (operationId as string));
         if (intent === undefined) {
           throw new Error(`unknown operation for delivery update: ${operationId as string}`);
         }
-        current = initialOutboxDelivery(intent);
+        base = initialOutboxDelivery(intent);
       }
-      const next = recordDeliveryAttempt(cloneValue(current), outcome);
-      (transaction as InMemoryTransaction).putDeliveryState(next);
+      const next = recordDeliveryAttempt(cloneValue(base), outcome);
+      tx.putDeliveryState(next);
       return frozenCopy(next);
     });
   }
@@ -296,6 +367,7 @@ class InMemoryTransaction implements RepositoryTransaction {
   private readonly operationWrites = new Map<string, OperationRecord>();
   private readonly outboxWrites: OutboxEnvelope[] = [];
   private readonly deliveryWrites = new Map<string, OutboxDeliveryState>();
+  private readonly deliveryVersionAtRead = new Map<string, number | null>();
   private readonly bookRevisionAtRead = new Map<string, number>();
   private sequenceBase: number | null = null;
   private sequencesAllocated = 0;
@@ -454,18 +526,40 @@ class InMemoryTransaction implements RepositoryTransaction {
   }
 
   /**
-   * Test-adapter-specific tentative delivery write. Delivery metadata is
-   * transactional like every other write: injection fails before the
-   * overlay mutates, and abandon/commit semantics match the finance
-   * records, so the conformance suite can prove byte-identical rollback
-   * at the delivery boundary.
+   * Test-adapter-specific tentative delivery write with first-committer-wins
+   * semantics. The record must have been read in this transaction, and must
+   * advance exactly one version past the read version (an absent read counts
+   * as version 0 via the implicit initial state, so the first staged write
+   * is version 1). The commit rechecks the guard against committed state.
    */
   putDeliveryState(next: OutboxDeliveryState): void {
     this.assertActive();
     if (this.takeInjectedFailure('putDeliveryState')) {
       throw new Error(`injected adapter failure at putDeliveryState (operation ${next.operationId as string})`);
     }
-    this.deliveryWrites.set(next.operationId as string, cloneValue(next));
+    const key = next.operationId as string;
+    if (!this.deliveryVersionAtRead.has(key)) {
+      throw new ConcurrencyConflictError(`delivery for ${key} must be read before it is written in a transaction`);
+    }
+    const readVersion = this.deliveryVersionAtRead.get(key) ?? 0;
+    if (next.version !== readVersion + 1) {
+      throw new ConcurrencyConflictError(
+        `delivery for ${key} must advance exactly one version: read ${String(readVersion)}, wrote ${next.version}`,
+      );
+    }
+    this.deliveryWrites.set(key, cloneValue(next));
+  }
+
+  getDeliveryState(operationId: OperationId): OutboxDeliveryState | null {
+    this.assertActive();
+    const key = operationId as string;
+    const staged = this.deliveryWrites.get(key);
+    if (staged !== undefined) return frozenCopy(staged);
+    const committed = this.store.delivery.get(key);
+    if (!this.deliveryVersionAtRead.has(key)) {
+      this.deliveryVersionAtRead.set(key, committed?.version ?? null);
+    }
+    return committed === undefined ? null : frozenCopy(committed);
   }
 
   nextEnqueueSequence(): number {
@@ -502,6 +596,13 @@ class InMemoryTransaction implements RepositoryTransaction {
     }
     this.store.outbox.push(...this.outboxWrites);
     for (const [operationId, delivery] of this.deliveryWrites) {
+      const readVersion = this.deliveryVersionAtRead.get(operationId);
+      const committedVersion = this.store.delivery.get(operationId)?.version ?? null;
+      if (committedVersion !== readVersion) {
+        throw new ConcurrencyConflictError(
+          `delivery for ${operationId} changed during the transaction: read ${String(readVersion)}, committed ${String(committedVersion)}`,
+        );
+      }
       this.store.delivery.set(operationId, delivery);
     }
     for (const state of this.bookWrites.values()) {
@@ -535,6 +636,7 @@ class InMemoryTransaction implements RepositoryTransaction {
     this.operationWrites.clear();
     this.outboxWrites.length = 0;
     this.deliveryWrites.clear();
+    this.deliveryVersionAtRead.clear();
     this.bookRevisionAtRead.clear();
     this.active = false;
   }

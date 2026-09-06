@@ -14,6 +14,7 @@ import {
   canonicalJson,
   executeCommand,
   previewCommand,
+  stableDigest,
   type CommandReceipt,
 } from '../../src/application/commands';
 import type { CommandContext } from '../../src/application/commands/context';
@@ -177,30 +178,35 @@ describe('uncertain commits', () => {
       expect(reacquired.getDeliveryState(deliveryOp)?.attempts).toBe(1);
     }
 
-    // Checkpoint boundary: a failed pulled-batch apply leaves cursor and applied set unchanged.
+    // Checkpoint boundary: a failed pulled-batch apply leaves finance,
+    // cursor, and applied set unchanged; success applies the real effect.
     {
-      const checkpoints = new InMemoryCheckpointStore();
+      const repo = new InMemoryFinanceRepository();
+      const { context } = createDeterministicContext();
+      const checkpoints = new InMemoryCheckpointStore({ boundScope: repo.boundScope });
+      const finance = { adapter: repo, context };
       const streamMade = makeReplicationStreamId('stream-uncertain');
       const cursorMade = makeSyncCursor('cursor-u-1');
       if (!streamMade.ok || !cursorMade.ok) throw new Error('invalid test stream');
-      const repo = new InMemoryFinanceRepository();
-      const { context } = createDeterministicContext();
       await run(repo, context, 'op-create', CREATE_BOOK);
       await run(repo, context, 'op-cycle', OPEN_CYCLE);
-      const receipt = await run(repo, context, 'op-remote-u-1', command);
+      const revision = repo.getBookState(bookId)?.revision ?? 0;
+      const payload = canonicalJson(command);
       const envelope = {
-        operationId: receipt.operationId,
+        operationId: op('op-remote-u-1'),
         sequence: 1,
-        scopeId: receipt.scopeId,
-        bookId: receipt.bookId,
-        baseRevision: receipt.revisionBefore,
-        resultingRevision: receipt.revisionAfter,
-        canonicalDigest: receipt.canonicalDigest,
+        scopeId: repo.boundScope,
+        bookId,
+        baseRevision: revision,
+        resultingRevision: revision + 1,
+        canonicalCommand: payload,
+        canonicalDigest: stableDigest(payload),
         schemaVersion: 1 as const,
       };
       const batch: PulledBatch = {
         schemaVersion: 1,
         streamId: streamMade.value,
+        scopeId: repo.boundScope,
         batchId: 'batch-uncertain-1',
         batchDigest: computePulledBatchDigest([envelope]),
         baseCursor: null,
@@ -208,12 +214,16 @@ describe('uncertain commits', () => {
         nextCursor: cursorMade.value,
       };
       const before = checkpoints.snapshotBytes();
+      const financeBefore = repo.snapshotBytes();
       checkpoints.injectApplyFailure();
-      expect(checkpoints.applyBatch(batch)).toEqual({ ok: false, reason: 'injectedFailure' });
+      expect(await checkpoints.applyBatch(batch, finance)).toEqual({ ok: false, reason: 'injectedFailure' });
       expect(checkpoints.snapshotBytes()).toBe(before);
-      expect(checkpoints.applyBatch(batch)).toEqual({ ok: true, replayed: false });
-      // The applied record carries the committed canonical digest.
-      expect(checkpoints.appliedOperations(streamMade.value)[0]?.canonicalDigest).toBe(receipt.canonicalDigest);
+      expect(repo.snapshotBytes()).toBe(financeBefore);
+      expect(await checkpoints.applyBatch(batch, finance)).toEqual({ ok: true, replayed: false });
+      // The applied record carries the committed canonical payload, and the
+      // finance effect is real.
+      expect(checkpoints.appliedOperations(streamMade.value)[0]?.canonicalCommand).toBe(payload);
+      expect(repo.getOperation(op('op-remote-u-1'))?.canonicalCommand).toBe(payload);
     }
   });
 });

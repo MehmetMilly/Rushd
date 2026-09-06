@@ -41,7 +41,14 @@ function boundAdapter(spec?: ConformanceScopeSpec): InMemoryFinanceRepository {
 const fixture: ConformanceFixture = {
   name: 'in-memory reference adapter',
   createAdapter: (spec) => boundAdapter(spec),
-  createCheckpointStore: () => new InMemoryCheckpointStore(),
+  createCheckpointStore: (spec) => {
+    if (spec?.scopeId !== undefined) {
+      const scope = makeRepositoryScopeId(spec.scopeId);
+      if (!scope.ok) throw new Error(`invalid conformance scope id: ${spec.scopeId}`);
+      return new InMemoryCheckpointStore({ boundScope: scope.value });
+    }
+    return new InMemoryCheckpointStore({ boundScope: boundAdapter(spec).boundScope });
+  },
 };
 
 runRepositoryConformanceSuite(fixture);

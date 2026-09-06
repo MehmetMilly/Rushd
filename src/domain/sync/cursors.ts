@@ -72,6 +72,8 @@ export type SyncCursorSchemaVersion = typeof SYNC_CURSOR_SCHEMA_VERSION;
 export interface CheckpointRecord {
   readonly schemaVersion: SyncCursorSchemaVersion;
   readonly streamId: ReplicationStreamId;
+  /** The single identity scope this stream replicates. Checkpoints never cross scopes. */
+  readonly scopeId: RepositoryScopeId;
   /** Null means nothing has ever been applied on this stream. */
   readonly cursor: SyncCursor | null;
   /** Content digest of the last applied batch; null when nothing was applied. A replay is exact only for the same digest. */
@@ -79,10 +81,11 @@ export interface CheckpointRecord {
 }
 
 /**
- * One content-bound replicated operation inside a pulled batch. Unlike a
- * bare ID reference, the envelope carries enough scope/book/revision/digest
- * data to detect changed content: the same operation ID with a different
- * canonical digest is an explicit conflict, never a silent keep-first.
+ * One content-bound replicated operation inside a pulled batch. The envelope
+ * carries the complete immutable identity: scope, book, base and resulting
+ * revision, the exact canonical command payload, and its digest. A short
+ * digest alone is never identity: duplicate equality covers every immutable
+ * field, and the receiver re-verifies that the digest matches the payload.
  */
 export interface PulledOperation {
   readonly operationId: OperationId;
@@ -93,22 +96,28 @@ export interface PulledOperation {
   readonly baseRevision: number;
   /** Exactly one revision advancement per operation: resultingRevision must equal baseRevision + 1. */
   readonly resultingRevision: number;
-  /** Stable digest of the canonical command payload, bound at the source. */
+  /** The exact normalized canonical command payload, as committed at the source. */
+  readonly canonicalCommand: string;
+  /** Stable digest of `canonicalCommand`, bound at the source and re-verified by the receiver. */
   readonly canonicalDigest: string;
   readonly schemaVersion: SyncCursorSchemaVersion;
 }
 
 /**
- * A batch pulled from one stream. `batchId` names the batch; `batchDigest`
- * binds its exact content (recomputed by the receiver — a digest that does
- * not match the operations is tampering or corruption, not a replay).
- * `baseCursor` must equal the stored checkpoint cursor (or be null when
- * nothing was applied) for the batch to apply; `nextCursor` becomes the
- * stored cursor only when every operation in the batch is durably applied.
+ * A batch pulled from one stream. `scopeId` binds the batch — and therefore
+ * the cursor advance it carries — to one identity scope; a batch naming
+ * another scope is rejected without mutation. `batchId` names the batch;
+ * `batchDigest` binds its exact content (recomputed by the receiver — a
+ * digest that does not match the operations is tampering or corruption,
+ * not a replay). `baseCursor` must equal the stored checkpoint cursor (or
+ * be null when nothing was applied) for the batch to apply; `nextCursor`
+ * becomes the stored cursor only when every operation in the batch is
+ * durably applied.
  */
 export interface PulledBatch {
   readonly schemaVersion: SyncCursorSchemaVersion;
   readonly streamId: ReplicationStreamId;
+  readonly scopeId: RepositoryScopeId;
   readonly batchId: string;
   readonly batchDigest: string;
   readonly baseCursor: SyncCursor | null;
@@ -123,6 +132,7 @@ export function computePulledBatchDigest(operations: readonly PulledOperation[])
       operations.map((operation) => ({
         baseRevision: operation.baseRevision,
         bookId: operation.bookId as string,
+        canonicalCommand: operation.canonicalCommand,
         canonicalDigest: operation.canonicalDigest,
         operationId: operation.operationId as string,
         resultingRevision: operation.resultingRevision,
@@ -140,10 +150,13 @@ export type PulledBatchShapeFailure =
 
 export type PulledBatchShapeResult = { readonly ok: true } | { readonly ok: false; readonly failure: PulledBatchShapeFailure };
 
-/** Pure shape check: schema support, batch identity/digest binding, and per-operation structural sanity. */
+/** Pure shape check: schema support, scope binding, batch identity/digest binding, and per-operation structural sanity. */
 export function validatePulledBatchShape(batch: PulledBatch): PulledBatchShapeResult {
   if (batch.schemaVersion !== SYNC_CURSOR_SCHEMA_VERSION) {
     return { ok: false, failure: { kind: 'unsupportedSchema', schemaVersion: batch.schemaVersion } };
+  }
+  if (!makeRepositoryScopeId(batch.scopeId).ok) {
+    return { ok: false, failure: { kind: 'invalidBatch', detail: 'every pulled batch must name its owning scope' } };
   }
   if (typeof batch.batchId !== 'string' || batch.batchId.length === 0 || !CURSOR_PATTERN.test(batch.batchId)) {
     return { ok: false, failure: { kind: 'invalidBatch', detail: 'every pulled batch needs a batch identity' } };
@@ -162,6 +175,9 @@ export function validatePulledBatchShape(batch: PulledBatch): PulledBatchShapeRe
     if (!makeRepositoryScopeId(operation.scopeId).ok) {
       return { ok: false, failure: { kind: 'invalidBatch', detail: 'every replicated operation needs a valid scope id' } };
     }
+    if ((operation.scopeId as string) !== (batch.scopeId as string)) {
+      return { ok: false, failure: { kind: 'invalidBatch', detail: 'a pulled operation naming another scope does not belong in this batch' } };
+    }
     if (!makeBookId(operation.bookId).ok) {
       return { ok: false, failure: { kind: 'invalidBatch', detail: 'every replicated operation needs a valid book id' } };
     }
@@ -171,8 +187,18 @@ export function validatePulledBatchShape(batch: PulledBatch): PulledBatchShapeRe
     if (operation.resultingRevision !== operation.baseRevision + 1) {
       return { ok: false, failure: { kind: 'invalidBatch', detail: 'every replicated operation must advance exactly one revision' } };
     }
-    if (typeof operation.canonicalDigest !== 'string' || !CURSOR_PATTERN.test(operation.canonicalDigest)) {
-      return { ok: false, failure: { kind: 'invalidBatch', detail: 'every replicated operation needs a canonical digest' } };
+    if (typeof operation.canonicalCommand !== 'string' || operation.canonicalCommand.length === 0) {
+      return { ok: false, failure: { kind: 'invalidBatch', detail: 'every replicated operation needs its exact canonical payload' } };
+    }
+    let parsedPayload: unknown;
+    try {
+      parsedPayload = JSON.parse(operation.canonicalCommand) as unknown;
+    } catch {
+      return { ok: false, failure: { kind: 'invalidBatch', detail: 'pulled canonical payload must be JSON' } };
+    }
+    void parsedPayload;
+    if (operation.canonicalDigest !== stableDigest(operation.canonicalCommand)) {
+      return { ok: false, failure: { kind: 'invalidBatch', detail: 'pulled canonical digest does not match the canonical payload' } };
     }
     if (operation.schemaVersion !== SYNC_CURSOR_SCHEMA_VERSION) {
       return { ok: false, failure: { kind: 'unsupportedSchema', schemaVersion: operation.schemaVersion } };
@@ -187,6 +213,40 @@ export function validatePulledBatchShape(batch: PulledBatch): PulledBatchShapeRe
 export interface PulledContentConflict {
   readonly operationId: string;
   readonly digests: readonly string[];
+  /** Immutable envelope fields that differ between the two records. */
+  readonly differingFields: readonly string[];
+}
+
+/**
+ * Exact duplicate equality over the complete immutable envelope. The
+ * provider sequence is transport positioning, not identity: redelivery may
+ * renumber it. Every other field — scope, book, base/result revisions,
+ * exact canonical payload and digest, schema — must match.
+ */
+export function pulledOperationsEqual(left: PulledOperation, right: PulledOperation): boolean {
+  return (
+    (left.operationId as string) === (right.operationId as string) &&
+    (left.scopeId as string) === (right.scopeId as string) &&
+    (left.bookId as string) === (right.bookId as string) &&
+    left.baseRevision === right.baseRevision &&
+    left.resultingRevision === right.resultingRevision &&
+    left.canonicalCommand === right.canonicalCommand &&
+    left.canonicalDigest === right.canonicalDigest &&
+    left.schemaVersion === right.schemaVersion
+  );
+}
+
+/** Names the immutable envelope fields that differ between two records with the same operation ID. */
+export function differingPulledFields(left: PulledOperation, right: PulledOperation): readonly string[] {
+  const differing: string[] = [];
+  if ((left.scopeId as string) !== (right.scopeId as string)) differing.push('scopeId');
+  if ((left.bookId as string) !== (right.bookId as string)) differing.push('bookId');
+  if (left.baseRevision !== right.baseRevision) differing.push('baseRevision');
+  if (left.resultingRevision !== right.resultingRevision) differing.push('resultingRevision');
+  if (left.canonicalCommand !== right.canonicalCommand) differing.push('canonicalCommand');
+  if (left.canonicalDigest !== right.canonicalDigest) differing.push('canonicalDigest');
+  if (left.schemaVersion !== right.schemaVersion) differing.push('schemaVersion');
+  return differing;
 }
 
 export type PulledReconcileResult =
@@ -194,25 +254,33 @@ export type PulledReconcileResult =
   | { readonly ok: false; readonly conflict: PulledContentConflict };
 
 /**
- * Content-bound reconciliation: same operation ID with the same canonical
- * digest deduplicates (first occurrence wins, batch order preserved), while
- * the same operation ID with a different digest is an explicit conflict.
- * Reordered or duplicated delivery of identical content therefore yields
- * one application per operation; changed duplicates never silently win.
+ * Content-bound reconciliation: same operation ID with a field-identical
+ * envelope deduplicates (first occurrence wins, batch order preserved),
+ * while the same operation ID with any changed immutable field is an
+ * explicit conflict naming the differing fields. Reordered or duplicated
+ * delivery of identical content therefore yields one application per
+ * operation; changed duplicates never silently win.
  */
 export function reconcilePulledOperations(operations: readonly PulledOperation[]): PulledReconcileResult {
-  const digestsById = new Map<string, string>();
+  const knownById = new Map<string, PulledOperation>();
   const result: PulledOperation[] = [];
   for (const operation of operations) {
     const id = operation.operationId as string;
-    const known = digestsById.get(id);
+    const known = knownById.get(id);
     if (known === undefined) {
-      digestsById.set(id, operation.canonicalDigest);
+      knownById.set(id, operation);
       result.push(operation);
       continue;
     }
-    if (known !== operation.canonicalDigest) {
-      return { ok: false, conflict: { operationId: id, digests: [known, operation.canonicalDigest] } };
+    if (!pulledOperationsEqual(known, operation)) {
+      return {
+        ok: false,
+        conflict: {
+          operationId: id,
+          digests: [known.canonicalDigest, operation.canonicalDigest],
+          differingFields: differingPulledFields(known, operation),
+        },
+      };
     }
   }
   return { ok: true, operations: result };
@@ -221,6 +289,7 @@ export function reconcilePulledOperations(operations: readonly PulledOperation[]
 /** True when the stored checkpoint already covers exactly this batch content (safe to acknowledge without re-applying). */
 export function isBatchAlreadyApplied(stored: CheckpointRecord, batch: PulledBatch): boolean {
   if (stored.streamId !== batch.streamId) return false;
+  if ((stored.scopeId as string) !== (batch.scopeId as string)) return false;
   if (stored.cursor === null || stored.batchDigest === null) return false;
   return equalSyncCursors(stored.cursor, batch.nextCursor) && stored.batchDigest === batch.batchDigest;
 }
@@ -228,6 +297,7 @@ export function isBatchAlreadyApplied(stored: CheckpointRecord, batch: PulledBat
 /** True when this batch is the immediate next batch for the stored checkpoint. */
 export function isNextBatchFor(stored: CheckpointRecord, batch: PulledBatch): boolean {
   if (stored.streamId !== batch.streamId) return false;
+  if ((stored.scopeId as string) !== (batch.scopeId as string)) return false;
   if (stored.cursor === null) return batch.baseCursor === null;
   if (batch.baseCursor === null) return false;
   return equalSyncCursors(stored.cursor, batch.baseCursor);

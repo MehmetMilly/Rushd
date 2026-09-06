@@ -29,6 +29,7 @@ import {
   canonicalJson,
   executeCommand,
   previewCommand,
+  recordDeliveryAttempt,
   stableDigest,
   type CommandReceipt,
   type DeliveryAttemptOutcome,
@@ -49,7 +50,7 @@ import {
   type ReplicationStreamId,
   type SyncCursor,
 } from '../../../src/domain/sync/cursors';
-import { makeAccountId as makeScopeAccountId, makeDeviceId as makeScopeDeviceId, makeGuestKey as makeScopeGuestKey, repositoryScopeIdFor } from '../../../src/domain/sync/scope';
+import { makeAccountId as makeScopeAccountId, makeDeviceId as makeScopeDeviceId, makeGuestKey as makeScopeGuestKey, repositoryScopeIdFor, type RepositoryScopeId } from '../../../src/domain/sync/scope';
 import { createDeterministicContext, DEFAULT_GUEST_KEY } from './deterministic-context';
 import type { CommandContext } from '../../../src/application/commands/context';
 
@@ -59,7 +60,9 @@ export type ConformanceWriteMethod = 'putBookState' | 'putOperation' | 'putOutbo
 export type ConformanceApplyResult =
   | { readonly ok: true; readonly replayed: boolean }
   | { readonly ok: false; readonly reason: 'unsupportedSchema' | 'invalidBatch' | 'baseCursorMismatch' | 'injectedFailure' }
-  | { readonly ok: false; readonly reason: 'contentConflict'; readonly conflict: PulledContentConflict };
+  | { readonly ok: false; readonly reason: 'contentConflict'; readonly conflict: PulledContentConflict }
+  | { readonly ok: false; readonly reason: 'scopeMismatch'; readonly detail: string }
+  | { readonly ok: false; readonly reason: 'applyFailed'; readonly detail: string; readonly failures: readonly string[] };
 
 /** The test hooks a conformance adapter must expose. Clearly test-adapter-specific; not part of the production port. */
 export interface ConformanceAdapter extends ScopedRepository, FinanceReadModel {
@@ -72,12 +75,15 @@ export interface ConformanceAdapter extends ScopedRepository, FinanceReadModel {
   reopen(): ConformanceAdapter;
   /** Canonical bytes of everything committed, for byte-identical rollback proofs. */
   snapshotBytes(): string;
+  /** Test-adapter-specific restore of a snapshot; the checkpoint runner uses it for atomic finance rollback. */
+  restoreSnapshot(bytes: string): void;
 }
 
 export interface ConformanceCheckpointStore {
+  readonly boundScope: RepositoryScopeId;
   cursorFor(streamId: ReplicationStreamId): SyncCursor | null;
   batchDigestFor(streamId: ReplicationStreamId): string | null;
-  applyBatch(batch: PulledBatch): ConformanceApplyResult;
+  applyBatch(batch: PulledBatch, finance: { readonly adapter: ConformanceAdapter; readonly context: CommandContext }): Promise<ConformanceApplyResult>;
   injectApplyFailure(occurrences?: number): void;
   appliedOperations(streamId: ReplicationStreamId): readonly PulledOperation[];
   appliedOperationIds(streamId: ReplicationStreamId): readonly string[];
@@ -94,7 +100,7 @@ export interface ConformanceScopeSpec {
 export interface ConformanceFixture {
   readonly name: string;
   createAdapter(scope?: ConformanceScopeSpec): ConformanceAdapter;
-  createCheckpointStore(): ConformanceCheckpointStore;
+  createCheckpointStore(scope?: ConformanceScopeSpec): ConformanceCheckpointStore;
 }
 
 function brandedBookId(raw: string): BookId {
@@ -197,7 +203,7 @@ async function previewAndExecute(harness: Harness, operationId: string, rawComma
 
 function seededHarness(fixture: ConformanceFixture, spec: ConformanceScopeSpec = DEFAULT_SPEC, stepMs?: number): Harness {
   const adapter = fixture.createAdapter(spec);
-  const checkpoints = fixture.createCheckpointStore();
+  const checkpoints = fixture.createCheckpointStore(spec);
   const { context } = createDeterministicContext({
     deviceId: spec.deviceId,
     ...(spec.accountId !== undefined ? { accountId: spec.accountId } : {}),
@@ -216,24 +222,43 @@ async function seedBook(harness: Harness): Promise<void> {
   await previewAndExecute(harness, 'op-cycle', { ...OPEN_CYCLE });
 }
 
-/** Content envelope for a locally committed operation, as a pull stream would carry it. */
-function pulledEnvelope(receipt: CommandReceipt, sequence: number): PulledOperation {
+/** Fresh envelope for a command not yet committed locally: base chains explicitly, like a server log. */
+function freshEnvelope(harness: Harness, operationId: string, command: Record<string, unknown>, sequence: number, baseRevision: number): PulledOperation {
+  const payload = canonicalJson(command);
   return {
-    operationId: receipt.operationId,
+    operationId: brandedOperationId(operationId),
     sequence,
-    scopeId: receipt.scopeId,
-    bookId: receipt.bookId,
-    baseRevision: receipt.revisionBefore,
-    resultingRevision: receipt.revisionAfter,
-    canonicalDigest: receipt.canonicalDigest,
+    scopeId: harness.adapter.boundScope,
+    bookId: brandedBookId('book-conformance'),
+    baseRevision,
+    resultingRevision: baseRevision + 1,
+    canonicalCommand: payload,
+    canonicalDigest: stableDigest(payload),
+    schemaVersion: 1,
+  };
+}
+/** Content envelope for a locally committed operation, as a pull stream would carry it: full canonical payload included. */
+function pulledEnvelope(harness: Harness, operationId: string, sequence: number): PulledOperation {
+  const journal = harness.adapter.getOperation(brandedOperationId(operationId));
+  if (journal === null) throw new Error(`conformance journal is missing ${operationId}`);
+  return {
+    operationId: journal.operationId,
+    sequence,
+    scopeId: journal.scopeId,
+    bookId: journal.bookId,
+    baseRevision: journal.receipt.revisionBefore,
+    resultingRevision: journal.receipt.revisionAfter,
+    canonicalCommand: journal.canonicalCommand,
+    canonicalDigest: journal.receipt.canonicalDigest,
     schemaVersion: 1,
   };
 }
 
-function pulledBatch(stream: ReplicationStreamId, batchId: string, base: SyncCursor | null, operations: readonly PulledOperation[], next: SyncCursor): PulledBatch {
+function pulledBatch(harness: Harness, stream: ReplicationStreamId, batchId: string, base: SyncCursor | null, operations: readonly PulledOperation[], next: SyncCursor): PulledBatch {
   return {
     schemaVersion: 1,
     streamId: stream,
+    scopeId: harness.adapter.boundScope,
     batchId,
     batchDigest: computePulledBatchDigest(operations),
     baseCursor: base,
@@ -371,15 +396,16 @@ export function runRepositoryConformanceSuite(fixture: ConformanceFixture): void
       const harness = seededHarness(fixture);
       await seedBook(harness);
       const stream = brandedStream('stream-conformance');
-      const seedReceipt = await previewAndExecute(harness, 'op-checkpoint-seed', inflowCommand(100, '2026-09-19', 'checkpoint-seed'));
-      const batch = pulledBatch(stream, 'batch-1', null, [pulledEnvelope(seedReceipt, 1)], brandedCursor('cursor-1'));
+      const finance = { adapter: harness.adapter, context: harness.context };
+      await previewAndExecute(harness, 'op-checkpoint-seed', inflowCommand(100, '2026-09-19', 'checkpoint-seed'));
+      const batch = pulledBatch(harness, stream, 'batch-1', null, [pulledEnvelope(harness, 'op-checkpoint-seed', 1)], brandedCursor('cursor-1'));
       const checkpointBefore = harness.checkpoints.snapshotBytes();
       harness.checkpoints.injectApplyFailure();
-      const failed = harness.checkpoints.applyBatch(batch);
+      const failed = await harness.checkpoints.applyBatch(batch, finance);
       expect(failed).toEqual({ ok: false, reason: 'injectedFailure' });
       expect(harness.checkpoints.snapshotBytes()).toBe(checkpointBefore);
       expect(harness.checkpoints.cursorFor(stream)).toBeNull();
-      const recovered = harness.checkpoints.applyBatch(batch);
+      const recovered = await harness.checkpoints.applyBatch(batch, finance);
       expect(recovered).toEqual({ ok: true, replayed: false });
       expect(harness.checkpoints.cursorFor(stream)).toBe(brandedCursor('cursor-1'));
     });
@@ -515,67 +541,108 @@ export function runRepositoryConformanceSuite(fixture: ConformanceFixture): void
     it('applies duplicate and reordered pulled delivery exactly once with content intact', async () => {
       const harness = seededHarness(fixture);
       await seedBook(harness);
-      const first = await previewAndExecute(harness, 'op-dup-1', inflowCommand(100, '2026-09-19', 'dup-1'));
-      const second = await previewAndExecute(harness, 'op-dup-2', inflowCommand(200, '2026-09-20', 'dup-2'));
+      await previewAndExecute(harness, 'op-dup-1', inflowCommand(100, '2026-09-19', 'dup-1'));
+      await previewAndExecute(harness, 'op-dup-2', inflowCommand(200, '2026-09-20', 'dup-2'));
+      const finance = { adapter: harness.adapter, context: harness.context };
+      const entriesBefore = harness.adapter.getBookState(bookId)?.entries.length ?? 0;
 
-      // Envelopes carry the canonical digests of really committed operations.
-      const envelopeA = pulledEnvelope(first, 1);
-      const envelopeB = pulledEnvelope(second, 2);
+      // Envelopes carry the canonical payloads of really committed operations.
+      const envelopeA = pulledEnvelope(harness, 'op-dup-1', 1);
+      const envelopeB = pulledEnvelope(harness, 'op-dup-2', 2);
       const journalA = harness.adapter.getOperation(brandedOperationId('op-dup-1'));
+      expect(envelopeA.canonicalCommand).toBe(journalA?.canonicalCommand);
       expect(envelopeA.canonicalDigest).toBe(journalA?.receipt.canonicalDigest);
 
+      // Redelivery, reordered and duplicated: one applied record per
+      // operation, and the finance replay adds no second effect.
       const stream = brandedStream('stream-duplicates');
-      const batch = pulledBatch(stream, 'batch-dup-1', null, [envelopeB, envelopeA, envelopeB], brandedCursor('cursor-dup-1'));
-      const appliedFirst = harness.checkpoints.applyBatch(batch);
+      const batch = pulledBatch(harness, stream, 'batch-dup-1', null, [envelopeB, envelopeA, envelopeB], brandedCursor('cursor-dup-1'));
+      const appliedFirst = await harness.checkpoints.applyBatch(batch, finance);
       expect(appliedFirst).toEqual({ ok: true, replayed: false });
 
-      // One canonical applied record per operation, content intact.
       const applied = harness.checkpoints.appliedOperations(stream);
       expect(applied).toHaveLength(2);
       expect([...harness.checkpoints.appliedOperationIds(stream)].sort()).toEqual(['op-dup-1', 'op-dup-2']);
       const storedA = applied.find((operation) => (operation.operationId as string) === 'op-dup-1');
+      expect(storedA?.canonicalCommand).toBe(journalA?.canonicalCommand);
       expect(storedA?.canonicalDigest).toBe(journalA?.receipt.canonicalDigest);
       expect(storedA?.baseRevision).toBe(journalA?.receipt.revisionBefore);
       expect(storedA?.resultingRevision).toBe(journalA?.receipt.revisionAfter);
+      expect(harness.adapter.getBookState(bookId)?.entries.length).toBe(entriesBefore);
 
-      // Literal replay is a no-op success, never a second record.
-      const replayed = harness.checkpoints.applyBatch(batch);
+      // Literal replay is a no-op success, never a second record or effect.
+      const replayed = await harness.checkpoints.applyBatch(batch, finance);
       expect(replayed).toEqual({ ok: true, replayed: true });
       expect(harness.checkpoints.appliedOperations(stream)).toHaveLength(2);
+      expect(harness.adapter.getBookState(bookId)?.entries.length).toBe(entriesBefore);
     });
 
     it('rejects changed pulled content without advancing the checkpoint', async () => {
       const harness = seededHarness(fixture);
       await seedBook(harness);
-      const receipt = await previewAndExecute(harness, 'op-content-1', inflowCommand(300, '2026-09-24', 'content-1'));
+      await previewAndExecute(harness, 'op-content-1', inflowCommand(300, '2026-09-24', 'content-1'));
+      const finance = { adapter: harness.adapter, context: harness.context };
       const stream = brandedStream('stream-content');
 
-      // Same cursor carrying a different operation is not a replay: explicit
-      // conflict, cursor stays, nothing applied.
-      const original = pulledBatch(stream, 'batch-content-1', null, [pulledEnvelope(receipt, 1)], brandedCursor('cursor-content-1'));
-      expect(harness.checkpoints.applyBatch(original)).toEqual({ ok: true, replayed: false });
+      const original = pulledBatch(harness, stream, 'batch-content-1', null, [pulledEnvelope(harness, 'op-content-1', 1)], brandedCursor('cursor-content-1'));
+      expect(await harness.checkpoints.applyBatch(original, finance)).toEqual({ ok: true, replayed: false });
 
-      // A changed duplicate inside one batch is a content conflict.
-      const conflicting = pulledBatch(stream, 'batch-content-2', brandedCursor('cursor-content-1'), [
-        { ...pulledEnvelope(receipt, 9), canonicalDigest: 'aaaaaaaaaaaaaaaa' },
-      ], brandedCursor('cursor-content-2'));
+      // Review case (a): the same operation ID and digest string with
+      // changed envelope fields (book, revisions) is a conflict, not
+      // keep-first — even though the digest matches.
+      const envelope = pulledEnvelope(harness, 'op-content-1', 9);
+      const relabeled: PulledOperation = { ...envelope, bookId: brandedBookId('book-second'), baseRevision: 9, resultingRevision: 10 };
+      const relabeledBatch = pulledBatch(harness, stream, 'batch-content-2', brandedCursor('cursor-content-1'), [relabeled], brandedCursor('cursor-content-2'));
       const bytesBefore = harness.checkpoints.snapshotBytes();
-      const result = harness.checkpoints.applyBatch(conflicting);
+      const financeBytesBefore = harness.adapter.snapshotBytes();
+      const result = await harness.checkpoints.applyBatch(relabeledBatch, finance);
       expect(result.ok).toBe(false);
       if (!result.ok && result.reason === 'contentConflict') {
         expect(result.conflict.operationId).toBe('op-content-1');
+        expect(result.conflict.differingFields).toEqual(expect.arrayContaining(['bookId', 'baseRevision', 'resultingRevision']));
       } else {
         throw new Error(`expected contentConflict, got ${JSON.stringify(result)}`);
       }
       expect(harness.checkpoints.snapshotBytes()).toBe(bytesBefore);
+      expect(harness.adapter.snapshotBytes()).toBe(financeBytesBefore);
       expect(harness.checkpoints.cursorFor(stream)).toBe(brandedCursor('cursor-content-1'));
 
-      // Same operation ID with changed content in a fresh batch also conflicts.
-      const altered = { ...pulledEnvelope(receipt, 9), canonicalDigest: 'bbbbbbbbbbbbbbbb' };
-      const alteredBatch = pulledBatch(stream, 'batch-content-3', brandedCursor('cursor-content-1'), [altered], brandedCursor('cursor-content-3'));
-      const alteredResult = harness.checkpoints.applyBatch(alteredBatch);
-      expect(alteredResult.ok).toBe(false);
-      if (!alteredResult.ok) expect(alteredResult.reason).toBe('contentConflict');
+      // Review case (b): the same operation ID with a changed canonical
+      // payload (valid shape, recomputed digest) conflicts instead of
+      // applying past it while the cursor advances.
+      const changedCommand = inflowCommand(999, '2026-09-24', 'content-1');
+      const changedPayload = canonicalJson(changedCommand);
+      const changed: PulledOperation = {
+        ...envelope,
+        sequence: 9,
+        canonicalCommand: changedPayload,
+        canonicalDigest: stableDigest(changedPayload),
+      };
+      const changedBatch = pulledBatch(harness, stream, 'batch-content-3', brandedCursor('cursor-content-1'), [changed], brandedCursor('cursor-content-3'));
+      const changedResult = await harness.checkpoints.applyBatch(changedBatch, finance);
+      expect(changedResult.ok).toBe(false);
+      if (!changedResult.ok) expect(changedResult.reason).toBe('contentConflict');
+      if (!changedResult.ok && changedResult.reason === 'contentConflict') {
+        expect(changedResult.conflict.differingFields).toEqual(expect.arrayContaining(['canonicalCommand', 'canonicalDigest']));
+      }
+      expect(harness.checkpoints.snapshotBytes()).toBe(bytesBefore);
+      expect(harness.adapter.snapshotBytes()).toBe(financeBytesBefore);
+      expect(harness.checkpoints.cursorFor(stream)).toBe(brandedCursor('cursor-content-1'));
+
+      // A tampered digest (payload/digest mismatch) is invalid, never applied.
+      const tampered: PulledOperation = { ...envelope, canonicalDigest: 'tampered-digest-value' };
+      const tamperedDirect: PulledBatch = {
+        schemaVersion: 1,
+        streamId: stream,
+        scopeId: harness.adapter.boundScope,
+        batchId: 'batch-content-4',
+        batchDigest: computePulledBatchDigest([tampered]),
+        baseCursor: brandedCursor('cursor-content-1'),
+        operations: [tampered],
+        nextCursor: brandedCursor('cursor-content-4'),
+      };
+      const tamperedResult = await harness.checkpoints.applyBatch(tamperedDirect, finance);
+      expect(tamperedResult).toEqual({ ok: false, reason: 'invalidBatch' });
       expect(harness.checkpoints.cursorFor(stream)).toBe(brandedCursor('cursor-content-1'));
     });
 
@@ -691,29 +758,145 @@ export function runRepositoryConformanceSuite(fixture: ConformanceFixture): void
     it('applies pulled batches and checkpoints atomically with content', async () => {
       const harness = seededHarness(fixture);
       await seedBook(harness);
-      const first = await previewAndExecute(harness, 'op-pull-1', inflowCommand(400, '2026-09-25', 'pull-1'));
-      const second = await previewAndExecute(harness, 'op-pull-2', inflowCommand(500, '2026-09-26', 'pull-2'));
+      const finance = { adapter: harness.adapter, context: harness.context };
       const stream = brandedStream('stream-atomic');
-      const batch = pulledBatch(stream, 'batch-atomic-1', null, [pulledEnvelope(first, 1), pulledEnvelope(second, 2)], brandedCursor('cursor-atomic-1'));
-      const applied = harness.checkpoints.applyBatch(batch);
+      const revisionBefore = harness.adapter.getBookState(bookId)?.revision ?? 0;
+
+      // Catch-up replication: fresh operations with chained bases commit
+      // real finance effects together with the checkpoint advance.
+      const batch = pulledBatch(harness, stream, 'batch-atomic-1', null, [
+        freshEnvelope(harness, 'op-pull-1', inflowCommand(400, '2026-09-25', 'pull-1'), 1, revisionBefore),
+        freshEnvelope(harness, 'op-pull-2', inflowCommand(500, '2026-09-26', 'pull-2'), 2, revisionBefore + 1),
+      ], brandedCursor('cursor-atomic-1'));
+      const applied = await harness.checkpoints.applyBatch(batch, finance);
       expect(applied).toEqual({ ok: true, replayed: false });
       expect(harness.checkpoints.cursorFor(stream)).toBe(brandedCursor('cursor-atomic-1'));
       expect(harness.checkpoints.batchDigestFor(stream)).toBe(batch.batchDigest);
       expect(harness.checkpoints.appliedOperationIds(stream)).toEqual(['op-pull-1', 'op-pull-2']);
       const stored = harness.checkpoints.appliedOperations(stream);
-      expect(stored.find((operation) => (operation.operationId as string) === 'op-pull-1')?.canonicalDigest).toBe(first.canonicalDigest);
+      expect(stored.find((operation) => (operation.operationId as string) === 'op-pull-1')?.canonicalCommand).toBe(
+        harness.adapter.getOperation(brandedOperationId('op-pull-1'))?.canonicalCommand,
+      );
+      expect(harness.adapter.getBookState(bookId)?.revision).toBe(revisionBefore + 2);
+      expect(harness.adapter.getBookState(bookId)?.entries.filter((entry) => entry.note.startsWith('pull-'))).toHaveLength(2);
 
-      const stale = pulledBatch(stream, 'batch-atomic-2', null, [pulledEnvelope(first, 1)], brandedCursor('cursor-atomic-2'));
+      // A batch on a stale base is rejected with finance and checkpoint unchanged.
+      const stale = pulledBatch(harness, stream, 'batch-atomic-2', null, [
+        freshEnvelope(harness, 'op-pull-3', inflowCommand(600, '2026-09-27', 'pull-3'), 1, revisionBefore + 2),
+      ], brandedCursor('cursor-atomic-2'));
       const bytesBefore = harness.checkpoints.snapshotBytes();
-      const rejected = harness.checkpoints.applyBatch(stale);
+      const financeBytesBefore = harness.adapter.snapshotBytes();
+      const rejected = await harness.checkpoints.applyBatch(stale, finance);
       expect(rejected).toEqual({ ok: false, reason: 'baseCursorMismatch' });
       expect(harness.checkpoints.snapshotBytes()).toBe(bytesBefore);
+      expect(harness.adapter.snapshotBytes()).toBe(financeBytesBefore);
 
-      const next = pulledBatch(stream, 'batch-atomic-3', brandedCursor('cursor-atomic-1'), [pulledEnvelope(second, 2)], brandedCursor('cursor-atomic-2'));
-      expect(harness.checkpoints.applyBatch(next)).toEqual({ ok: true, replayed: false });
+      // A mid-batch finance failure (stale pulled base revision) rolls back
+      // the whole batch: the first effect is undone and the cursor stays.
+      const failing = pulledBatch(harness, stream, 'batch-atomic-3', brandedCursor('cursor-atomic-1'), [
+        freshEnvelope(harness, 'op-pull-4', inflowCommand(700, '2026-09-28', 'pull-4'), 1, revisionBefore + 2),
+        freshEnvelope(harness, 'op-pull-5', inflowCommand(800, '2026-09-29', 'pull-5'), 2, 99),
+      ], brandedCursor('cursor-atomic-3'));
+      const failed = await harness.checkpoints.applyBatch(failing, finance);
+      expect(failed.ok).toBe(false);
+      if (!failed.ok) expect(failed.reason).toBe('applyFailed');
+      expect(harness.checkpoints.snapshotBytes()).toBe(bytesBefore);
+      expect(harness.adapter.snapshotBytes()).toBe(financeBytesBefore);
+      expect(harness.adapter.getOperation(brandedOperationId('op-pull-4'))).toBeNull();
+
+      // The already-applied operation redelivered in a new batch is skipped:
+      // cursor advances, no duplicate effect.
+      const next = pulledBatch(harness, stream, 'batch-atomic-4', brandedCursor('cursor-atomic-1'), [
+        pulledEnvelope(harness, 'op-pull-1', 9),
+        freshEnvelope(harness, 'op-pull-6', inflowCommand(900, '2026-09-30', 'pull-6'), 2, revisionBefore + 2),
+      ], brandedCursor('cursor-atomic-2'));
+      expect(await harness.checkpoints.applyBatch(next, finance)).toEqual({ ok: true, replayed: false });
       expect(harness.checkpoints.cursorFor(stream)).toBe(brandedCursor('cursor-atomic-2'));
-      // The already-applied operation was not duplicated.
-      expect(harness.checkpoints.appliedOperations(stream)).toHaveLength(2);
+      expect(harness.checkpoints.appliedOperations(stream)).toHaveLength(3);
+      expect(harness.adapter.getBookState(bookId)?.entries.filter((entry) => entry.note === 'pull-1')).toHaveLength(1);
+    });
+
+    it('rejects cross-scope pulled batches without applying or advancing', async () => {
+      const harness = seededHarness(fixture);
+      await seedBook(harness);
+      const finance = { adapter: harness.adapter, context: harness.context };
+      const stream = brandedStream('stream-cross-scope');
+      const revision = harness.adapter.getBookState(bookId)?.revision ?? 0;
+      expect(harness.checkpoints.boundScope as string).toBe(harness.adapter.boundScope as string);
+
+      // A batch naming another scope is rejected before anything mutates.
+      const foreignScope = scopeIdForSpec({ deviceId: 'test-device-foreign' });
+      const foreignBatch: PulledBatch = {
+        schemaVersion: 1,
+        streamId: stream,
+        scopeId: foreignScope as RepositoryScopeId,
+        batchId: 'batch-foreign-1',
+        batchDigest: 'placeholder',
+        baseCursor: null,
+        operations: [],
+        nextCursor: brandedCursor('cursor-foreign-1'),
+      };
+      const foreignDigestBatch: PulledBatch = { ...foreignBatch, batchDigest: computePulledBatchDigest([]) };
+      const bytesBefore = harness.checkpoints.snapshotBytes();
+      const financeBytesBefore = harness.adapter.snapshotBytes();
+      const foreign = await harness.checkpoints.applyBatch(foreignDigestBatch, finance);
+      expect(foreign).toEqual({ ok: false, reason: 'scopeMismatch', detail: 'pulled batch names another scope than this checkpoint stream' });
+      expect(harness.checkpoints.snapshotBytes()).toBe(bytesBefore);
+      expect(harness.adapter.snapshotBytes()).toBe(financeBytesBefore);
+
+      // An operation naming another scope inside an otherwise own-scope
+      // batch is malformed: rejected, nothing applied, cursor unmoved.
+      const ownBase = pulledBatch(harness, stream, 'batch-cross-op', null, [], brandedCursor('cursor-cross-1'));
+      const foreignOp = freshEnvelope(harness, 'op-foreign', inflowCommand(50, '2026-09-10', 'foreign'), 1, revision);
+      const smuggled: PulledOperation = { ...foreignOp, scopeId: foreignScope as RepositoryScopeId };
+      const smuggledBatch: PulledBatch = {
+        ...ownBase,
+        operations: [smuggled],
+        batchDigest: computePulledBatchDigest([smuggled]),
+      };
+      const smuggledResult = await harness.checkpoints.applyBatch(smuggledBatch, finance);
+      expect(smuggledResult).toEqual({ ok: false, reason: 'invalidBatch' });
+      expect(harness.checkpoints.snapshotBytes()).toBe(bytesBefore);
+      expect(harness.adapter.snapshotBytes()).toBe(financeBytesBefore);
+      expect(harness.checkpoints.cursorFor(stream)).toBeNull();
+    });
+
+    it('serializes concurrent delivery updates without losing successful writes', async () => {
+      const harness = seededHarness(fixture);
+      await seedBook(harness);
+      await previewAndExecute(harness, 'op-race', inflowCommand(1_200, '2026-09-28', 'race'));
+      const operationId = brandedOperationId('op-race');
+
+      // Sequential updates accumulate: two attempts persist as attempts=2.
+      await harness.adapter.updateDeliveryState(operationId, { ok: false, error: 'timeout-a', nextRetryAtMs: 1_000 });
+      const second = await harness.adapter.updateDeliveryState(operationId, { ok: false, error: 'timeout-b', nextRetryAtMs: 2_000 });
+      expect(second.attempts).toBe(2);
+
+      // A true race: one transaction parks mid-flight while another commits.
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let parkedError: unknown = null;
+      const parked = harness.adapter.runTransaction(async (transaction) => {
+        const current = transaction.getDeliveryState(operationId);
+        if (current === null) throw new Error('delivery disappeared during test');
+        await gate;
+        transaction.putDeliveryState(recordDeliveryAttempt(current, { ok: true }));
+      }).catch((error: unknown) => {
+        parkedError = error;
+      });
+      const winner = await harness.adapter.updateDeliveryState(operationId, { ok: false, error: 'timeout-c', nextRetryAtMs: 3_000 });
+      expect(winner.attempts).toBe(3);
+      release();
+      await parked;
+      // Exactly one writer loses, explicitly: no silent overwrite.
+      expect(parkedError).not.toBeNull();
+      expect(harness.adapter.getDeliveryState(operationId)?.attempts).toBe(3);
+      // The loser retries and reaches attempts=4: no successful update lost.
+      const retried = await harness.adapter.updateDeliveryState(operationId, { ok: true });
+      expect(retried.attempts).toBe(4);
+      expect(retried.lastError).toBeNull();
     });
 
     it('orders fixed-clock commits by durable sequence only', async () => {

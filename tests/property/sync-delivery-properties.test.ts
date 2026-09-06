@@ -59,6 +59,7 @@ function operationId(raw: string): OperationId {
 const opIdArb = fc.integer({ min: 1, max: 5 }).map((n) => `prop-op-${n}`);
 
 function envelopeFor(id: string, sequence: number): PulledOperation {
+  const payload = `{"n":"${id}"}`;
   return {
     operationId: operationId(id),
     sequence,
@@ -66,6 +67,7 @@ function envelopeFor(id: string, sequence: number): PulledOperation {
     bookId,
     baseRevision: 1,
     resultingRevision: 2,
+    canonicalCommand: payload,
     canonicalDigest: `digest-for-${id}`,
     schemaVersion: 1,
   };
@@ -92,18 +94,28 @@ describe('sync delivery properties (bounded, seeded)', () => {
     return fc.assert(property, { seed: SEED, numRuns: PROPERTY_RUNS });
   });
 
-  it('turns same-ID/changed-digest duplicates into explicit conflicts', () => {
-    const property = fc.property(opIdArb, fc.string({ minLength: 1, maxLength: 8 }), (id, extra) => {
-      const first = envelopeFor(id, 0);
-      const changed = { ...envelopeFor(id, 1), canonicalDigest: `digest-for-${id}-${extra}` };
-      if (changed.canonicalDigest === first.canonicalDigest) return;
-      const reconciled = reconcilePulledOperations([first, changed]);
-      expect(reconciled.ok).toBe(false);
-      if (!reconciled.ok) {
-        expect(reconciled.conflict.operationId).toBe(id);
-        expect(reconciled.conflict.digests).toEqual([first.canonicalDigest, changed.canonicalDigest]);
-      }
-    });
+  it('turns same-ID/changed-envelope duplicates into explicit conflicts', () => {
+    const property = fc.property(
+      opIdArb,
+      fc.string({ minLength: 1, maxLength: 8 }),
+      fc.integer({ min: 0, max: 3 }),
+      (id, extra, field) => {
+        const first = envelopeFor(id, 0);
+        const changed =
+          field === 0
+            ? { ...envelopeFor(id, 1), canonicalDigest: `digest-for-${id}-${extra}`, canonicalCommand: `{"n":"${id}-${extra}"}` }
+            : field === 1
+              ? { ...envelopeFor(id, 1), baseRevision: 7, resultingRevision: 8 }
+              : { ...envelopeFor(id, 1), bookId: branded(makeBookId('book-prop-other')) };
+        if (changed.canonicalDigest === first.canonicalDigest && field === 0 && extra === '') return;
+        const reconciled = reconcilePulledOperations([first, changed]);
+        expect(reconciled.ok).toBe(false);
+        if (!reconciled.ok) {
+          expect(reconciled.conflict.operationId).toBe(id);
+          expect(reconciled.conflict.differingFields.length).toBeGreaterThan(0);
+        }
+      },
+    );
     return fc.assert(property, { seed: SEED + 4, numRuns: PROPERTY_RUNS });
   });
 
@@ -155,6 +167,7 @@ describe('sync delivery properties (bounded, seeded)', () => {
         const stored = {
           schemaVersion: 1 as const,
           streamId,
+          scopeId,
           cursor: storedCursor,
           batchDigest: storedCursor === null ? null : 'digest-stored',
         };
@@ -162,6 +175,7 @@ describe('sync delivery properties (bounded, seeded)', () => {
         const batch: PulledBatch = {
           schemaVersion: 1,
           streamId,
+          scopeId,
           batchId: 'batch-prop',
           batchDigest: digestMatches ? 'digest-stored' : computePulledBatchDigest(operations),
           baseCursor: candidateBase === 0 ? null : cursorFor(candidateBase),

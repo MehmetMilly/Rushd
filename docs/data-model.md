@@ -233,19 +233,27 @@ these shapes.
   source of truth for the canonical payload; the outbox intent references
   it by operation ID and never duplicates it. Both commit atomically with
   the next `BookState`.
-- **OutboxDeliveryState**: mutable transport metadata (attempts, last
-  error, lease, acknowledgement, retry time) owned by the
-  adapter/transport and persisted transactionally per operation. Pure helpers
-  record attempts and acknowledge exactly the intended operation; delivery
-  changes can never rewrite canonical history. Delivery tentative/commit
-  failures roll back byte-identically with exactly-one retry.
+- **OutboxDeliveryState**: mutable transport metadata (version, attempts,
+  last error, lease, acknowledgement, retry time) owned by the
+  adapter/transport and persisted transactionally per operation with
+  first-committer-wins version guards — every mutation advances exactly
+  one version, so concurrent workers serialize or fail explicitly. Pure
+  helpers record attempts and acknowledge exactly the intended operation;
+  delivery changes can never rewrite canonical history. Delivery
+  tentative/commit failures roll back byte-identically with exactly-one
+  retry.
 - **SyncCursor / CheckpointRecord / PulledBatch / PulledOperation**
   (`src/domain/sync/cursors.ts`): the cursor is opaque and compared by
-  equality only — no timestamp or lexical ordering. Pulled operations are
-  content envelopes (operation ID, provider sequence, scope, book, base and
-  resulting revision with exactly-one advancement, canonical digest,
-  schema version); batches carry an identity plus a recomputed content
-  digest. Application persists canonical pulled records together with the
+  equality only — no timestamp or lexical ordering. Every checkpoint,
+  batch, and stream is bound to one immutable scope; cross-scope batches
+  are rejected without mutation. Pulled operations are full content
+  envelopes (scope, book, base/resulting revision with exactly-one
+  advancement, exact canonical payload, re-verified digest, schema);
+  duplicate equality covers every immutable field and names differing
+  fields on conflict. Batches carry an identity plus a recomputed content
+  digest. Application executes each fresh operation's exact canonical
+  command through the production path against the scope-bound adapter, so
+  applied records and real finance effects commit atomically with the
   checkpoint: stale bases reject, exact replays are no-op successes, and
   changed content is an explicit `contentConflict` that advances nothing.
 - **TombstoneRecord** (`src/domain/sync/tombstones.ts`): scope, entity

@@ -1057,11 +1057,19 @@ export interface OutboxEnvelope {
  * adapter/transport. Mutating this record must never change the canonical
  * command, receipt, book revision, or effect: it is keyed by operation ID
  * and acknowledges exactly the intended operation.
+ *
+ * `version` is the optimistic-concurrency guard: every mutation produces
+ * exactly version + 1, and the adapter commits a delivery write only when
+ * the committed version still equals the version read in the same
+ * transaction (first-committer-wins). Concurrent delivery workers therefore
+ * serialize or receive an explicit conflict — no successful update is ever
+ * silently lost.
  */
 export interface OutboxDeliveryState {
   readonly schemaVersion: SyncRecordSchemaVersion;
   readonly outboxId: string;
   readonly operationId: OperationId;
+  readonly version: number;
   readonly attempts: number;
   readonly lastError: string | null;
   readonly leaseHolder: string | null;
@@ -1076,6 +1084,7 @@ export function initialOutboxDelivery(envelope: OutboxEnvelope): OutboxDeliveryS
     schemaVersion: SYNC_RECORD_SCHEMA_VERSION,
     outboxId: envelope.outboxId,
     operationId: envelope.operationId,
+    version: 0,
     attempts: 0,
     lastError: null,
     leaseHolder: null,
@@ -1087,12 +1096,12 @@ export function initialOutboxDelivery(envelope: OutboxEnvelope): OutboxDeliveryS
 
 export type DeliveryAttemptOutcome = { readonly ok: true } | { readonly ok: false; readonly error: string; readonly nextRetryAtMs: number | null };
 
-/** Records one transport attempt. Pure: the canonical records are untouched by construction. */
+/** Records one transport attempt and advances the version by exactly one. Pure: the canonical records are untouched by construction. */
 export function recordDeliveryAttempt(state: OutboxDeliveryState, outcome: DeliveryAttemptOutcome): OutboxDeliveryState {
   if (!outcome.ok) {
-    return { ...state, attempts: state.attempts + 1, lastError: outcome.error, nextRetryAtMs: outcome.nextRetryAtMs };
+    return { ...state, version: state.version + 1, attempts: state.attempts + 1, lastError: outcome.error, nextRetryAtMs: outcome.nextRetryAtMs };
   }
-  return { ...state, attempts: state.attempts + 1, lastError: null };
+  return { ...state, version: state.version + 1, attempts: state.attempts + 1, lastError: null };
 }
 
 export type OutboxAcknowledgement = { readonly ok: true; readonly delivery: OutboxDeliveryState } | { readonly ok: false; readonly reason: 'operationMismatch' | 'alreadyAcknowledged' };
@@ -1109,7 +1118,7 @@ export function acknowledgeOutboxDelivery(state: OutboxDeliveryState, operationI
   if (state.acknowledged) {
     return { ok: false, reason: 'alreadyAcknowledged' };
   }
-  return { ok: true, delivery: { ...state, acknowledged: true, nextRetryAtMs: null } };
+  return { ok: true, delivery: { ...state, version: state.version + 1, acknowledged: true, nextRetryAtMs: null } };
 }
 
 export type CommandFailure =

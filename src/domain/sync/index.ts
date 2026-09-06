@@ -36,11 +36,13 @@ export {
 export {
   SYNC_CURSOR_SCHEMA_VERSION,
   computePulledBatchDigest,
+  differingPulledFields,
   equalSyncCursors,
   isBatchAlreadyApplied,
   isNextBatchFor,
   makeReplicationStreamId,
   makeSyncCursor,
+  pulledOperationsEqual,
   reconcilePulledOperations,
   validatePulledBatchShape,
   type CheckpointRecord,
