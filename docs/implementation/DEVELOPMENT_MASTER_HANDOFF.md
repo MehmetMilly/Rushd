@@ -40,7 +40,7 @@ Use `ACTIVE_DELIVERY_PLAN.md` for the current commit, phase, available models, e
 
 ## Immediate continuation
 
-The founder approved compacting this task and switching from Astra Medium to Sol High on 6 September. Preserve the existing role and product decisions; this is a model handoff, not a planning restart. P03 B is closed. Start by reading the active plan's next action, then prepare C against `P03_EXECUTION_PLAN.md`, especially the agreed Reality Check input basis. Check current worker availability before dispatch. No worker or monitor needs continuing for B, and no new C work has been launched.
+The founder approved compacting this task and switching from Astra Medium to Sol High on 6 September. Preserve the existing role and product decisions; this is a model handoff, not a planning restart. P03 Tasks A through C are implemented. C closed at `a047a60` after two correction rounds and a final Terra High `ready_for_integration` review; the Master reran every required gate successfully. Start by reading the active plan's next action, then prepare the compact P03 D worker card from `P03_EXECUTION_PLAN.md`. Check current cheap external-worker availability before routing and do not assume the expired GLM window is still active. Persistent browser storage remains P04 scope.
 
 The founder subsequently reserved Astra for ambitious animations and selected design work too, including hands-on creation rather than consultation alone. Preserve the active plan's motion/design quality requirements; cheaper routine management is not permission to compromise the intended experience.
 

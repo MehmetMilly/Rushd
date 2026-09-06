@@ -2,7 +2,7 @@
 
 **Date:** 5 September 2026
 **Assessment base:** `f80cfc9`
-**Status:** Execution agreed. Task A is committed with corrections at `51659e6`; current status and remaining issues live in `ACTIVE_DELIVERY_PLAN.md`. Task B's prompt includes the narrow remaining era-validation fix.
+**Status:** Execution active. Tasks A through C are implemented; C closed at `a047a60` after independent finance review and two correction rounds. Task D is next. Current routing and continuity live in `ACTIVE_DELIVERY_PLAN.md`.
 
 ## Outcome
 
