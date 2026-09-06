@@ -9,21 +9,40 @@
 
 declare const bookIdBrand: unique symbol;
 declare const cycleIdBrand: unique symbol;
+declare const cycleVersionIdBrand: unique symbol;
 declare const entryIdBrand: unique symbol;
 declare const operationIdBrand: unique symbol;
 declare const outboxIdBrand: unique symbol;
 declare const obligationIdBrand: unique symbol;
 declare const goalIdBrand: unique symbol;
 declare const allocationRecordIdBrand: unique symbol;
+declare const observationIdBrand: unique symbol;
+declare const planIdBrand: unique symbol;
+declare const occurrenceIdBrand: unique symbol;
+declare const settlementIdBrand: unique symbol;
 
 export type BookId = string & { readonly [bookIdBrand]: true };
 export type CycleId = string & { readonly [cycleIdBrand]: true };
+/**
+ * A version of one logical cycle. Rebase, settlement, and reopen mint new
+ * version identities in a `cycver:` namespace so they can never collide with
+ * `composeCycleId`'s `cyc:` identities.
+ */
+export type CycleVersionId = string & { readonly [cycleVersionIdBrand]: true };
 export type EntryId = string & { readonly [entryIdBrand]: true };
 export type OperationId = string & { readonly [operationIdBrand]: true };
 export type OutboxId = string & { readonly [outboxIdBrand]: true };
 export type ObligationId = string & { readonly [obligationIdBrand]: true };
 export type GoalId = string & { readonly [goalIdBrand]: true };
 export type AllocationRecordId = string & { readonly [allocationRecordIdBrand]: true };
+/** A Reality Check observation boundary owned by one cycle. */
+export type ObservationId = string & { readonly [observationIdBrand]: true };
+/** A recurring plan definition (revisions are separate records). */
+export type PlanId = string & { readonly [planIdBrand]: true };
+/** A stable managed occurrence of a recurring plan. */
+export type OccurrenceId = string & { readonly [occurrenceIdBrand]: true };
+/** An immutable cycle-settlement snapshot version. */
+export type SettlementId = string & { readonly [settlementIdBrand]: true };
 
 export type EntityIdFailure = { readonly reason: 'invalidId'; readonly provided: unknown; readonly detail: string };
 
@@ -71,6 +90,26 @@ export function makeObligationId(value: unknown): EntityIdResult<ObligationId> {
 
 export function makeGoalId(value: unknown): EntityIdResult<GoalId> {
   return makeBrandedId<GoalId>(value);
+}
+
+export function makeObservationId(value: unknown): EntityIdResult<ObservationId> {
+  return makeBrandedId<ObservationId>(value);
+}
+
+export function makePlanId(value: unknown): EntityIdResult<PlanId> {
+  return makeBrandedId<PlanId>(value);
+}
+
+export function makeOccurrenceId(value: unknown): EntityIdResult<OccurrenceId> {
+  return makeBrandedId<OccurrenceId>(value);
+}
+
+export function makeSettlementId(value: unknown): EntityIdResult<SettlementId> {
+  return makeBrandedId<SettlementId>(value);
+}
+
+export function makeCycleVersionId(value: unknown): EntityIdResult<CycleVersionId> {
+  return makeBrandedId<CycleVersionId>(value);
 }
 
 export function makeAllocationRecordId(value: unknown): EntityIdResult<AllocationRecordId> {

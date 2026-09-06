@@ -42,6 +42,7 @@ import {
 import { validateActivityCommand } from './validation-activity';
 import { validateObligationCommand } from './validation-obligations';
 import { validateAllocationCommand } from './validation-allocations';
+import { validateTaskCCommand } from './validation-task-c';
 
 export type { ValidationIssue } from './validation-helpers';
 
@@ -90,6 +91,22 @@ export function validateFinanceCommand(raw: unknown): CommandValidation {
     case 'releaseAllocation':
     case 'reverseAllocationRecord':
       return validateAllocationCommand(record);
+    case 'openBoundaryCycle':
+    case 'recordRealityCheck':
+    case 'recoverObservedActivity':
+    case 'createRecurringPlan':
+    case 'reviseRecurringPlan':
+    case 'materializePlanOccurrences':
+    case 'detachPlanOccurrence':
+    case 'reservePlanOccurrence':
+    case 'updateBookSettings':
+    case 'rebaseOpenCycle':
+    case 'closeCycle':
+    case 'disposeCycleRemainder':
+    case 'reopenCycle':
+    case 'recordClosedCycleCorrection':
+    case 'resolvePropagationConflict':
+      return validateTaskCCommand(record);
     case 'setBuffer':
       return validateSetBuffer(record);
     default:

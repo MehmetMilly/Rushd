@@ -125,14 +125,80 @@ semantics. It is still backend-only: the legacy UI does not call it.
   not disappear because transactions got categories, and vice versa.
 
 Handler and validator code is split per domain (`activity-handlers`,
-`obligation-handlers`, `allocation-handlers`, and matching `validation-*`
-modules) behind the unchanged `previewCommand`/`executeCommand` hub, so
-every new mutation keeps runtime validation, preview/confirmation, revision
-checks, atomic state+receipt+outbox commits, and the idempotency policy.
+`obligation-handlers`, `allocation-handlers`, plus Task C's
+`recovery-handlers`, `plan-handlers`, `cycle-handlers`, and matching
+`validation-*` modules) behind the unchanged `previewCommand`/
+`executeCommand` hub, so every new mutation keeps runtime validation,
+preview/confirmation, revision checks, atomic state+receipt+outbox commits,
+and the idempotency policy.
 
-Not implemented yet (later P03 tasks): Reality Check/recovery and observed
-boundaries, recurring plans and occurrences, cycle close/carry/reopen,
-obligation due dates, persistent storage, and sync.
+## Recovery, recurring plans, and cycle lifecycle (P03 Task C)
+
+Task C turns the one-cycle engine into a cycle-aware finance system. It is
+still backend-only: the legacy UI does not call it.
+
+- `src/domain/recovery/`: Reality Check derivations. The observation names
+  the full physically-left pool (goal-earmarked and obligation-reserved
+  money included); the signed adjustment is observed minus the
+  ledger-derived pool at the boundary, never availability. Allocation moves
+  and reservations are earmarks and never enter the comparison. Residuals
+  derive from linked recoveries at live correction-family values, so
+  correcting or voiding recovered activity recomputes the boundary forward.
+  Ordering uses the financial occurrence (explicit instants resolved under
+  the boundary timezone with DST rules, else the civil date); a civil-date
+  fact on the boundary's own date is ambiguous and clarifies with no write.
+  Recoveries attach to the earliest covering boundary, which keeps every
+  observed pool exact. Successive observations chain forward; a backdated
+  boundary stacks an independent adjustment without rewriting later ones.
+- `src/domain/plans/`: effective-dated revisions with stable deterministic
+  occurrence identities, short-month clamping, and idempotent
+  materialization. Revisions move future unpaid managed occurrences only;
+  paid and detached occurrences keep their historical revision. Reserving
+  creates the obligation with its due-cycle identity; paying moves actual
+  money in the payment's cycle. Detach is the explicit pre-editing escape
+  and later revisions never retake a detached occurrence. Flexible links
+  stay descriptive and arithmetic-neutral.
+- `src/domain/cycles/`: effective settings (timezone/payday/week-start) per
+  date, settlement remainder derivation (snapshot plus linked deltas),
+  carry attribution, and overlap accounting. Week-start is display policy
+  and never changes financial occurrence.
+- Cycle versions are append-only rows with derived effective status: a
+  version referenced by a settlement is closed, one named by another
+  version's `supersedesVersionId` is superseded, otherwise the latest is
+  open. Rebase and close never mutate a row; reopen appends a new version
+  that acts as the reversal record while the closed snapshot and version
+  stay byte-for-byte. Managed unpaid occurrences and unresolved conflict
+  flags are lifecycle pointers that advance by replacement; paid, detached,
+  closed, and settled facts are never overwritten, and every transition is
+  journaled through the operation record.
+- Reality Check, recovery, plans, settings/rebase, close, explicit
+  remainder disposition (carry-in, tracked funding, split, independent),
+  reopen, closed-cycle corrections (new facts plus linked corrections and
+  voids with live-command refund/net guards), and conflict resolution all
+  run through the shared command protocol. Foreign-currency and ambiguous
+  inputs clarify with no writes. Backdated corrections are always accepted:
+  exact linked deltas while the downstream is untouched, explicit
+  unresolved conflicts (pool degraded until resolution) otherwise.
+- Availability is cycle-scoped (starting funds plus signed carry-in, this
+  cycle's cash facts, signed reconciliation residuals, once-counted open
+  reservations, per-cycle allocation attribution, buffer) with extra
+  components `carryIn` and `netAdjustments`. Completeness covers the active
+  basis: old unclassified history never contaminates a newer pool, while
+  unexplained residuals, unclassified adjustments, and unresolved
+  propagation conflicts stay visible. A pool may be Current while
+  classification remains Needs Attention.
+- Known Task C boundaries for later phases: pre-C commands keep resolving
+  instants and capturing in the book creation timezone (unchanged behavior
+  when no settings revision exists); new commands use the version or
+  boundary timezone. Successive observations chain forward in boundary
+  order; a backdated boundary stacks an independent adjustment without
+  rewriting later ones, so contradictory repeated claims add rather than
+  cancel. Detach is the occurrence cancellation path; there is no separate
+  plan-cancellation command.
+
+Not implemented yet (P03 Task D and later phases): the provider-neutral
+storage/sync contract, persistent storage, obligation due dates beyond plan
+occurrences, and sync.
 
 ## Main Screens
 

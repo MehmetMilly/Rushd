@@ -20,7 +20,17 @@
 
 import type { BookState, LedgerEntry } from './ledger';
 import type { OperationRecord, OutboxEnvelope } from './commands';
-import type { BookId, EntryId, GoalId, ObligationId, OperationId } from './identity';
+import type {
+  BookId,
+  EntryId,
+  GoalId,
+  ObligationId,
+  ObservationId,
+  OccurrenceId,
+  OperationId,
+  PlanId,
+  SettlementId,
+} from './identity';
 
 export interface EntryLocation {
   readonly bookId: BookId;
@@ -38,6 +48,26 @@ export interface GoalLocation {
   readonly goalId: GoalId;
 }
 
+export interface ObservationLocation {
+  readonly bookId: BookId;
+  readonly observationId: ObservationId;
+}
+
+export interface PlanLocation {
+  readonly bookId: BookId;
+  readonly planId: PlanId;
+}
+
+export interface OccurrenceLocation {
+  readonly bookId: BookId;
+  readonly occurrenceId: OccurrenceId;
+}
+
+export interface SettlementLocation {
+  readonly bookId: BookId;
+  readonly settlementId: SettlementId;
+}
+
 /**
  * A consistent, defensively copied read view for previews and derived
  * queries. Returned objects must not alias repository internals.
@@ -47,6 +77,10 @@ export interface FinanceReadModel {
   locateEntry(entryId: EntryId): EntryLocation | null;
   locateObligation(obligationId: ObligationId): ObligationLocation | null;
   locateGoal(goalId: GoalId): GoalLocation | null;
+  locateObservation(observationId: ObservationId): ObservationLocation | null;
+  locatePlan(planId: PlanId): PlanLocation | null;
+  locateOccurrence(occurrenceId: OccurrenceId): OccurrenceLocation | null;
+  locateSettlement(settlementId: SettlementId): SettlementLocation | null;
 }
 
 export interface RepositoryTransaction extends FinanceReadModel {

@@ -27,6 +27,7 @@ import type { ApplyResult, HandlerRefs } from './handlers';
 import {
   currencyMismatchFailure,
   newEntryId,
+  occurredInstantOf,
   requireDateInOpenCycle,
   requireOpenCycle,
   resolveOccurredAt,
@@ -143,6 +144,7 @@ function appendExpense(
     flexibleDefinitionId: fields.flexibleDefinitionId,
     linkedObligationId: fields.linkedObligationId,
     replacesEntryId: fields.replacesEntryId,
+    occurredAtInstantMs: occurredInstantOf(occurredAt),
     capturedAtInstantMs: context.clock.nowMs(),
     capturedInTimeZone: state.book.timeZone,
     calculationVersion: context.calculationVersion,
@@ -290,6 +292,7 @@ export function applyCorrectExpense(
     amount: negated.value,
     reversesEntryId: target.entryId,
     note: command.note,
+    occurredAtInstantMs: occurredInstantOf(command.occurredAt),
     capturedAtInstantMs,
     capturedInTimeZone: state.book.timeZone,
     calculationVersion: context.calculationVersion,
@@ -309,6 +312,10 @@ export function applyCorrectExpense(
 
   let entries: BookState['entries'] = [...state.entries, reversalEntry];
   if (command.replacement !== null) {
+    // The replacement's financial date is either the explicit local date
+    // (no instant evidence) or the correction's own occurrence.
+    const replacementInstant =
+      command.replacement.localDate === undefined ? occurredInstantOf(command.occurredAt) : null;
     const replacement: ExpenseEntry = {
       kind: 'expense',
       entryId: newEntryId(context, 'expense'),
@@ -323,6 +330,7 @@ export function applyCorrectExpense(
         command.replacement.flexibleDefinitionId !== undefined ? command.replacement.flexibleDefinitionId : target.flexibleDefinitionId,
       linkedObligationId: target.linkedObligationId,
       replacesEntryId: target.entryId,
+      occurredAtInstantMs: replacementInstant,
       capturedAtInstantMs,
       capturedInTimeZone: state.book.timeZone,
       calculationVersion: context.calculationVersion,
@@ -434,6 +442,7 @@ export function applyRecordExpenseReturn(
     linkedObligationId: null,
     replacesReturnEntryId: null,
     note: command.note,
+    occurredAtInstantMs: occurredInstantOf(command.occurredAt),
     capturedAtInstantMs: context.clock.nowMs(),
     capturedInTimeZone: state.book.timeZone,
     calculationVersion: context.calculationVersion,
@@ -588,6 +597,7 @@ export function applyCorrectExpenseReturn(
     linkedExpenseEntryId: target.linkedExpenseEntryId,
     linkedObligationId: target.linkedObligationId,
     note: command.note,
+    occurredAtInstantMs: occurredInstantOf(command.occurredAt),
     capturedAtInstantMs,
     capturedInTimeZone: state.book.timeZone,
     calculationVersion: context.calculationVersion,
@@ -609,6 +619,8 @@ export function applyCorrectExpenseReturn(
 
   let entries: BookState['entries'] = [...state.entries, reversalEntry];
   if (command.replacement !== null && replacementAmount !== null) {
+    const replacementInstant =
+      command.replacement.localDate === undefined ? occurredInstantOf(command.occurredAt) : null;
     const replacement = {
       kind: 'expenseReturn' as const,
       entryId: newEntryId(context, 'expense-return'),
@@ -621,6 +633,7 @@ export function applyCorrectExpenseReturn(
       linkedObligationId: target.linkedObligationId,
       replacesReturnEntryId: target.entryId,
       note: command.replacement.note ?? target.note,
+      occurredAtInstantMs: replacementInstant,
       capturedAtInstantMs,
       capturedInTimeZone: state.book.timeZone,
       calculationVersion: context.calculationVersion,

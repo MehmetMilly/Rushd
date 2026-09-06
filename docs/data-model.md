@@ -147,6 +147,51 @@ immutable; state changes append linked facts.
   `openDisputedObligation`, `releasedResidualUncertainty`,
   `unclassifiedExpenseMovements`).
 
+## P03 canonical model additions (Task C)
+
+Task C extends the same in-memory canonical model. Financial facts,
+observations, adjustments, revisions, occurrences (once paid or detached),
+settlements, and version rows are append-only and never rewritten; managed
+unpaid occurrences and conflict workflow flags advance by replacement under
+the operation journal.
+
+- **CycleRecord** (one logical cycle, many versions): deterministic
+  `cycleId` (`cyc:<book>:<start>`), separate `versionId` (`cycver:…`)
+  namespace, `versionSeq`, full-cycle vs `remainingFromBoundary` mode,
+  window, anchor snapshot, governing timezone, starting (or observed) pool,
+  boundary evidence, and `supersedesVersionId`. Effective status
+  (open/closed/superseded) derives from settlements and supersede links.
+- **LedgerEntry occurrence evidence**: every entry carries
+  `occurredAtInstantMs` (the financial instant when the command named one,
+  else null) alongside its local date; ordering against boundaries never
+  uses append order or capture time.
+- **RealityCheckObservation** + **ReconciliationAdjustment** +
+  **RecoveryLink**: one boundary-specific signed adjustment per
+  observation; residuals derive from linked recoveries at live
+  correction-family values. Observations carry the boundary (instant or
+  civil date plus wall time), timezone, optional currency label, and
+  classification note.
+- **RecurringPlan** + **PlanRevision** + **PlanOccurrence**: plan identity
+  with anchor snapshot; immutable effective-dated revisions (amount,
+  schedule day); stable deterministic occurrence identities with revision
+  attribution, due date, due-cycle identity, managed/detached state, and
+  obligation/expense links.
+- **BookSettingsRevision**: versioned timezone, cycle anchor, and
+  week-start with an explicit anchor-aligned effective date; creation facts
+  on `FinanceBook` never change.
+- **CycleSettlement** + **CarryAction** + **PropagationDelta** +
+  **PropagationConflict**: immutable settlement snapshots (funds, cash,
+  residuals, reservations, allocations, buffer, signed availability,
+  completeness states, versions, data-as-of); explicit once-consumed
+  dispositions (carry-in, tracked funding, split, independent); exact
+  linked forward deltas; explicit unresolved conflicts with signed
+  unpropagated amounts and downstream kinds.
+- **Derived queries** gain cycle scoping: availability adds `carryIn` and
+  `netAdjustments` components over the effective open version only;
+  completeness adds `noActiveBasis`,
+  `unexplainedReconciliationResidual`, `unresolvedPropagationConflict`,
+  and `unclassifiedAdjustment` reasons over the active basis.
+
 ## P02 compatibility boundary
 
 `src/data/legacy-v1/contracts.ts` records the v1 database name, version,

@@ -328,11 +328,13 @@ describe('availability result contract', () => {
     expect(availability.available).toEqual(SAR(100_000));
     expect(availability.components).toEqual({
       startingFunds: SAR(100_000),
+      carryIn: SAR(0),
       netInflows: SAR(0),
       netReturns: SAR(0),
       netActualOutflows: SAR(0),
       residualReservations: SAR(0),
       netCycleAllocations: SAR(0),
+      netAdjustments: SAR(0),
       buffer: SAR(0),
     });
     expect(availability.completeness.pool.state).toBe('current');

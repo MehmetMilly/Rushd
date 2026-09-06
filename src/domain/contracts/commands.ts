@@ -24,10 +24,15 @@ import type {
   AllocationRecordId,
   BookId,
   CycleId,
+  CycleVersionId,
   EntryId,
   GoalId,
   ObligationId,
+  ObservationId,
+  OccurrenceId,
   OperationId,
+  PlanId,
+  SettlementId,
 } from './identity';
 import type { AllocationChange } from './ledger';
 
@@ -58,7 +63,22 @@ export type CommandKind =
   | 'unassignFromGoal'
   | 'releaseAllocation'
   | 'reverseAllocationRecord'
-  | 'setBuffer';
+  | 'setBuffer'
+  | 'openBoundaryCycle'
+  | 'recordRealityCheck'
+  | 'recoverObservedActivity'
+  | 'createRecurringPlan'
+  | 'reviseRecurringPlan'
+  | 'materializePlanOccurrences'
+  | 'detachPlanOccurrence'
+  | 'reservePlanOccurrence'
+  | 'updateBookSettings'
+  | 'rebaseOpenCycle'
+  | 'closeCycle'
+  | 'disposeCycleRemainder'
+  | 'reopenCycle'
+  | 'recordClosedCycleCorrection'
+  | 'resolvePropagationConflict';
 
 export interface CreateBookCommand {
   readonly kind: 'createBook';
@@ -331,6 +351,244 @@ export interface SetBufferCommand {
   readonly note: string;
 }
 
+/**
+ * An observation boundary: either an explicit instant (resolved in the
+ * boundary timezone at apply time) or a civil date plus `HH:MM:SS` wall time
+ * in the boundary timezone.
+ */
+export type ObservationBoundary =
+  | { readonly kind: 'instant'; readonly instantMs: number }
+  | { readonly kind: 'civilDateTime'; readonly localDate: CivilDate; readonly localTime: string };
+
+/**
+ * Opens a `remaining-from-boundary` cycle starting mid-cycle at a named
+ * observed pool. Pre-boundary activity improves history without subtracting
+ * again from the starting pool; post-boundary movement changes it normally.
+ */
+export interface OpenBoundaryCycleCommand {
+  readonly kind: 'openBoundaryCycle';
+  readonly bookId: BookId;
+  /** Non-negative physically-left pool at the boundary, in book currency. */
+  readonly observedPool: Money;
+  readonly boundary: ObservationBoundary;
+  readonly note: string;
+}
+
+/**
+ * An explicit Reality Check against the open cycle: the caller names the
+ * full amount physically left in the tracked pool (including goal-earmarked
+ * and obligation-reserved money) and Rushd derives the signed reconciliation
+ * adjustment against the ledger-derived pool at the boundary. A mismatched
+ * currency or ambiguous ordering evidence is a typed clarification, never a
+ * reinterpretation.
+ */
+export interface RecordRealityCheckCommand {
+  readonly kind: 'recordRealityCheck';
+  readonly bookId: BookId;
+  /** Non-negative physically-left pool in the book currency. */
+  readonly observedPool: Money;
+  readonly boundary: ObservationBoundary;
+  /** Optional caller-named currency label; ambiguous labels clarify. */
+  readonly currencyLabel: string | null;
+  /** Null means the resulting adjustment stays unclassified. */
+  readonly classificationNote: string | null;
+  readonly note: string;
+}
+
+/**
+ * Recovers one forgotten activity dated at or before a named boundary. The
+ * command atomically appends the actual fact (in the observation's cycle)
+ * and links it to that boundary's adjustment, consuming the unexplained
+ * difference exactly once. Same-date civil-date recoveries without instant
+ * evidence clarify instead of guessing.
+ */
+export interface RecoverObservedActivityCommand {
+  readonly kind: 'recoverObservedActivity';
+  readonly bookId: BookId;
+  readonly observationId: ObservationId;
+  readonly movementKind: 'expense' | 'inflow' | 'return';
+  /** Strictly positive book-currency amount. */
+  readonly amount: Money;
+  readonly occurredAt: OccurredAt;
+  readonly note: string;
+  /** Descriptive only; never affects availability. */
+  readonly category: string | null;
+  /** Required when `movementKind` is `return` (the refunded expense). */
+  readonly linkedExpenseEntryId: EntryId | null;
+}
+
+/** Defines a monthly recurring plan starting at `effectiveDate`. */
+export interface CreateRecurringPlanCommand {
+  readonly kind: 'createRecurringPlan';
+  readonly bookId: BookId;
+  /** Caller-supplied stable identity, so retries and sync dedupe cleanly. */
+  readonly planId: PlanId;
+  readonly name: string;
+  /** Strictly positive expected amount per occurrence. */
+  readonly amount: Money;
+  /** Monthly schedule day 1-31; short months clamp explicitly. */
+  readonly scheduleDay: number;
+  readonly effectiveDate: CivilDate;
+  /** Descriptive flexible-definition link; arithmetic-neutral. */
+  readonly flexibleDefinitionId: string | null;
+}
+
+/** Appends an immutable revision; future unpaid managed occurrences follow. */
+export interface ReviseRecurringPlanCommand {
+  readonly kind: 'reviseRecurringPlan';
+  readonly bookId: BookId;
+  readonly planId: PlanId;
+  readonly effectiveDate: CivilDate;
+  /** Strictly positive expected amount per occurrence. */
+  readonly amount: Money;
+  /** Monthly schedule day 1-31; short months clamp explicitly. */
+  readonly scheduleDay: number;
+  readonly note: string;
+}
+
+/** Idempotently materializes stable occurrences through `throughDate`. */
+export interface MaterializePlanOccurrencesCommand {
+  readonly kind: 'materializePlanOccurrences';
+  readonly bookId: BookId;
+  readonly planId: PlanId;
+  readonly throughDate: CivilDate;
+}
+
+/** Detaches a managed occurrence before manual editing; irreversible. */
+export interface DetachPlanOccurrenceCommand {
+  readonly kind: 'detachPlanOccurrence';
+  readonly bookId: BookId;
+  readonly occurrenceId: OccurrenceId;
+  readonly note: string;
+}
+
+/**
+ * Reserves a managed occurrence by creating its obligation. Paying that
+ * obligation later creates actual movement in the payment's occurrence
+ * cycle while the expectation retains its original due-cycle identity.
+ */
+export interface ReservePlanOccurrenceCommand {
+  readonly kind: 'reservePlanOccurrence';
+  readonly bookId: BookId;
+  readonly occurrenceId: OccurrenceId;
+  /** Caller-supplied stable obligation identity. */
+  readonly obligationId: ObligationId;
+  readonly note: string;
+}
+
+/**
+ * A versioned timezone/payday/week-start decision. By default it governs the
+ * next unopened cycle only: existing actuals keep their captured dates and
+ * closed cycles never move. At least one of `timeZone`/`cycleAnchor`/
+ * `weekStart` must change. Week-start is display policy (0 = Sunday through
+ * 6 = Saturday) and never changes financial occurrence.
+ */
+export interface UpdateBookSettingsCommand {
+  readonly kind: 'updateBookSettings';
+  readonly bookId: BookId;
+  readonly timeZone: TimeZoneName | null;
+  readonly cycleAnchor: MonthlyCycleAnchor | null;
+  readonly weekStart: number | null;
+  /** The cycle start the new settings take effect from (anchor-aligned). */
+  readonly effectiveDate: CivilDate;
+  readonly note: string;
+}
+
+/**
+ * A separate previewed command that moves the open cycle onto new settings.
+ * It supersedes the prior version (closing its boundary state), creates a
+ * new version/boundary, and reports every carry/allocation delta. Captured
+ * facts are never re-dated.
+ */
+export interface RebaseOpenCycleCommand {
+  readonly kind: 'rebaseOpenCycle';
+  readonly bookId: BookId;
+  readonly timeZone: TimeZoneName;
+  readonly cycleAnchor: MonthlyCycleAnchor;
+  readonly note: string;
+}
+
+/** Closes the open cycle version with one immutable settlement snapshot. */
+export interface CloseCycleCommand {
+  readonly kind: 'closeCycle';
+  readonly bookId: BookId;
+  /** Null means the currently open version's logical cycle. */
+  readonly cycleId: CycleId | null;
+  readonly note: string;
+}
+
+export type RemainderDispositionInput =
+  | { readonly kind: 'carryIn'; readonly amount: Money; readonly destinationCycleId: CycleId }
+  | { readonly kind: 'fundTracked'; readonly amount: Money }
+  | { readonly kind: 'split'; readonly carryAmount: Money; readonly fundAmount: Money; readonly destinationCycleId: CycleId }
+  | { readonly kind: 'leaveIndependent' };
+
+/**
+ * An explicit confirmed disposition of a named settlement's free remainder:
+ * carry-in to a named cycle, tracked-allocation funding, an explicit split,
+ * or leaving the next cycle independent. The source is consumed only once.
+ */
+export interface DisposeCycleRemainderCommand {
+  readonly kind: 'disposeCycleRemainder';
+  readonly bookId: BookId;
+  readonly settlementId: SettlementId;
+  readonly disposition: RemainderDispositionInput;
+  readonly note: string;
+}
+
+/** Reopens a closed cycle: reverses its settlement, opens a new version. */
+export interface ReopenCycleCommand {
+  readonly kind: 'reopenCycle';
+  readonly bookId: BookId;
+  readonly cycleId: CycleId;
+  readonly note: string;
+}
+
+/**
+ * Appends backdated activity against a closed cycle without rewriting its
+ * snapshot. With `correctsEntryId` null this records a new backdated fact;
+ * otherwise it atomically appends a linked reversal of a live closed-cycle
+ * fact plus, unless voiding, its replacement (a corrected fact). The
+ * correction propagates as an exact linked delta while no downstream
+ * carry/allocation has consumed the settlement; otherwise the valid
+ * correction is still accepted and an explicit unresolved conflict is
+ * recorded alongside it.
+ */
+export interface RecordClosedCycleCorrectionCommand {
+  readonly kind: 'recordClosedCycleCorrection';
+  readonly bookId: BookId;
+  readonly targetCycleId: CycleId;
+  readonly movementKind: 'expense' | 'inflow' | 'return';
+  /**
+   * Strictly positive book-currency amount. For a new fact this is the
+   * fact's amount; for a linked correction it confirms the replacement
+   * amount (or the voided target amount when `replacement` is null).
+   */
+  readonly amount: Money;
+  readonly occurredAt: OccurredAt;
+  readonly note: string;
+  /** Descriptive only; never affects availability. */
+  readonly category: string | null;
+  /** Required when `movementKind` is `return` for a new fact (the refunded expense). */
+  readonly linkedExpenseEntryId: EntryId | null;
+  /** The live closed-cycle fact being corrected or voided; null for a new fact. */
+  readonly correctsEntryId: EntryId | null;
+  /** Null means void (reversal only); otherwise the linked replacement. */
+  readonly replacement: {
+    readonly amount: Money;
+    readonly note?: string;
+  } | null;
+}
+
+/** Records an explicit decision on an unresolved propagation conflict. */
+export interface ResolvePropagationConflictCommand {
+  readonly kind: 'resolvePropagationConflict';
+  readonly bookId: BookId;
+  readonly conflictId: EntryId;
+  readonly resolution: 'acknowledgedDownstreamStands';
+  readonly note: string;
+}
+
 export type FinanceCommand =
   | CreateBookCommand
   | OpenCycleCommand
@@ -355,7 +613,22 @@ export type FinanceCommand =
   | UnassignFromGoalCommand
   | ReleaseAllocationCommand
   | ReverseAllocationRecordCommand
-  | SetBufferCommand;
+  | SetBufferCommand
+  | OpenBoundaryCycleCommand
+  | RecordRealityCheckCommand
+  | RecoverObservedActivityCommand
+  | CreateRecurringPlanCommand
+  | ReviseRecurringPlanCommand
+  | MaterializePlanOccurrencesCommand
+  | DetachPlanOccurrenceCommand
+  | ReservePlanOccurrenceCommand
+  | UpdateBookSettingsCommand
+  | RebaseOpenCycleCommand
+  | CloseCycleCommand
+  | DisposeCycleRemainderCommand
+  | ReopenCycleCommand
+  | RecordClosedCycleCorrectionCommand
+  | ResolvePropagationConflictCommand;
 
 /**
  * Declared reversal policy per command kind:
@@ -383,6 +656,21 @@ export type ReversalPolicy =
 export const COMMAND_REVERSAL_POLICY: Readonly<Record<CommandKind, ReversalPolicy>> = Object.freeze({
   createBook: 'lifecycleCorrectionLaterTask',
   openCycle: 'lifecycleCorrectionLaterTask',
+  openBoundaryCycle: 'lifecycleCorrectionLaterTask',
+  recordRealityCheck: 'managedByLifecycleCommands',
+  recoverObservedActivity: 'appendsLinkedReversal',
+  createRecurringPlan: 'managedByLifecycleCommands',
+  reviseRecurringPlan: 'managedByLifecycleCommands',
+  materializePlanOccurrences: 'managedByLifecycleCommands',
+  detachPlanOccurrence: 'managedByLifecycleCommands',
+  reservePlanOccurrence: 'managedByLifecycleCommands',
+  updateBookSettings: 'managedByLifecycleCommands',
+  rebaseOpenCycle: 'managedByLifecycleCommands',
+  closeCycle: 'managedByLifecycleCommands',
+  disposeCycleRemainder: 'managedByLifecycleCommands',
+  reopenCycle: 'managedByLifecycleCommands',
+  recordClosedCycleCorrection: 'appendsLinkedReversal',
+  resolvePropagationConflict: 'managedByLifecycleCommands',
   recordInflow: 'appendsLinkedReversal',
   reverseInflow: 'isALinkedReversal',
   recordExpense: 'appendsLinkedReversal',
@@ -566,6 +854,114 @@ export type CommandEffect =
       readonly kind: 'bufferSet';
       readonly amount: Money;
       readonly previousAmount: Money | null;
+    }
+  | {
+      readonly kind: 'boundaryCycleOpened';
+      readonly cycleId: CycleId;
+      readonly versionId: CycleVersionId;
+      readonly startDate: CivilDate;
+      readonly endDateExclusive: CivilDate;
+      readonly observedPool: Money;
+    }
+  | {
+      readonly kind: 'realityCheckRecorded';
+      readonly observationId: ObservationId;
+      readonly cycleId: CycleId;
+      readonly observedPool: Money;
+      readonly ledgerPool: Money;
+      readonly adjustmentAmount: Money;
+    }
+  | {
+      readonly kind: 'observedActivityRecovered';
+      readonly entryId: EntryId;
+      readonly observationId: ObservationId;
+      readonly cycleId: CycleId;
+      readonly localDate: CivilDate;
+      readonly amount: Money;
+      readonly movementKind: 'expense' | 'inflow' | 'return';
+    }
+  | {
+      readonly kind: 'recurringPlanCreated';
+      readonly planId: PlanId;
+      readonly amount: Money;
+      readonly scheduleDay: number;
+      readonly effectiveDate: CivilDate;
+    }
+  | {
+      readonly kind: 'recurringPlanRevised';
+      readonly planId: PlanId;
+      readonly revisionId: EntryId;
+      readonly effectiveDate: CivilDate;
+      readonly amount: Money;
+      readonly scheduleDay: number;
+      readonly updatedOccurrences: number;
+    }
+  | {
+      readonly kind: 'planOccurrencesMaterialized';
+      readonly planId: PlanId;
+      readonly occurrenceIds: readonly OccurrenceId[];
+    }
+  | {
+      readonly kind: 'planOccurrenceDetached';
+      readonly occurrenceId: OccurrenceId;
+    }
+  | {
+      readonly kind: 'planOccurrenceReserved';
+      readonly occurrenceId: OccurrenceId;
+      readonly obligationId: ObligationId;
+      readonly expectedAmount: Money;
+    }
+  | {
+      readonly kind: 'bookSettingsUpdated';
+      readonly effectiveDate: CivilDate;
+    }
+  | {
+      readonly kind: 'openCycleRebased';
+      readonly cycleId: CycleId;
+      readonly oldVersionId: CycleVersionId;
+      readonly newVersionId: CycleVersionId;
+      readonly oldStartDate: CivilDate;
+      readonly newStartDate: CivilDate;
+      readonly oldEndDateExclusive: CivilDate;
+      readonly newEndDateExclusive: CivilDate;
+      readonly allocationDelta: Money;
+      readonly carryDelta: Money;
+      readonly unmovedOutsideWindow: number;
+    }
+  | {
+      readonly kind: 'cycleClosed';
+      readonly cycleId: CycleId;
+      readonly versionId: CycleVersionId;
+      readonly settlementId: SettlementId;
+      readonly availability: Money;
+    }
+  | {
+      readonly kind: 'cycleRemainderDisposed';
+      readonly settlementId: SettlementId;
+      readonly carryId: EntryId;
+      readonly dispositionKind: RemainderDispositionInput['kind'];
+    }
+  | {
+      readonly kind: 'cycleReopened';
+      readonly cycleId: CycleId;
+      readonly reopenedSettlementId: SettlementId;
+      readonly newVersionId: CycleVersionId;
+    }
+  | {
+      readonly kind: 'closedCycleCorrectionRecorded';
+      readonly entryId: EntryId;
+      readonly targetCycleId: CycleId;
+      readonly settlementId: SettlementId;
+      readonly propagation: 'applied' | 'conflicted';
+      readonly deltaAmount: Money;
+      /** The corrected closed-cycle fact, if this was a linked correction. */
+      readonly correctsEntryId: EntryId | null;
+      /** The linked replacement entry, if the correction replaces. */
+      readonly replacementEntryId: EntryId | null;
+    }
+  | {
+      readonly kind: 'propagationConflictResolved';
+      readonly conflictId: EntryId;
     };
 
 export interface CommandReceipt {
@@ -707,7 +1103,67 @@ export type CommandFailure =
       readonly bookId: BookId;
       readonly requestedCycleId: CycleId;
       readonly openCycleId: CycleId;
-    };
+    }
+  | {
+      readonly kind: 'clarificationNeeded';
+      readonly bookId: BookId;
+      readonly reason: 'foreignCurrency' | 'ambiguousCurrency' | 'ambiguousBoundaryOrder';
+      readonly detail: string;
+    }
+  | { readonly kind: 'unknownCycle'; readonly bookId: BookId; readonly cycleId: CycleId }
+  | { readonly kind: 'cycleAlreadyClosed'; readonly bookId: BookId; readonly cycleId: CycleId }
+  | { readonly kind: 'cycleNotClosed'; readonly bookId: BookId; readonly cycleId: CycleId }
+  | { readonly kind: 'invalidBoundary'; readonly bookId: BookId; readonly detail: string }
+  | { readonly kind: 'unknownObservation'; readonly bookId: BookId; readonly observationId: ObservationId }
+  | {
+      readonly kind: 'crossBookObservation';
+      readonly bookId: BookId;
+      readonly observationId: ObservationId;
+      readonly observationBookId: BookId;
+    }
+  | {
+      readonly kind: 'duplicateObservation';
+      readonly bookId: BookId;
+      readonly cycleId: CycleId;
+      readonly observationId: ObservationId;
+    }
+  | { readonly kind: 'invalidRecoveryBoundary'; readonly bookId: BookId; readonly observationId: ObservationId; readonly detail: string }
+  | { readonly kind: 'unknownPlan'; readonly bookId: BookId; readonly planId: PlanId }
+  | {
+      readonly kind: 'crossBookPlan';
+      readonly bookId: BookId;
+      readonly planId: PlanId;
+      readonly planBookId: BookId;
+    }
+  | { readonly kind: 'planAlreadyExists'; readonly bookId: BookId; readonly planId: PlanId }
+  | { readonly kind: 'unknownOccurrence'; readonly bookId: BookId; readonly occurrenceId: OccurrenceId }
+  | {
+      readonly kind: 'crossBookOccurrence';
+      readonly bookId: BookId;
+      readonly occurrenceId: OccurrenceId;
+      readonly occurrenceBookId: BookId;
+    }
+  | {
+      readonly kind: 'occurrenceNotManaged';
+      readonly bookId: BookId;
+      readonly occurrenceId: OccurrenceId;
+      readonly state: string;
+    }
+  | { readonly kind: 'occurrenceAlreadyPaid'; readonly bookId: BookId; readonly occurrenceId: OccurrenceId }
+  | { readonly kind: 'invalidEffectiveDate'; readonly bookId: BookId; readonly detail: string }
+  | { readonly kind: 'rebaseNotNeeded'; readonly bookId: BookId; readonly cycleId: CycleId }
+  | { readonly kind: 'unknownSettlement'; readonly bookId: BookId; readonly settlementId: SettlementId }
+  | {
+      readonly kind: 'crossBookSettlement';
+      readonly bookId: BookId;
+      readonly settlementId: SettlementId;
+      readonly settlementBookId: BookId;
+    }
+  | { readonly kind: 'settlementReversed'; readonly bookId: BookId; readonly settlementId: SettlementId }
+  | { readonly kind: 'carryAlreadyConsumed'; readonly bookId: BookId; readonly settlementId: SettlementId; readonly existingCarryId: EntryId }
+  | { readonly kind: 'invalidDisposition'; readonly bookId: BookId; readonly settlementId: SettlementId; readonly detail: string }
+  | { readonly kind: 'unknownConflict'; readonly bookId: BookId; readonly conflictId: EntryId }
+  | { readonly kind: 'conflictAlreadyResolved'; readonly bookId: BookId; readonly conflictId: EntryId };
 
 export type CommandPreviewResult =
   | { readonly ok: true; readonly preview: CommandPreview }
@@ -802,5 +1258,55 @@ export function describeCommandFailure(failure: CommandFailure): string {
       return `tracked pool ${failure.pool.kind === 'goal' ? failure.pool.goalId : 'unallocated'} has ${failure.available.minorUnits}, not ${failure.requested.minorUnits}`;
     case 'invalidReleaseDestination':
       return `release destination ${failure.requestedCycleId} is not the open cycle ${failure.openCycleId}`;
+    case 'clarificationNeeded':
+      return `clarification needed (${failure.reason}): ${failure.detail}`;
+    case 'unknownCycle':
+      return `cycle ${failure.cycleId} is unknown in book ${failure.bookId}`;
+    case 'cycleAlreadyClosed':
+      return `cycle ${failure.cycleId} in book ${failure.bookId} is already closed`;
+    case 'cycleNotClosed':
+      return `cycle ${failure.cycleId} in book ${failure.bookId} is not closed`;
+    case 'invalidBoundary':
+      return `invalid boundary: ${failure.detail}`;
+    case 'unknownObservation':
+      return `observation ${failure.observationId} is unknown in book ${failure.bookId}`;
+    case 'crossBookObservation':
+      return `observation ${failure.observationId} belongs to book ${failure.observationBookId}, not book ${failure.bookId}`;
+    case 'duplicateObservation':
+      return `observation ${failure.observationId} already records this boundary and amount in cycle ${failure.cycleId}`;
+    case 'invalidRecoveryBoundary':
+      return `recovery against observation ${failure.observationId} is invalid: ${failure.detail}`;
+    case 'unknownPlan':
+      return `plan ${failure.planId} is unknown in book ${failure.bookId}`;
+    case 'crossBookPlan':
+      return `plan ${failure.planId} belongs to book ${failure.planBookId}, not book ${failure.bookId}`;
+    case 'planAlreadyExists':
+      return `plan ${failure.planId} already exists in book ${failure.bookId}`;
+    case 'unknownOccurrence':
+      return `occurrence ${failure.occurrenceId} is unknown in book ${failure.bookId}`;
+    case 'crossBookOccurrence':
+      return `occurrence ${failure.occurrenceId} belongs to book ${failure.occurrenceBookId}, not book ${failure.bookId}`;
+    case 'occurrenceNotManaged':
+      return `occurrence ${failure.occurrenceId} is ${failure.state}, not managed`;
+    case 'occurrenceAlreadyPaid':
+      return `occurrence ${failure.occurrenceId} is already paid and keeps its historical revision`;
+    case 'invalidEffectiveDate':
+      return `invalid effective date: ${failure.detail}`;
+    case 'rebaseNotNeeded':
+      return `cycle ${failure.cycleId} already uses the requested settings; no rebase written`;
+    case 'unknownSettlement':
+      return `settlement ${failure.settlementId} is unknown in book ${failure.bookId}`;
+    case 'crossBookSettlement':
+      return `settlement ${failure.settlementId} belongs to book ${failure.settlementBookId}, not book ${failure.bookId}`;
+    case 'settlementReversed':
+      return `settlement ${failure.settlementId} was reversed by a reopen and is no longer effective`;
+    case 'carryAlreadyConsumed':
+      return `settlement ${failure.settlementId} was already consumed by ${failure.existingCarryId}`;
+    case 'invalidDisposition':
+      return `invalid disposition for settlement ${failure.settlementId}: ${failure.detail}`;
+    case 'unknownConflict':
+      return `propagation conflict ${failure.conflictId} is unknown in book ${failure.bookId}`;
+    case 'conflictAlreadyResolved':
+      return `propagation conflict ${failure.conflictId} is already resolved`;
   }
 }

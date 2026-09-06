@@ -17,6 +17,7 @@ import type { ApplyResult } from './handlers';
 import {
   currencyMismatchFailure,
   newEntryId,
+  occurredInstantOf,
   requireDateInOpenCycle,
   requireOpenCycle,
   resolveOccurredAt,
@@ -59,6 +60,7 @@ export function appendExpenseEntry(
     flexibleDefinitionId: null,
     linkedObligationId,
     replacesEntryId: null,
+    occurredAtInstantMs: occurredInstantOf(occurredAt),
     capturedAtInstantMs: context.clock.nowMs(),
     capturedInTimeZone: state.book.timeZone,
     calculationVersion: context.calculationVersion,
@@ -121,6 +123,7 @@ export function appendObligationReturnEntry(
     linkedObligationId,
     replacesReturnEntryId: null,
     note,
+    occurredAtInstantMs: occurredInstantOf(occurredAt),
     capturedAtInstantMs: context.clock.nowMs(),
     capturedInTimeZone: state.book.timeZone,
     calculationVersion: context.calculationVersion,

@@ -11,13 +11,13 @@ import type { CivilDate } from '../../domain/primitives/civil-date';
 import { resolveCivilDate, type TimeZoneName } from '../../domain/primitives/instant';
 import { isDateWithinMonthlyWindow } from '../../domain/primitives/monthly-cycle';
 import { type CurrencyCode } from '../../domain/primitives/currency';
-import { makeAllocationRecordId, makeEntryId, type AllocationRecordId, type BookId, type EntryId } from '../../domain/contracts/identity';
+import { makeAllocationRecordId, makeCycleVersionId, makeEntryId, makeObservationId, makeOccurrenceId, makeSettlementId, type AllocationRecordId, type BookId, type CycleVersionId, type EntryId, type ObservationId, type SettlementId } from '../../domain/contracts/identity';
 import type { CommandFailure, OccurredAt } from '../../domain/contracts/commands';
-import { findOpenCycle, type OpenCycleRecord } from '../../domain/contracts/ledger';
+import { findOpenCycle, type CycleRecord } from '../../domain/contracts/ledger';
 import type { BookState } from '../../domain/contracts/ledger';
 import type { CommandContext } from './context';
 
-export function requireOpenCycle(state: BookState): { ok: true; value: OpenCycleRecord } | { ok: false; failure: CommandFailure } {
+export function requireOpenCycle(state: BookState): { ok: true; value: CycleRecord } | { ok: false; failure: CommandFailure } {
   const openCycle = findOpenCycle(state);
   if (openCycle === null) {
     return { ok: false, failure: { kind: 'noOpenCycle', bookId: state.book.id } };
@@ -49,7 +49,7 @@ export function resolveOccurredAt(
 
 export function requireDateInOpenCycle(
   localDate: CivilDate,
-  cycle: OpenCycleRecord,
+  cycle: CycleRecord,
   bookId: BookId,
 ): { ok: true } | { ok: false; failure: CommandFailure } {
   if (!isDateWithinMonthlyWindow(localDate, { startDate: cycle.startDate, endDateExclusive: cycle.endDateExclusive })) {
@@ -90,4 +90,44 @@ export function newAllocationRecordId(context: CommandContext): AllocationRecord
 
 export function monthParts(date: CivilDate): { year: number; month: number } {
   return { year: Number(date.slice(0, 4)), month: Number(date.slice(5, 7)) };
+}
+
+/** The financial occurrence instant of a command, if it named one. */
+export function occurredInstantOf(occurredAt: OccurredAt): number | null {
+  return occurredAt.kind === 'instant' ? occurredAt.instantMs : null;
+}
+
+/**
+ * A version identity in its own namespace: `cycver:<book>:<start>:v<seq>`.
+ * It can never collide with `composeCycleId`'s `cyc:` identities.
+ */
+export function newCycleVersionId(bookId: BookId, startDate: CivilDate, versionSeq: number): CycleVersionId {
+  const made = makeCycleVersionId(`cycver:${bookId}:${startDate}:v${String(versionSeq)}`);
+  if (!made.ok) {
+    throw new TypeError(`cycle version id could not be composed (${made.failure.detail})`);
+  }
+  return made.value;
+}
+
+/** A settlement identity: `stl:<book>:<start>:s<seq>`, stable per version. */
+export function newSettlementId(bookId: BookId, startDate: CivilDate, settlementSeq: number): SettlementId {
+  const made = makeSettlementId(`stl:${bookId}:${startDate}:s${String(settlementSeq)}`);
+  if (!made.ok) {
+    throw new TypeError(`settlement id could not be composed (${made.failure.detail})`);
+  }
+  return made.value;
+}
+
+/** A generated observation identity from the caller's ID sequence. */
+export function newObservationId(context: CommandContext): ObservationId {
+  const made = makeObservationId(context.ids.newId('observation'));
+  if (!made.ok) {
+    throw new TypeError(`id factory produced an invalid observation id: ${made.failure.detail}`);
+  }
+  return made.value;
+}
+
+/** A deterministic occurrence identity helper for plan materialization. */
+export function newOccurrenceIdFor(planId: string, dueDate: CivilDate): ReturnType<typeof makeOccurrenceId> {
+  return makeOccurrenceId(`occ:${planId}:${dueDate}`);
 }

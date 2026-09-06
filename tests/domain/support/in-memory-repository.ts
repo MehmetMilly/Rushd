@@ -26,13 +26,17 @@ import type {
   OutboxEnvelope,
 } from '../../../src/domain/contracts/commands';
 import type { BookState } from '../../../src/domain/contracts/ledger';
-import type { BookId, EntryId, GoalId, ObligationId, OperationId } from '../../../src/domain/contracts/identity';
+import type { BookId, EntryId, GoalId, ObligationId, ObservationId, OccurrenceId, OperationId, PlanId, SettlementId } from '../../../src/domain/contracts/identity';
 import type {
   EntryLocation,
   FinanceReadModel,
   GoalLocation,
   ObligationLocation,
+  ObservationLocation,
+  OccurrenceLocation,
+  PlanLocation,
   RepositoryTransaction,
+  SettlementLocation,
   TransactionalRepository,
 } from '../../../src/domain/contracts/repository';
 
@@ -47,6 +51,10 @@ interface CommittedStore {
   entryIndex: Map<string, EntryLocation>;
   obligationIndex: Map<string, ObligationLocation>;
   goalIndex: Map<string, GoalLocation>;
+  observationIndex: Map<string, ObservationLocation>;
+  planIndex: Map<string, PlanLocation>;
+  occurrenceIndex: Map<string, OccurrenceLocation>;
+  settlementIndex: Map<string, SettlementLocation>;
 }
 
 function cloneValue<T>(value: T): T {
@@ -78,6 +86,10 @@ export class InMemoryFinanceRepository implements TransactionalRepository, Finan
     entryIndex: new Map(),
     obligationIndex: new Map(),
     goalIndex: new Map(),
+    observationIndex: new Map(),
+    planIndex: new Map(),
+    occurrenceIndex: new Map(),
+    settlementIndex: new Map(),
   };
   private injectedFailure: { method: WriteMethodName; remaining: number } | null = null;
 
@@ -103,6 +115,26 @@ export class InMemoryFinanceRepository implements TransactionalRepository, Finan
 
   locateGoal(goalId: GoalId): GoalLocation | null {
     const location = this.store.goalIndex.get(goalId);
+    return location === undefined ? null : { ...location };
+  }
+
+  locateObservation(observationId: ObservationId): ObservationLocation | null {
+    const location = this.store.observationIndex.get(observationId);
+    return location === undefined ? null : { ...location };
+  }
+
+  locatePlan(planId: PlanId): PlanLocation | null {
+    const location = this.store.planIndex.get(planId);
+    return location === undefined ? null : { ...location };
+  }
+
+  locateOccurrence(occurrenceId: OccurrenceId): OccurrenceLocation | null {
+    const location = this.store.occurrenceIndex.get(occurrenceId);
+    return location === undefined ? null : { ...location };
+  }
+
+  locateSettlement(settlementId: SettlementId): SettlementLocation | null {
+    const location = this.store.settlementIndex.get(settlementId);
     return location === undefined ? null : { ...location };
   }
 
@@ -212,6 +244,54 @@ class InMemoryTransaction implements RepositoryTransaction {
     return location === undefined ? null : { ...location };
   }
 
+  locateObservation(observationId: ObservationId): ObservationLocation | null {
+    this.assertActive();
+    for (const state of this.bookWrites.values()) {
+      const observation = state.observations.find((candidate) => candidate.observationId === observationId);
+      if (observation !== undefined) {
+        return { bookId: observation.bookId, observationId: observation.observationId };
+      }
+    }
+    const location = this.store.observationIndex.get(observationId);
+    return location === undefined ? null : { ...location };
+  }
+
+  locatePlan(planId: PlanId): PlanLocation | null {
+    this.assertActive();
+    for (const state of this.bookWrites.values()) {
+      const plan = state.plans.find((candidate) => candidate.planId === planId);
+      if (plan !== undefined) {
+        return { bookId: plan.bookId, planId: plan.planId };
+      }
+    }
+    const location = this.store.planIndex.get(planId);
+    return location === undefined ? null : { ...location };
+  }
+
+  locateOccurrence(occurrenceId: OccurrenceId): OccurrenceLocation | null {
+    this.assertActive();
+    for (const state of this.bookWrites.values()) {
+      const occurrence = state.planOccurrences.find((candidate) => candidate.occurrenceId === occurrenceId);
+      if (occurrence !== undefined) {
+        return { bookId: occurrence.bookId, occurrenceId: occurrence.occurrenceId };
+      }
+    }
+    const location = this.store.occurrenceIndex.get(occurrenceId);
+    return location === undefined ? null : { ...location };
+  }
+
+  locateSettlement(settlementId: SettlementId): SettlementLocation | null {
+    this.assertActive();
+    for (const state of this.bookWrites.values()) {
+      const settlement = state.settlements.find((candidate) => candidate.settlementId === settlementId);
+      if (settlement !== undefined) {
+        return { bookId: settlement.bookId, settlementId: settlement.settlementId };
+      }
+    }
+    const location = this.store.settlementIndex.get(settlementId);
+    return location === undefined ? null : { ...location };
+  }
+
   getOperation(operationId: OperationId): OperationRecord | null {
     this.assertActive();
     const local = this.operationWrites.get(operationId);
@@ -280,6 +360,18 @@ class InMemoryTransaction implements RepositoryTransaction {
       }
       for (const goal of state.goals) {
         this.store.goalIndex.set(goal.goalId, { bookId: goal.bookId, goalId: goal.goalId });
+      }
+      for (const observation of state.observations) {
+        this.store.observationIndex.set(observation.observationId, { bookId: observation.bookId, observationId: observation.observationId });
+      }
+      for (const plan of state.plans) {
+        this.store.planIndex.set(plan.planId, { bookId: plan.bookId, planId: plan.planId });
+      }
+      for (const occurrence of state.planOccurrences) {
+        this.store.occurrenceIndex.set(occurrence.occurrenceId, { bookId: occurrence.bookId, occurrenceId: occurrence.occurrenceId });
+      }
+      for (const settlement of state.settlements) {
+        this.store.settlementIndex.set(settlement.settlementId, { bookId: settlement.bookId, settlementId: settlement.settlementId });
       }
     }
     this.active = false;

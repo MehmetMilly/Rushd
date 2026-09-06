@@ -1,5 +1,5 @@
 /**
- * Public command API for Rushd's canonical finance engine (P03 Tasks A+B).
+ * Public command API for Rushd's canonical finance engine (P03 Tasks A+B+C).
  *
  * Task A implemented `previewCommand` / `executeCommand` over books, cycles,
  * inflows, and linked inflow reversals, with checked integer money, strict
@@ -31,9 +31,32 @@
  *   computed across correction families, so a new replacement ID never
  *   resets it.
  *
- * Not implemented yet (later P03 tasks): Reality Check/recovery and observed
- * boundaries, recurring plans and occurrences, cycle close/carry/reopen,
- * obligation due dates, persistent storage, and sync.
+ * Task C adds the cycle-aware core over the same protocol:
+ * - boundary cycles (`openBoundaryCycle`, remaining-from-boundary) alongside
+ *   full-cycle versions with rebase/close/reopen lifecycle;
+ * - Reality Check (`recordRealityCheck`) with boundary-specific signed
+ *   adjustments over the full tracked pool, and linked recovery
+ *   (`recoverObservedActivity`) that consumes the unexplained difference
+ *   exactly once and recomputes forward through corrections;
+ * - recurring plans (`createRecurringPlan`, `reviseRecurringPlan`,
+ *   `materializePlanOccurrences`, `detachPlanOccurrence`,
+ *   `reservePlanOccurrence`) with immutable effective-dated revisions and
+ *   stable occurrences that protect paid/detached facts;
+ * - versioned settings (`updateBookSettings`, defaulting to the next
+ *   unopened cycle) with explicit previewed open-cycle rebase;
+ * - immutable settlements (`closeCycle`), explicit remainder disposition
+ *   (`disposeCycleRemainder`: carry-in, tracked funding, split, or
+ *   independent), `reopenCycle`, backdated closed-cycle corrections with
+ *   exact linked propagation or explicit unresolved conflicts, and explicit
+ *   conflict resolution;
+ * - cycle-scoped availability (carry-in plus signed reconciliation
+ *   residuals; old-cycle facts never double-count) and active-basis
+ *   completeness (old unclassified history excluded; propagation and
+ *   recovery gaps stay visible).
+ *
+ * Not implemented yet (P03 Task D and later phases): the provider-neutral
+ * storage/sync contract, persistent storage, obligation due dates beyond
+ * plan occurrences, and sync.
  * Nothing here claims PWA, sync, account, security, or release readiness.
  *
  * Usage:
@@ -69,6 +92,8 @@ export { requireCommandContext, type CommandContext, type DomainClock, type Doma
 export type { ApplyResult, HandlerRefs } from './handlers';
 export {
   computeAvailability,
+  deriveActiveCycleLedger,
+  type ActiveCycleLedger,
   type AvailabilityComputed,
   type AvailabilityComponents,
   type AvailabilityResult,
@@ -117,6 +142,7 @@ export {
   type AllocationChangeType,
   type AssignToGoalCommand,
   type CancelObligationCommand,
+  type CloseCycleCommand,
   type CommandConfirmation,
   type CommandEffect,
   type CommandExecutionResult,
@@ -130,42 +156,72 @@ export {
   type CreateBookCommand,
   type CreateGoalCommand,
   type CreateObligationCommand,
+  type CreateRecurringPlanCommand,
+  type DetachPlanOccurrenceCommand,
+  type DisposeCycleRemainderCommand,
   type DisputeResolutionReason,
   type FinanceCommand,
   type FundAllocationPoolCommand,
+  type MaterializePlanOccurrencesCommand,
   type ObligationDisputeResolution,
+  type ObservationBoundary,
   type OccurredAt,
+  type OpenBoundaryCycleCommand,
   type OpenCycleCommand,
   type OpenObligationDisputeCommand,
   type OperationRecord,
   type OutboxEnvelope,
+  type RebaseOpenCycleCommand,
+  type RecordClosedCycleCorrectionCommand,
   type RecordExpenseCommand,
   type RecordExpenseReturnCommand,
   type RecordInflowCommand,
   type RecordObligationPaymentCommand,
   type RecordObligationReturnCommand,
+  type RecordRealityCheckCommand,
+  type RecoverObservedActivityCommand,
   type ReleaseAllocationCommand,
   type ReleaseDisputedResidualCommand,
+  type RemainderDispositionInput,
+  type ReopenCycleCommand,
   type ReopenObligationCommand,
+  type ReservePlanOccurrenceCommand,
   type ResolveObligationDisputeCommand,
+  type ResolvePropagationConflictCommand,
   type ReverseAllocationRecordCommand,
   type ReverseInflowCommand,
   type ReversalPolicy,
+  type ReviseRecurringPlanCommand,
   type SetBufferCommand,
   type SettleObligationFinallyCommand,
   type UnassignFromGoalCommand,
+  type UpdateBookSettingsCommand,
 } from '../../domain/contracts/commands';
 export {
+  findAdjustmentByObservation,
   findAllocationRecordById,
+  findCycleVersion,
+  findEffectiveCycleVersion,
+  findEffectiveSettlement,
   findEntryById,
   findGoalById,
   findObligationById,
+  findObservationById,
+  findOccurrenceById,
   findOpenCycle,
+  findPlanById,
   findReversalOf,
+  findSettlementById,
+  effectiveVersionStatus,
   type AllocationChange,
   type AllocationRecord,
+  type BookSettingsRevision,
   type BookState,
   type BufferSetting,
+  type CarryAction,
+  type CycleRecord,
+  type CycleSettlement,
+  type CycleVersionStatus,
   type ExpenseEntry,
   type ExpenseReturnEntry,
   type ExpenseReturnReversalEntry,
@@ -179,13 +235,26 @@ export {
   type ObligationEvent,
   type ObligationRecord,
   type OpenCycleRecord,
+  type PlanOccurrence,
+  type PlanRevision,
+  type PropagationConflict,
+  type PropagationDelta,
+  type ReconciliationAdjustment,
+  type RecoveryLink,
+  type RecurringPlan,
+  type RemainderDisposition,
+  type RealityCheckObservation,
 } from '../../domain/contracts/ledger';
 export {
   type EntryLocation,
   type FinanceReadModel,
   type GoalLocation,
   type ObligationLocation,
+  type ObservationLocation,
+  type OccurrenceLocation,
+  type PlanLocation,
   type RepositoryTransaction,
+  type SettlementLocation,
   type TransactionalRepository,
 } from '../../domain/contracts/repository';
 export { canonicalJson, stableDigest } from '../../domain/contracts/canonical';
@@ -193,20 +262,30 @@ export {
   composeCycleId,
   makeBookId,
   makeCycleId,
+  makeCycleVersionId,
   makeEntryId,
   makeGoalId,
   makeObligationId,
+  makeObservationId,
+  makeOccurrenceId,
   makeOperationId,
   makeOutboxId,
+  makePlanId,
+  makeSettlementId,
   makeAllocationRecordId,
   type AllocationRecordId,
   type BookId,
   type CycleId,
+  type CycleVersionId,
   type EntryId,
   type GoalId,
   type ObligationId,
+  type ObservationId,
+  type OccurrenceId,
   type OperationId,
   type OutboxId,
+  type PlanId,
+  type SettlementId,
 } from '../../domain/contracts/identity';
 export {
   addMoney,
@@ -243,3 +322,53 @@ export {
   type MonthlyCycleWindow,
 } from '../../domain/primitives/monthly-cycle';
 export { isValidTimeZoneName, MAX_REPRESENTABLE_INSTANT_MS, MIN_REPRESENTABLE_INSTANT_MS, resolveCivilDate, resolveCivilDateTime, type TimeZoneName } from '../../domain/primitives/instant';
+export {
+  adjustmentContribution,
+  adjustmentResidual,
+  boundaryFromObservation,
+  classifyCurrencyLabel,
+  compareOccurrenceToBoundary,
+  compareResolvedBoundaries,
+  deriveLedgerPoolAt,
+  deriveReconciliationAmount,
+  earliestCoveringObservation,
+  isOccurrenceCoveredBy,
+  linkedEffectAmount,
+  linkedRootOccurrence,
+  liveExpenseHeadAmount,
+  liveInflowAmount,
+  liveReturnHeadAmount,
+  type BoundaryOrder,
+  type FamilyOccurrence,
+  type ResolvedBoundary,
+} from '../../domain/recovery/derive';
+export {
+  applicableRevision,
+  clampedDueDate,
+  isOccurrencePaid,
+  latestRevision,
+  occurrenceExpectedAmount,
+  occurrenceIdFor,
+  planMaterialization,
+  revisionsOf,
+  type MaterializedOccurrence,
+} from '../../domain/plans/derive';
+export {
+  carryActionFor,
+  countEntriesOutsideWindow,
+  downstreamConsumedKinds,
+  effectiveAnchorForDate,
+  effectiveCarryToCycle,
+  effectiveSettingsAt,
+  effectiveSettlementRemainder,
+  effectiveTimeZoneForDate,
+  fitsWithinRemainder,
+  nextSettlementSeq,
+  nextVersionSeq,
+  overlapsOtherCycle,
+  settlementConsumed,
+  subtractOrThrow,
+  sumDispositionTotal,
+  unresolvedConflicts,
+  type EffectiveSettings,
+} from '../../domain/cycles/derive';

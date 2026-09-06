@@ -116,6 +116,10 @@ export async function executeCommand(
       locateEntry: (entryId) => transaction.locateEntry(entryId),
       locateObligation: (obligationId) => transaction.locateObligation(obligationId),
       locateGoal: (goalId) => transaction.locateGoal(goalId),
+      locateObservation: (observationId) => transaction.locateObservation(observationId),
+      locatePlan: (planId) => transaction.locatePlan(planId),
+      locateOccurrence: (occurrenceId) => transaction.locateOccurrence(occurrenceId),
+      locateSettlement: (settlementId) => transaction.locateSettlement(settlementId),
     });
     if (!applied.ok) {
       return { ok: false, failure: applied.failure };

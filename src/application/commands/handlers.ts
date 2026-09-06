@@ -17,8 +17,9 @@ import { negateMoney } from '../../domain/primitives/money';
 import { type CivilDate } from '../../domain/primitives/civil-date';
 import { resolveCivilDate } from '../../domain/primitives/instant';
 import { cycleStartForMonth, isDateWithinMonthlyWindow, monthlyCycleContaining } from '../../domain/primitives/monthly-cycle';
-import { makeEntryId, composeCycleId, type EntryId, type GoalId, type ObligationId, type OperationId } from '../../domain/contracts/identity';
-import { findEntryById, findOpenCycle, findReversalOf, type BookState, type OpenCycleRecord } from '../../domain/contracts/ledger';
+import { effectiveAnchorForDate, effectiveTimeZoneForDate, overlapsOtherCycle } from '../../domain/cycles/derive';
+import { makeEntryId, composeCycleId, type EntryId, type GoalId, type ObligationId, type ObservationId, type OccurrenceId, type OperationId, type PlanId, type SettlementId } from '../../domain/contracts/identity';
+import { findEffectiveCycleVersion, findEntryById, findOpenCycle, findReversalOf, effectiveVersionStatus, type BookState, type CycleRecord } from '../../domain/contracts/ledger';
 import type {
   CommandEffect,
   CommandFailure,
@@ -28,11 +29,13 @@ import type {
   RecordInflowCommand,
   ReverseInflowCommand,
 } from '../../domain/contracts/commands';
-import type { EntryLocation, GoalLocation, ObligationLocation } from '../../domain/contracts/repository';
+import type { EntryLocation, GoalLocation, ObligationLocation, ObservationLocation, OccurrenceLocation, PlanLocation, SettlementLocation } from '../../domain/contracts/repository';
 import type { CommandContext } from './context';
 import {
   currencyMismatchFailure,
   monthParts,
+  newCycleVersionId,
+  occurredInstantOf,
   requireOpenCycle,
   resolveOccurredAt,
 } from './handler-support';
@@ -57,6 +60,23 @@ import {
   applySetBuffer,
   applyUnassignFromGoal,
 } from './allocation-handlers';
+import { applyOpenBoundaryCycle, applyRecordRealityCheck, applyRecoverObservedActivity } from './recovery-handlers';
+import {
+  applyCreateRecurringPlan,
+  applyDetachPlanOccurrence,
+  applyMaterializePlanOccurrences,
+  applyReservePlanOccurrence,
+  applyReviseRecurringPlan,
+} from './plan-handlers';
+import {
+  applyCloseCycle,
+  applyDisposeCycleRemainder,
+  applyRebaseOpenCycle,
+  applyRecordClosedCycleCorrection,
+  applyReopenCycle,
+  applyResolvePropagationConflict,
+  applyUpdateBookSettings,
+} from './cycle-handlers';
 
 /**
  * Cross-book reference lookups supplied by the transaction/read model, so a
@@ -66,6 +86,10 @@ export interface HandlerRefs {
   readonly locateEntry: (entryId: EntryId) => EntryLocation | null;
   readonly locateObligation: (obligationId: ObligationId) => ObligationLocation | null;
   readonly locateGoal: (goalId: GoalId) => GoalLocation | null;
+  readonly locateObservation: (observationId: ObservationId) => ObservationLocation | null;
+  readonly locatePlan: (planId: PlanId) => PlanLocation | null;
+  readonly locateOccurrence: (occurrenceId: OccurrenceId) => OccurrenceLocation | null;
+  readonly locateSettlement: (settlementId: SettlementId) => SettlementLocation | null;
 }
 
 export type ApplyResult =
@@ -139,6 +163,36 @@ export function dispatchApply(
       return applyReverseAllocationRecord(command, state as BookState, context, operationId);
     case 'setBuffer':
       return applySetBuffer(command, state as BookState, context, operationId);
+    case 'openBoundaryCycle':
+      return applyOpenBoundaryCycle(command, state as BookState, context);
+    case 'recordRealityCheck':
+      return applyRecordRealityCheck(command, state as BookState, context, operationId, refs);
+    case 'recoverObservedActivity':
+      return applyRecoverObservedActivity(command, state as BookState, context, operationId, refs);
+    case 'createRecurringPlan':
+      return applyCreateRecurringPlan(command, state as BookState, context, operationId, refs);
+    case 'reviseRecurringPlan':
+      return applyReviseRecurringPlan(command, state as BookState, context, operationId, refs);
+    case 'materializePlanOccurrences':
+      return applyMaterializePlanOccurrences(command, state as BookState, context, operationId, refs);
+    case 'detachPlanOccurrence':
+      return applyDetachPlanOccurrence(command, state as BookState, context, operationId, refs);
+    case 'reservePlanOccurrence':
+      return applyReservePlanOccurrence(command, state as BookState, context, operationId, refs);
+    case 'updateBookSettings':
+      return applyUpdateBookSettings(command, state as BookState, context, operationId);
+    case 'rebaseOpenCycle':
+      return applyRebaseOpenCycle(command, state as BookState, context, operationId);
+    case 'closeCycle':
+      return applyCloseCycle(command, state as BookState, context, operationId);
+    case 'disposeCycleRemainder':
+      return applyDisposeCycleRemainder(command, state as BookState, context, operationId, refs);
+    case 'reopenCycle':
+      return applyReopenCycle(command, state as BookState, context, operationId);
+    case 'recordClosedCycleCorrection':
+      return applyRecordClosedCycleCorrection(command, state as BookState, context, operationId, refs);
+    case 'resolvePropagationConflict':
+      return applyResolvePropagationConflict(command, state as BookState, context, operationId, refs);
   }
 }
 
@@ -167,6 +221,17 @@ function applyCreateBook(command: CreateBookCommand, context: CommandContext): A
     goals: [],
     allocationRecords: [],
     buffer: null,
+    observations: [],
+    adjustments: [],
+    recoveryLinks: [],
+    plans: [],
+    planRevisions: [],
+    planOccurrences: [],
+    settingsRevisions: [],
+    settlements: [],
+    carryActions: [],
+    propagationDeltas: [],
+    propagationConflicts: [],
   };
   return {
     ok: true,
@@ -189,8 +254,12 @@ function applyOpenCycle(command: OpenCycleCommand, state: BookState, context: Co
     return { ok: false, failure: { kind: 'cycleAlreadyOpen', bookId: command.bookId, openCycleId: openCycle.cycleId } };
   }
 
+  // The governing anchor comes from the latest settings revision at or
+  // before the requested start, so a payday edit already governs the next
+  // unopened cycle without moving anything existing.
+  const anchor = effectiveAnchorForDate(state, command.startDate);
   const parts = monthParts(command.startDate);
-  const expectedStart = cycleStartForMonth(state.book.cycleAnchor, parts.year, parts.month);
+  const expectedStart = cycleStartForMonth(anchor, parts.year, parts.month);
   if (!expectedStart.ok || expectedStart.value !== command.startDate) {
     return {
       ok: false,
@@ -215,17 +284,50 @@ function applyOpenCycle(command: OpenCycleCommand, state: BookState, context: Co
     };
   }
 
-  const containing = monthlyCycleContaining(state.book.cycleAnchor, command.startDate);
-  const cycle = {
+  const existing = findEffectiveCycleVersion(state, cycleIdResult.value);
+  if (existing !== null) {
+    // Re-entering an existing logical cycle is never a fresh open: a closed
+    // cycle reopens explicitly, and any other version is an internal
+    // invariant break rather than a new cycle.
+    if (effectiveVersionStatus(state, existing) === 'closed') {
+      return { ok: false, failure: { kind: 'cycleAlreadyClosed', bookId: command.bookId, cycleId: existing.cycleId } };
+    }
+    return {
+      ok: false,
+      failure: { kind: 'invalidCommand', issues: [`cycle ${existing.cycleId} already has version ${existing.versionSeq}`] },
+    };
+  }
+
+  const containing = monthlyCycleContaining(anchor, command.startDate);
+  if (overlapsOtherCycle(state, cycleIdResult.value, containing.startDate, containing.endDateExclusive)) {
+    return {
+      ok: false,
+      failure: {
+        kind: 'invalidCycleStart',
+        bookId: command.bookId,
+        requestedStartDate: command.startDate,
+        expectedStartDate: command.startDate,
+      },
+    };
+  }
+  const cycle: CycleRecord = {
+    versionId: newCycleVersionId(command.bookId, command.startDate, 1),
     cycleId: cycleIdResult.value,
     bookId: command.bookId,
-    mode: 'fullCycle' as const,
-    status: 'open' as const,
-    startDate: command.startDate,
+    versionSeq: 1,
+    mode: 'fullCycle',
+    startDate: containing.startDate,
     endDateExclusive: containing.endDateExclusive,
-    anchor: state.book.cycleAnchor,
+    anchor,
     startingFunds: command.startingFunds,
     openedAtInstantMs: context.clock.nowMs(),
+    boundaryObservedPool: null,
+    boundaryLocalDate: null,
+    boundaryLocalTime: null,
+    boundaryInstantMs: null,
+    boundaryTimeZone: null,
+    timeZone: effectiveTimeZoneForDate(state, command.startDate),
+    supersedesVersionId: null,
   };
   const nextState: BookState = {
     ...state,
@@ -280,6 +382,7 @@ function applyRecordInflow(
     timeZone: state.book.timeZone,
     amount: command.amount,
     note: command.note,
+    occurredAtInstantMs: occurredInstantOf(command.occurredAt),
     capturedAtInstantMs: context.clock.nowMs(),
     capturedInTimeZone: state.book.timeZone,
     calculationVersion: context.calculationVersion,
@@ -379,6 +482,7 @@ function applyReverseInflow(
     amount: negated.value,
     reversesEntryId: target.entryId,
     note: command.note,
+    occurredAtInstantMs: occurredInstantOf(command.occurredAt),
     capturedAtInstantMs: context.clock.nowMs(),
     capturedInTimeZone: state.book.timeZone,
     calculationVersion: context.calculationVersion,
@@ -405,7 +509,7 @@ function applyReverseInflow(
   };
 }
 
-function isDateWithinOpenCycle(date: CivilDate, cycle: OpenCycleRecord): boolean {
+function isDateWithinOpenCycle(date: CivilDate, cycle: CycleRecord): boolean {
   return isDateWithinMonthlyWindow(date, { startDate: cycle.startDate, endDateExclusive: cycle.endDateExclusive });
 }
 

@@ -71,6 +71,10 @@ export function previewCommand(
     locateEntry: (entryId: Parameters<FinanceReadModel['locateEntry']>[0]) => readModel.locateEntry(entryId),
     locateObligation: (obligationId: Parameters<FinanceReadModel['locateObligation']>[0]) => readModel.locateObligation(obligationId),
     locateGoal: (goalId: Parameters<FinanceReadModel['locateGoal']>[0]) => readModel.locateGoal(goalId),
+    locateObservation: (observationId: Parameters<FinanceReadModel['locateObservation']>[0]) => readModel.locateObservation(observationId),
+    locatePlan: (planId: Parameters<FinanceReadModel['locatePlan']>[0]) => readModel.locatePlan(planId),
+    locateOccurrence: (occurrenceId: Parameters<FinanceReadModel['locateOccurrence']>[0]) => readModel.locateOccurrence(occurrenceId),
+    locateSettlement: (settlementId: Parameters<FinanceReadModel['locateSettlement']>[0]) => readModel.locateSettlement(settlementId),
   };
   if (command.kind === 'createBook') {
     const existing = readModel.getBookState(command.bookId);

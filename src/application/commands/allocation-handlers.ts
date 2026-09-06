@@ -33,6 +33,7 @@ import type { ApplyResult, HandlerRefs } from './handlers';
 import {
   currencyMismatchFailure,
   newAllocationRecordId,
+  occurredInstantOf,
   requireDateInOpenCycle,
   requireOpenCycle,
   resolveOccurredAt,
@@ -47,6 +48,7 @@ function allocationRecord(
   context: CommandContext,
   operationId: OperationId,
   note: string,
+  occurredAtInstantMs: AllocationRecord['occurredAtInstantMs'] = null,
 ): AllocationRecord {
   return {
     kind: 'allocation',
@@ -56,6 +58,7 @@ function allocationRecord(
     localDate,
     change,
     note,
+    occurredAtInstantMs,
     capturedAtInstantMs: context.clock.nowMs(),
     capturedInTimeZone: state.book.timeZone,
     calculationVersion: context.calculationVersion,
@@ -181,6 +184,7 @@ export function applyFundAllocationPool(
     context,
     operationId,
     command.note,
+    occurredInstantOf(command.occurredAt),
   );
   return commitWithRecords(state, [record], [
     {
@@ -311,6 +315,7 @@ export function applyReleaseAllocation(
     context,
     operationId,
     command.note,
+    occurredInstantOf(command.occurredAt),
   );
   return commitWithRecords(state, [record], [
     {

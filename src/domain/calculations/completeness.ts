@@ -4,27 +4,34 @@
  *
  * Two independent dimensions are derived:
  * - pool completeness: whether there is an honest basis for the availability
- *   amount (a full-cycle start) and no unresolved material uncertainty
- *   (disputed reservations, released disputed residuals);
- * - classification completeness: the classified share of live pool
- *   movements.
+ *   amount (a full-cycle start or an observed boundary) and no unresolved
+ *   material uncertainty (disputed reservations, released disputed
+ *   residuals, unexplained reconciliation remainders, unresolved
+ *   propagation conflicts);
+ * - classification completeness: the classified share of the covered pool
+ *   movements, including classified reconciliation adjustments.
  *
  * A reason can only disappear when its underlying evidence changes: an
  * unresolved dispute is not hidden by classifying every transaction, and an
- * unclassified expense does not invalidate a known pool. Task B derives from
- * the evidence these records support; Task C extends the reducer with
- * observed boundaries, recovery, and unresolved proposals, and those future
- * transition kinds are deliberately not invented here.
+ * unclassified expense does not invalidate a known pool. Coverage is the
+ * active cycle/version basis: old unclassified history outside it never
+ * contaminates a newer Current pool, while unresolved linked propagation or
+ * recovery gaps stay visible. A pool may be Current while classification
+ * remains Needs Attention.
  */
 
 import type { BookState } from '../contracts/ledger';
+import { findOpenCycle } from '../contracts/ledger';
 import { deriveObligationViews } from '../obligations/derive';
 import { liveExpenseEntries } from '../activity/derive';
+import { adjustmentResidual } from '../recovery/derive';
+import { unresolvedConflicts } from '../cycles/derive';
 
 export type CompletenessState = 'current' | 'needsAttention' | 'recordsOnly' | 'unavailable';
 
 export type CompletenessReason =
   | { readonly type: 'noPoolBasis' }
+  | { readonly type: 'noActiveBasis' }
   | {
       readonly type: 'openDisputedObligation';
       readonly obligationId: string;
@@ -35,7 +42,14 @@ export type CompletenessReason =
       readonly obligationId: string;
       readonly releasedUnpaid: { readonly currency: string; readonly minorUnits: number };
     }
-  | { readonly type: 'unclassifiedExpenseMovements'; readonly count: number };
+  | {
+      readonly type: 'unexplainedReconciliationResidual';
+      readonly observationId: string;
+      readonly residual: { readonly currency: string; readonly minorUnits: number };
+    }
+  | { readonly type: 'unresolvedPropagationConflict'; readonly conflictId: string }
+  | { readonly type: 'unclassifiedExpenseMovements'; readonly count: number }
+  | { readonly type: 'unclassifiedAdjustment'; readonly observationId: string };
 
 export interface CompletenessDimension {
   readonly state: CompletenessState;
@@ -83,19 +97,68 @@ export function computeCompleteness(
       });
     }
   }
+
+  const activeCycle = findOpenCycle(state);
+  if (activeCycle === null) {
+    // Cycles exist but none is open (between close and open): the last basis
+    // is history, not a decision basis. Unresolved propagation conflicts
+    // stay visible even here; the correction itself is never hidden.
+    const historyReasons: CompletenessReason[] = [...poolReasons];
+    for (const conflict of unresolvedConflicts(state)) {
+      historyReasons.push({ type: 'unresolvedPropagationConflict', conflictId: conflict.conflictId });
+    }
+    historyReasons.push({ type: 'noActiveBasis' });
+    const pool: CompletenessDimension = { state: 'recordsOnly', reasons: historyReasons };
+    const classification: CompletenessDimension = { state: 'recordsOnly', reasons: [{ type: 'noActiveBasis' }] };
+    return { pool, classification, asOfInstantMs: params.asOfInstantMs, calculationVersion: params.calculationVersion };
+  }
+
+  // Unexplained reconciliation remainders in the active cycle are known gaps.
+  for (const adjustment of state.adjustments) {
+    if (adjustment.cycleId !== activeCycle.cycleId) continue;
+    const residual = adjustmentResidual(state, adjustment);
+    if (residual.minorUnits !== 0) {
+      poolReasons.push({
+        type: 'unexplainedReconciliationResidual',
+        observationId: adjustment.observationId,
+        residual: { currency: residual.currency, minorUnits: residual.minorUnits },
+      });
+    }
+  }
+
+  // Unresolved propagation conflicts degrade the pool until explicitly
+  // resolved; the valid correction itself is never hidden.
+  for (const conflict of unresolvedConflicts(state)) {
+    poolReasons.push({ type: 'unresolvedPropagationConflict', conflictId: conflict.conflictId });
+  }
+
   const pool: CompletenessDimension =
     poolReasons.length === 0
       ? { state: 'current', reasons: [] }
       : { state: 'needsAttention', reasons: poolReasons };
 
-  const unclassified = liveExpenseEntries(state).filter((entry) => entry.category === null);
+  // Classification covers the active basis only: old-cycle history outside
+  // it never contaminates a newer pool, while unclassified adjustments keep
+  // merchant/category analysis Needs Attention.
+  const classificationReasons: CompletenessReason[] = [];
+  const unclassified = liveExpenseEntries(state).filter(
+    (entry) => entry.cycleId === activeCycle.cycleId && entry.category === null,
+  );
+  if (unclassified.length > 0) {
+    classificationReasons.push({ type: 'unclassifiedExpenseMovements', count: unclassified.length });
+  }
+  for (const adjustment of state.adjustments) {
+    if (adjustment.cycleId !== activeCycle.cycleId) continue;
+    if (adjustment.classificationNote !== null) continue;
+    // An unclassified adjustment keeps classification Needs Attention even
+    // when its remainder is fully explained: the pool can be Current while
+    // merchant/category analysis is not.
+    classificationReasons.push({ type: 'unclassifiedAdjustment', observationId: adjustment.observationId });
+  }
   const classification: CompletenessDimension =
-    unclassified.length === 0
+    classificationReasons.length === 0
       ? { state: 'current', reasons: [] }
-      : {
-          state: 'needsAttention',
-          reasons: [{ type: 'unclassifiedExpenseMovements', count: unclassified.length }],
-        };
+      : { state: 'needsAttention', reasons: classificationReasons };
 
   return { pool, classification, asOfInstantMs: params.asOfInstantMs, calculationVersion: params.calculationVersion };
 }
