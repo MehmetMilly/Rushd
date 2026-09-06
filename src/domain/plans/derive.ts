@@ -63,12 +63,18 @@ export function latestRevision(state: BookState, planId: RecurringPlan['planId']
   return revisions.length === 0 ? null : revisions[revisions.length - 1];
 }
 
-/** The deterministic occurrence identity for a plan and due date. */
+/**
+ * The deterministic occurrence identity for a plan and due date: plan plus
+ * monthly period key. One monthly slot remains one occurrence across
+ * schedule-day revisions, so rematerialization can never create a duplicate
+ * payable occurrence; the mutable due date lives on the row, not in the
+ * identity.
+ */
 export function occurrenceIdFor(
   planId: RecurringPlan['planId'],
   dueDate: CivilDate,
 ): { ok: true; value: OccurrenceId } | { ok: false; detail: string } {
-  const made = makeOccurrenceId(`occ:${planId}:${dueDate}`);
+  const made = makeOccurrenceId(`occ:${planId}:${dueDate.slice(0, 7)}`);
   if (!made.ok) return { ok: false, detail: made.failure.detail };
   return { ok: true, value: made.value };
 }

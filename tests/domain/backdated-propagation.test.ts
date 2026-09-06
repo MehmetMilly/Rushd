@@ -76,6 +76,9 @@ describe('exact linked propagation while the downstream is untouched', () => {
 
     // The later carry decision sees the propagated remainder exactly.
     await harness.run({
+      kind: 'openCycle', bookId: harness.bookId, startDate: '2026-10-01', startingFunds: SAR(0),
+    });
+    await harness.run({
       kind: 'disposeCycleRemainder', bookId: harness.bookId, settlementId,
       disposition: { kind: 'carryIn', amount: SAR(85_000), destinationCycleId: `cyc:${harness.bookId}:2026-10-01` },
       note: '',
@@ -86,6 +89,42 @@ describe('exact linked propagation while the downstream is untouched', () => {
       note: '',
     });
     expect(over.ok).toBe(false);
+  });
+
+  it('adjusts an untouched downstream carry basis by the exact delta', async () => {
+    const harness = makeTaskCHarness('book-proof-7-untouched');
+    await seedStandardBook(harness);
+    await harness.run({ kind: 'closeCycle', bookId: harness.bookId, cycleId: null, note: '' });
+    const settlementId = harness.state().settlements[0].settlementId;
+    await harness.run({
+      kind: 'openCycle', bookId: harness.bookId, startDate: '2026-10-01', startingFunds: SAR(0),
+    });
+    await harness.run({
+      kind: 'disposeCycleRemainder', bookId: harness.bookId, settlementId,
+      disposition: { kind: 'carryIn', amount: SAR(100_000), destinationCycleId: `cyc:${harness.bookId}:2026-10-01` },
+      note: '',
+    });
+    expect(harness.availableMinor()).toBe(100_000);
+
+    // October is otherwise untouched, so the backdated September expense
+    // propagates as an exact linked delta: no conflict, and the downstream
+    // basis and availability become 90,000.
+    const corrected = await harness.run(
+      closedCorrection(harness, `cyc:${harness.bookId}:2026-09-01`, 'expense', 10_000, '2026-09-10'),
+    );
+    const effect = effectOf(corrected, 'closedCycleCorrectionRecorded');
+    expect(effect['propagation']).toBe('applied');
+    expect(effect['deltaAmount']).toEqual(SAR(-10_000));
+    const state = harness.state();
+    expect(state.propagationConflicts).toHaveLength(0);
+    expect(state.propagationDeltas).toHaveLength(1);
+    // The snapshot is frozen; the remainder view and October follow the delta.
+    expect(state.settlements.find((candidate) => candidate.settlementId === settlementId)?.availability).toEqual(SAR(100_000));
+    const effective = findEffectiveSettlement(state, `cyc:${harness.bookId}:2026-09-01` as never);
+    if (effective === null) throw new Error('settlement missing');
+    expect(effectiveSettlementRemainder(state, effective)).toEqual(SAR(90_000));
+    expect(harness.availableMinor()).toBe(90_000);
+    expect(completenessOf(harness).pool.state).toBe('current');
   });
 });
 
@@ -102,9 +141,19 @@ describe('unresolved conflicts after the downstream changed', () => {
     const settlementId = effectOf(closed, 'cycleClosed')['settlementId'] as string;
     const targetCycleId = `cyc:${harness.bookId}:2026-09-01`;
     await harness.run({
+      kind: 'openCycle', bookId: harness.bookId, startDate: '2026-10-01', startingFunds: SAR(0),
+    });
+    await harness.run({
       kind: 'disposeCycleRemainder', bookId: harness.bookId, settlementId,
       disposition: { kind: 'carryIn', amount: SAR(80_000), destinationCycleId: `cyc:${harness.bookId}:2026-10-01` },
       note: 'consumed downstream',
+    });
+    // Touch the downstream cycle after the carry lands: its intent has
+    // changed, so a later correction conflicts instead of adjusting it.
+    await harness.run({
+      kind: 'recordExpense', bookId: harness.bookId, amount: SAR(5_000),
+      occurredAt: { kind: 'civilDate', localDate: '2026-10-06' },
+      note: '', category: 'food', flexibleDefinitionId: null,
     });
 
     const corrected = await harness.run(closedCorrection(harness, targetCycleId, 'expense', 5_000, '2026-09-10'));
@@ -116,39 +165,47 @@ describe('unresolved conflicts after the downstream changed', () => {
     const state = harness.state();
     expect(state.entries.some((entry) => entry.entryId === (effect['entryId'] as string))).toBe(true);
     expect(state.propagationConflicts).toHaveLength(1);
+    const conflictBefore = JSON.stringify(state.propagationConflicts[0]);
     expect(state.propagationConflicts[0]).toMatchObject({
       settlementId,
       sourceCycleId: targetCycleId,
       unpropagatedAmount: SAR(-5_000),
       downstreamKind: 'carry',
-      resolved: false,
     });
     // The historical snapshot is untouched.
     expect(state.settlements.find((candidate) => candidate.settlementId === settlementId)?.availability).toEqual(SAR(80_000));
 
     const completeness = completenessOf(harness);
-    // No cycle is open, so the basis is history — but the conflict stays an
-    // explicit reason rather than hiding until the next cycle opens.
-    expect(completeness.pool.state).toBe('recordsOnly');
-    const hasConflictReason = (reasons: readonly { type: string }[]): boolean =>
-      reasons.some((reason) => reason.type === 'unresolvedPropagationConflict');
-    expect(hasConflictReason(completeness.pool.reasons)).toBe(true);
+    expect(completeness.pool.state).toBe('needsAttention');
+    expect(
+      completeness.pool.reasons.some(
+        (reason) => reason.type === 'unresolvedPropagationConflict' && reason.conflictId === state.propagationConflicts[0].conflictId,
+      ),
+    ).toBe(true);
 
-    await harness.run({
-      kind: 'openCycle', bookId: harness.bookId, startDate: '2026-10-01', startingFunds: SAR(0),
-    });
-    const reopened = completenessOf(harness);
-    expect(reopened.pool.state).toBe('needsAttention');
-    expect(hasConflictReason(reopened.pool.reasons)).toBe(true);
-
-    // Explicit resolution restores Current; the correction stays recorded.
-    await harness.run({
+    // Explicit resolution appends a separate record: the conflict row stays
+    // byte-identical, completeness recovers, the correction stays recorded.
+    // Acknowledgements carry no monetary action: October availability is
+    // unchanged by the resolution itself.
+    const availabilityBeforeResolve = harness.availableMinor();
+    const resolved = await harness.run({
       kind: 'resolvePropagationConflict', bookId: harness.bookId,
       conflictId: state.propagationConflicts[0].conflictId,
       resolution: 'acknowledgedDownstreamStands', note: 'carry stands, books annotated',
     });
+    expect(effectOf(resolved, 'propagationConflictResolved')['conflictId']).toBe(state.propagationConflicts[0].conflictId);
+    const afterResolve = harness.state();
+    expect(JSON.stringify(afterResolve.propagationConflicts[0])).toBe(conflictBefore);
+    expect(afterResolve.conflictResolutions).toHaveLength(1);
+    expect(afterResolve.conflictResolutions[0]).toMatchObject({
+      conflictId: state.propagationConflicts[0].conflictId,
+      settlementId,
+      resolution: 'acknowledgedDownstreamStands',
+      note: 'carry stands, books annotated',
+    });
     expect(completenessOf(harness).pool.state).toBe('current');
-    expect(harness.state().entries.some((entry) => entry.entryId === (effect['entryId'] as string))).toBe(true);
+    expect(harness.availableMinor()).toBe(availabilityBeforeResolve);
+    expect(afterResolve.entries.some((entry) => entry.entryId === (effect['entryId'] as string))).toBe(true);
     const resolvedTwice = harness.previewRaw({
       kind: 'resolvePropagationConflict', bookId: harness.bookId,
       conflictId: state.propagationConflicts[0].conflictId,
@@ -158,7 +215,7 @@ describe('unresolved conflicts after the downstream changed', () => {
     if (!resolvedTwice.ok) expect(resolvedTwice.failure.kind).toBe('conflictAlreadyResolved');
   });
 
-  it('reports tracked-allocation and combined downstream kinds', async () => {
+  it('reports tracked-allocation and combined downstream kinds once touched', async () => {
     const tracked = makeTaskCHarness('book-proof-7-tracked');
     await seedStandardBook(tracked);
     const trackedClosed = await tracked.run({ kind: 'closeCycle', bookId: tracked.bookId, cycleId: null, note: '' });
@@ -170,8 +227,22 @@ describe('unresolved conflicts after the downstream changed', () => {
       kind: 'disposeCycleRemainder', bookId: tracked.bookId, settlementId: trackedSettlement,
       disposition: { kind: 'fundTracked', amount: SAR(10_000) }, note: '',
     });
-    const corrected = await tracked.run(
+    // An untouched tracked pool receives the exact delta with no conflict.
+    const untouched = await tracked.run(
       closedCorrection(tracked, `cyc:${tracked.bookId}:2026-09-01`, 'inflow', 2_000, '2026-09-10'),
+    );
+    expect(effectOf(untouched, 'closedCycleCorrectionRecorded')['propagation']).toBe('applied');
+    expect(tracked.state().propagationConflicts).toHaveLength(0);
+    // Reallocating the pool afterwards changes downstream intent: the next
+    // correction conflicts instead.
+    await tracked.run({
+      kind: 'createGoal', bookId: tracked.bookId, goalId: 'goal-t', name: 'T', targetAmount: SAR(50_000),
+    });
+    await tracked.run({
+      kind: 'assignToGoal', bookId: tracked.bookId, goalId: 'goal-t', amount: SAR(1_000), note: '',
+    });
+    const corrected = await tracked.run(
+      closedCorrection(tracked, `cyc:${tracked.bookId}:2026-09-01`, 'inflow', 1_000, '2026-09-11'),
     );
     expect(effectOf(corrected, 'closedCycleCorrectionRecorded')['propagation']).toBe('conflicted');
     expect(tracked.state().propagationConflicts[0].downstreamKind).toBe('trackedAllocation');
@@ -190,6 +261,18 @@ describe('unresolved conflicts after the downstream changed', () => {
         destinationCycleId: `cyc:${split.bookId}:2026-10-01`,
       },
       note: '',
+    });
+    // Touch both downstream intents: October spending and pool allocation.
+    await split.run({
+      kind: 'recordExpense', bookId: split.bookId, amount: SAR(1_000),
+      occurredAt: { kind: 'civilDate', localDate: '2026-10-06' },
+      note: '', category: null, flexibleDefinitionId: null,
+    });
+    await split.run({
+      kind: 'createGoal', bookId: split.bookId, goalId: 'goal-s', name: 'S', targetAmount: SAR(50_000),
+    });
+    await split.run({
+      kind: 'assignToGoal', bookId: split.bookId, goalId: 'goal-s', amount: SAR(1_000), note: '',
     });
     const splitCorrected = await split.run(
       closedCorrection(split, `cyc:${split.bookId}:2026-09-01`, 'expense', 1_000, '2026-09-10'),

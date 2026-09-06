@@ -6,10 +6,14 @@
  * - pool completeness: whether there is an honest basis for the availability
  *   amount (a full-cycle start or an observed boundary) and no unresolved
  *   material uncertainty (disputed reservations, released disputed
- *   residuals, unexplained reconciliation remainders, unresolved
- *   propagation conflicts);
+ *   residuals, unresolved propagation conflicts). An accepted Reality Check
+ *   adjustment IS pool reconciliation: the observed pool is the recorded
+ *   truth, so its residual never keeps the pool stale — only genuinely
+ *   unresolved recovery/proposal/conflict gaps do;
  * - classification completeness: the classified share of the covered pool
- *   movements, including classified reconciliation adjustments.
+ *   movements, including classified reconciliation adjustments. An
+ *   unclassified adjustment keeps this dimension Needs Attention even when
+ *   the pool is Current.
  *
  * A reason can only disappear when its underlying evidence changes: an
  * unresolved dispute is not hidden by classifying every transaction, and an
@@ -24,7 +28,6 @@ import type { BookState } from '../contracts/ledger';
 import { findOpenCycle } from '../contracts/ledger';
 import { deriveObligationViews } from '../obligations/derive';
 import { liveExpenseEntries } from '../activity/derive';
-import { adjustmentResidual } from '../recovery/derive';
 import { unresolvedConflicts } from '../cycles/derive';
 
 export type CompletenessState = 'current' | 'needsAttention' | 'recordsOnly' | 'unavailable';
@@ -41,11 +44,6 @@ export type CompletenessReason =
       readonly type: 'releasedResidualUncertainty';
       readonly obligationId: string;
       readonly releasedUnpaid: { readonly currency: string; readonly minorUnits: number };
-    }
-  | {
-      readonly type: 'unexplainedReconciliationResidual';
-      readonly observationId: string;
-      readonly residual: { readonly currency: string; readonly minorUnits: number };
     }
   | { readonly type: 'unresolvedPropagationConflict'; readonly conflictId: string }
   | { readonly type: 'unclassifiedExpenseMovements'; readonly count: number }
@@ -113,21 +111,11 @@ export function computeCompleteness(
     return { pool, classification, asOfInstantMs: params.asOfInstantMs, calculationVersion: params.calculationVersion };
   }
 
-  // Unexplained reconciliation remainders in the active cycle are known gaps.
-  for (const adjustment of state.adjustments) {
-    if (adjustment.cycleId !== activeCycle.cycleId) continue;
-    const residual = adjustmentResidual(state, adjustment);
-    if (residual.minorUnits !== 0) {
-      poolReasons.push({
-        type: 'unexplainedReconciliationResidual',
-        observationId: adjustment.observationId,
-        residual: { currency: residual.currency, minorUnits: residual.minorUnits },
-      });
-    }
-  }
-
   // Unresolved propagation conflicts degrade the pool until explicitly
-  // resolved; the valid correction itself is never hidden.
+  // resolved; the valid correction itself is never hidden. Accepted
+  // reconciliation residuals never appear here: the observed pool is the
+  // recorded truth, so an accepted adjustment reconciles the pool by
+  // definition (its classification state lives in the other dimension).
   for (const conflict of unresolvedConflicts(state)) {
     poolReasons.push({ type: 'unresolvedPropagationConflict', conflictId: conflict.conflictId });
   }

@@ -88,6 +88,10 @@ interface ModelSettlement {
   snapshot: number;
   deltas: number[];
   consumed: boolean;
+  /** Carry destination, if the disposition moved money downstream. */
+  dest: string | null;
+  /** Destination intent changed after the disposition landed. */
+  touched: boolean;
 }
 
 interface ModelConflict {
@@ -211,6 +215,11 @@ describe('settlement and carry properties (bounded, seeded)', () => {
             if (result.ok) {
               spent[id] = (spent[id] ?? 0) + operation.amount;
               entryCount += 1;
+              // Spending in a carry destination after the carry landed
+              // changes downstream intent for settlements carried there.
+              for (const model of settlements) {
+                if (model.consumed && model.dest === id) model.touched = true;
+              }
             }
             break;
           }
@@ -222,10 +231,15 @@ describe('settlement and carry properties (bounded, seeded)', () => {
             if (result.ok) {
               const effect = result.receipt.effects.find((candidate) => candidate.kind === 'cycleClosed');
               if (effect?.kind !== 'cycleClosed') throw new Error('missing effect');
-              settlements.push({ id: effect.settlementId, cycle: id, snapshot: modelAvailability(id), deltas: [], consumed: false });
+              settlements.push({ id: effect.settlementId, cycle: id, snapshot: modelAvailability(id), deltas: [], consumed: false, dest: null, touched: false });
               closedNow.add(id);
               closeOrder.push(id);
               openCycle = null;
+              // Closing a carry destination after the carry landed changes
+              // downstream intent for settlements carried there.
+              for (const model of settlements) {
+                if (model.consumed && model.dest === id) model.touched = true;
+              }
             }
             break;
           }
@@ -244,16 +258,19 @@ describe('settlement and carry properties (bounded, seeded)', () => {
                   disposition: { kind: 'leaveIndependent' }, note: '',
                 };
             // The latest settlement may be superseded (after a reclose),
-            // already consumed, or attached to a reopened cycle; the model
-            // mirrors the handler guards.
+            // already consumed, attached to a reopened cycle, or aimed at a
+            // non-open October; the model mirrors the handler guards.
             const effective = settlements.filter((model) => model.cycle === target.cycle);
             const isEffective = effective.length > 0 && effective[effective.length - 1]?.id === target.id;
             const versionClosed = closedNow.has(target.cycle);
+            // Only carry dispositions name a destination, which must be an
+            // open cycle; leave decisions need none.
+            const destinationOpen = operation.t === 'leave' || openCycle === 'oct';
             if (target.consumed) {
               const result = await previewExecute(rawCommand);
               expect(result.ok).toBe(false);
               if (!result.ok) expect(result.kind).toBe('carryAlreadyConsumed');
-            } else if (!isEffective || !versionClosed) {
+            } else if (!isEffective || !versionClosed || !destinationOpen) {
               const result = await previewExecute(rawCommand);
               expect(result.ok).toBe(false);
               if (!result.ok) expect(result.kind).toBe('invalidDisposition');
@@ -268,6 +285,7 @@ describe('settlement and carry properties (bounded, seeded)', () => {
                 expect(result.ok).toBe(true);
                 if (result.ok) {
                   target.consumed = true;
+                  target.dest = OCT_ID;
                   carryReceived[OCT_ID] = (carryReceived[OCT_ID] ?? 0) + operation.amount;
                 }
               }
@@ -351,10 +369,20 @@ describe('settlement and carry properties (bounded, seeded)', () => {
               spent[target] = (spent[target] ?? 0) + operation.amount;
               const settlement = settlements.find((model) => model.id === effect.settlementId);
               if (settlement === undefined) throw new Error('settlement missing from model');
-              if (effect.propagation === 'applied') {
+              // Mirrors the downstream rule: no disposition (or an
+              // independent one) applies the delta; a consumed-but-untouched
+              // carry adjusts its destination basis; a touched downstream
+              // conflicts instead.
+              if (!settlement.consumed || settlement.dest === null) {
+                expect(effect.propagation).toBe('applied');
                 settlement.deltas.push(effect.deltaAmount.minorUnits);
-              } else {
+              } else if (settlement.touched) {
+                expect(effect.propagation).toBe('conflicted');
                 conflicts.push({ amount: effect.deltaAmount.minorUnits, resolved: false });
+              } else {
+                expect(effect.propagation).toBe('applied');
+                settlement.deltas.push(effect.deltaAmount.minorUnits);
+                carryReceived[settlement.dest] = (carryReceived[settlement.dest] ?? 0) + effect.deltaAmount.minorUnits;
               }
             }
             break;
@@ -395,7 +423,7 @@ describe('settlement and carry properties (bounded, seeded)', () => {
               const effect = result.receipt.effects.find((candidate) => candidate.kind === 'planOccurrencesMaterialized');
               if (effect?.kind !== 'planOccurrencesMaterialized') throw new Error('missing effect');
               for (const id of effect.occurrenceIds) occurrences.add(id);
-              expect([...occurrences].sort()).toEqual(['occ:plan-prop:2026-09-05', 'occ:plan-prop:2026-10-05']);
+              expect([...occurrences].sort()).toEqual(['occ:plan-prop:2026-09', 'occ:plan-prop:2026-10']);
             }
             break;
           }

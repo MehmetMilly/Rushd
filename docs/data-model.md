@@ -173,24 +173,33 @@ the operation journal.
   classification note.
 - **RecurringPlan** + **PlanRevision** + **PlanOccurrence**: plan identity
   with anchor snapshot; immutable effective-dated revisions (amount,
-  schedule day); stable deterministic occurrence identities with revision
-  attribution, due date, due-cycle identity, managed/detached state, and
-  obligation/expense links.
+  schedule day); stable period-slot occurrence identities
+  (`occ:<plan>:<YYYY-MM>`, one monthly slot stays one occurrence across
+  schedule-day revisions) with revision attribution, due date, due-cycle
+  identity, managed/detached state, and obligation/expense links. Revisions
+  skip paid, detached, and reserved occurrences.
 - **BookSettingsRevision**: versioned timezone, cycle anchor, and
   week-start with an explicit anchor-aligned effective date; creation facts
   on `FinanceBook` never change.
 - **CycleSettlement** + **CarryAction** + **PropagationDelta** +
-  **PropagationConflict**: immutable settlement snapshots (funds, cash,
-  residuals, reservations, allocations, buffer, signed availability,
-  completeness states, versions, data-as-of); explicit once-consumed
-  dispositions (carry-in, tracked funding, split, independent); exact
-  linked forward deltas; explicit unresolved conflicts with signed
-  unpropagated amounts and downstream kinds.
+  **PropagationConflict** + **ConflictResolution**: immutable settlement
+  snapshots (funds, cash, residuals, reservations, allocations, buffer,
+  signed availability, completeness states, versions, data-as-of);
+  explicit once-consumed dispositions (carry-in, tracked funding, split,
+  independent) whose destinations must resolve to an existing open cycle;
+  exact linked forward deltas (carrying the standing action's identity so
+  an untouched carry basis follows by derivation); explicit unresolved
+  conflicts with signed unpropagated amounts and downstream kinds; and
+  append-only conflict resolutions that leave the conflict row
+  byte-identical (acknowledgements carry no monetary action).
 - **Derived queries** gain cycle scoping: availability adds `carryIn` and
   `netAdjustments` components over the effective open version only;
   completeness adds `noActiveBasis`,
-  `unexplainedReconciliationResidual`, `unresolvedPropagationConflict`,
-  and `unclassifiedAdjustment` reasons over the active basis.
+  `unresolvedPropagationConflict`,
+  and `unclassifiedAdjustment` reasons over the active basis. An accepted
+  adjustment reconciles the pool by definition, so no residual pool reason
+  exists; unclassified adjustments keep classification Needs Attention
+  while the pool is Current.
 
 ## P02 compatibility boundary
 

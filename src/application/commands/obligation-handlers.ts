@@ -34,7 +34,7 @@ import type {
 } from '../../domain/contracts/commands';
 import type { CommandContext } from './context';
 import type { ApplyResult, HandlerRefs } from './handlers';
-import { newObligationEventId, requireOpenCycle } from './handler-support';
+import { newObligationEventId, activeVersionTimeZone, requireOpenCycle } from './handler-support';
 import { deriveObligationView } from '../../domain/obligations/derive';
 import { appendExpenseEntry, appendObligationReturnEntry } from './obligation-movement';
 
@@ -54,7 +54,7 @@ function obligationEvent(
     change,
     note,
     capturedAtInstantMs: context.clock.nowMs(),
-    capturedInTimeZone: state.book.timeZone,
+    capturedInTimeZone: activeVersionTimeZone(state),
     calculationVersion: context.calculationVersion,
     sourceOperationId: operationId,
   };
@@ -113,7 +113,7 @@ export function applyCreateObligation(
     note: command.note,
     category: command.category,
     createdAtInstantMs: context.clock.nowMs(),
-    createdInTimeZone: state.book.timeZone,
+    createdInTimeZone: activeVersionTimeZone(state),
     calculationVersion: context.calculationVersion,
     sourceOperationId: operationId,
   };

@@ -42,7 +42,11 @@ describe('close, carry, payment, reopen, and reclose', () => {
     expect(snapshot?.reservedCommitments).toEqual(SAR(10_000));
     expect(snapshot?.settlementSeq).toBe(1);
 
-    // Explicit carry of 50 to the not-yet-open October cycle.
+    // Explicit carry of 50 to October, which must already be open: the
+    // destination has to resolve to an existing open cycle.
+    await harness.run({
+      kind: 'openCycle', bookId: harness.bookId, startDate: '2026-10-01', startingFunds: SAR(0),
+    });
     await harness.run({
       kind: 'disposeCycleRemainder', bookId: harness.bookId, settlementId,
       disposition: { kind: 'carryIn', amount: SAR(50_000), destinationCycleId: `cyc:${harness.bookId}:2026-10-01` },
@@ -56,9 +60,6 @@ describe('close, carry, payment, reopen, and reclose', () => {
     expect(consumed.ok).toBe(false);
     if (!consumed.ok) expect(consumed.failure.kind).toBe('carryAlreadyConsumed');
 
-    await harness.run({
-      kind: 'openCycle', bookId: harness.bookId, startDate: '2026-10-01', startingFunds: SAR(0),
-    });
     // 0 start + 50 carry, with the 10 cross-cycle reservation encumbered once.
     expect(harness.availableMinor()).toBe(40_000);
 
@@ -89,6 +90,39 @@ describe('close, carry, payment, reopen, and reclose', () => {
     expect(state.cycles.filter((cycle) => cycle.cycleId === `cyc:${harness.bookId}:2026-10-01`)).toHaveLength(2);
     // The original September snapshot is byte-for-byte intact.
     expect(state.settlements.find((candidate) => candidate.settlementId === settlementId)?.availability).toEqual(SAR(90_000));
+  });
+
+  it('rejects a carry to a nonexistent cycle with no write and an unconsumed source', async () => {
+    const harness = makeTaskCHarness('book-proof-6-dest');
+    await seedStandardBook(harness);
+    const closed = await harness.run({ kind: 'closeCycle', bookId: harness.bookId, cycleId: null, note: '' });
+    const settlementId = effectOf(closed, 'cycleClosed')['settlementId'] as string;
+    const stateBefore = JSON.stringify(harness.state());
+    // Syntactically prefixed but nonexistent: no partial write, no consumption.
+    const missing = harness.previewRaw({
+      kind: 'disposeCycleRemainder', bookId: harness.bookId, settlementId,
+      disposition: { kind: 'carryIn', amount: SAR(10_000), destinationCycleId: `cyc:${harness.bookId}:2099-01-01` },
+      note: '',
+    });
+    expect(missing.ok).toBe(false);
+    if (!missing.ok) expect(missing.failure.kind).toBe('invalidDisposition');
+    expect(JSON.stringify(harness.state())).toBe(stateBefore);
+    expect(harness.state().carryActions).toHaveLength(0);
+    // A closed destination is equally invalid: the carry needs an open one.
+    await harness.run({
+      kind: 'openCycle', bookId: harness.bookId, startDate: '2026-10-01', startingFunds: SAR(0),
+    });
+    await harness.run({ kind: 'closeCycle', bookId: harness.bookId, cycleId: null, note: '' });
+    const stateBeforeClose = JSON.stringify(harness.state());
+    const toClosed = harness.previewRaw({
+      kind: 'disposeCycleRemainder', bookId: harness.bookId, settlementId,
+      disposition: { kind: 'carryIn', amount: SAR(10_000), destinationCycleId: `cyc:${harness.bookId}:2026-10-01` },
+      note: '',
+    });
+    expect(toClosed.ok).toBe(false);
+    if (!toClosed.ok) expect(toClosed.failure.kind).toBe('invalidDisposition');
+    expect(JSON.stringify(harness.state())).toBe(stateBeforeClose);
+    expect(harness.state().carryActions).toHaveLength(0);
   });
 });
 

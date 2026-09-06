@@ -28,6 +28,7 @@ import {
   currencyMismatchFailure,
   newEntryId,
   occurredInstantOf,
+  activeVersionTimeZone,
   requireDateInOpenCycle,
   requireOpenCycle,
   resolveOccurredAt,
@@ -125,11 +126,12 @@ function appendExpense(
     return currencyMismatchFailure(bookId, state.book.currency, fields.amount.currency);
   }
 
-  const localDate = resolveOccurredAt(occurredAt, state.book.timeZone, bookId);
+  const localDate = resolveOccurredAt(occurredAt, activeVersionTimeZone(state), bookId);
   if (!localDate.ok) return localDate;
   const inCycle = requireDateInOpenCycle(localDate.value, cycle, bookId);
   if (!inCycle.ok) return inCycle;
 
+  const entryTimeZone = activeVersionTimeZone(state);
   const entryId = newEntryId(context, 'expense');
   const entry: ExpenseEntry = {
     kind: 'expense',
@@ -137,7 +139,7 @@ function appendExpense(
     bookId,
     cycleId: cycle.cycleId,
     localDate: localDate.value,
-    timeZone: state.book.timeZone,
+    timeZone: entryTimeZone,
     amount: fields.amount,
     note: fields.note,
     category: fields.category,
@@ -146,7 +148,7 @@ function appendExpense(
     replacesEntryId: fields.replacesEntryId,
     occurredAtInstantMs: occurredInstantOf(occurredAt),
     capturedAtInstantMs: context.clock.nowMs(),
-    capturedInTimeZone: state.book.timeZone,
+    capturedInTimeZone: entryTimeZone,
     calculationVersion: context.calculationVersion,
     sourceOperationId: operationId,
   };
@@ -261,7 +263,10 @@ export function applyCorrectExpense(
     if (!blocked.ok) return blocked;
   }
 
-  const correctionDate = resolveOccurredAt(command.occurredAt, state.book.timeZone, command.bookId);
+  // Correction records retain the original fact's timezone by design: the
+  // correction belongs to the corrected history, so its occurrence resolves
+  // and stamps in the target's timezone rather than the active version's.
+  const correctionDate = resolveOccurredAt(command.occurredAt, target.timeZone, command.bookId);
   if (!correctionDate.ok) return correctionDate;
   const correctionInCycle = requireDateInOpenCycle(correctionDate.value, cycle, command.bookId);
   if (!correctionInCycle.ok) return correctionInCycle;
@@ -288,13 +293,13 @@ export function applyCorrectExpense(
     bookId: command.bookId,
     cycleId: cycle.cycleId,
     localDate: correctionDate.value,
-    timeZone: state.book.timeZone,
+    timeZone: target.timeZone,
     amount: negated.value,
     reversesEntryId: target.entryId,
     note: command.note,
     occurredAtInstantMs: occurredInstantOf(command.occurredAt),
     capturedAtInstantMs,
-    capturedInTimeZone: state.book.timeZone,
+    capturedInTimeZone: target.timeZone,
     calculationVersion: context.calculationVersion,
     sourceOperationId: operationId,
   };
@@ -322,7 +327,7 @@ export function applyCorrectExpense(
       bookId: command.bookId,
       cycleId: cycle.cycleId,
       localDate: replacementDate.value,
-      timeZone: state.book.timeZone,
+      timeZone: target.timeZone,
       amount: replacementAmount,
       note: command.replacement.note ?? target.note,
       category: command.replacement.category !== undefined ? command.replacement.category : target.category,
@@ -332,7 +337,7 @@ export function applyCorrectExpense(
       replacesEntryId: target.entryId,
       occurredAtInstantMs: replacementInstant,
       capturedAtInstantMs,
-      capturedInTimeZone: state.book.timeZone,
+      capturedInTimeZone: target.timeZone,
       calculationVersion: context.calculationVersion,
       sourceOperationId: operationId,
     };
@@ -424,11 +429,12 @@ export function applyRecordExpenseReturn(
     };
   }
 
-  const localDate = resolveOccurredAt(command.occurredAt, state.book.timeZone, command.bookId);
+  const localDate = resolveOccurredAt(command.occurredAt, activeVersionTimeZone(state), command.bookId);
   if (!localDate.ok) return localDate;
   const inCycle = requireDateInOpenCycle(localDate.value, cycle, command.bookId);
   if (!inCycle.ok) return inCycle;
 
+  const entryTimeZone = activeVersionTimeZone(state);
   const entryId = newEntryId(context, 'expense-return');
   const entry = {
     kind: 'expenseReturn' as const,
@@ -436,7 +442,7 @@ export function applyRecordExpenseReturn(
     bookId: command.bookId,
     cycleId: cycle.cycleId,
     localDate: localDate.value,
-    timeZone: state.book.timeZone,
+    timeZone: entryTimeZone,
     amount: command.amount,
     linkedExpenseEntryId: target.entryId,
     linkedObligationId: null,
@@ -444,7 +450,7 @@ export function applyRecordExpenseReturn(
     note: command.note,
     occurredAtInstantMs: occurredInstantOf(command.occurredAt),
     capturedAtInstantMs: context.clock.nowMs(),
-    capturedInTimeZone: state.book.timeZone,
+    capturedInTimeZone: entryTimeZone,
     calculationVersion: context.calculationVersion,
     sourceOperationId: operationId,
   };
@@ -564,7 +570,9 @@ export function applyCorrectExpenseReturn(
     };
   }
 
-  const correctionDate = resolveOccurredAt(command.occurredAt, state.book.timeZone, command.bookId);
+  // Correction records retain the original fact's timezone by design (see
+  // applyCorrectExpense).
+  const correctionDate = resolveOccurredAt(command.occurredAt, target.timeZone, command.bookId);
   if (!correctionDate.ok) return correctionDate;
   const correctionInCycle = requireDateInOpenCycle(correctionDate.value, cycle, command.bookId);
   if (!correctionInCycle.ok) return correctionInCycle;
@@ -591,7 +599,7 @@ export function applyCorrectExpenseReturn(
     bookId: command.bookId,
     cycleId: cycle.cycleId,
     localDate: correctionDate.value,
-    timeZone: state.book.timeZone,
+    timeZone: target.timeZone,
     amount: negated.value,
     reversesEntryId: target.entryId,
     linkedExpenseEntryId: target.linkedExpenseEntryId,
@@ -599,7 +607,7 @@ export function applyCorrectExpenseReturn(
     note: command.note,
     occurredAtInstantMs: occurredInstantOf(command.occurredAt),
     capturedAtInstantMs,
-    capturedInTimeZone: state.book.timeZone,
+    capturedInTimeZone: target.timeZone,
     calculationVersion: context.calculationVersion,
     sourceOperationId: operationId,
   };
@@ -627,7 +635,7 @@ export function applyCorrectExpenseReturn(
       bookId: command.bookId,
       cycleId: cycle.cycleId,
       localDate: replacementDate.value,
-      timeZone: state.book.timeZone,
+      timeZone: target.timeZone,
       amount: replacementAmount,
       linkedExpenseEntryId: target.linkedExpenseEntryId,
       linkedObligationId: target.linkedObligationId,
@@ -635,7 +643,7 @@ export function applyCorrectExpenseReturn(
       note: command.replacement.note ?? target.note,
       occurredAtInstantMs: replacementInstant,
       capturedAtInstantMs,
-      capturedInTimeZone: state.book.timeZone,
+      capturedInTimeZone: target.timeZone,
       calculationVersion: context.calculationVersion,
       sourceOperationId: operationId,
     };

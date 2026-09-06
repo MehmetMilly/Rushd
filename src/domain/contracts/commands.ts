@@ -1152,6 +1152,7 @@ export type CommandFailure =
   | { readonly kind: 'occurrenceAlreadyPaid'; readonly bookId: BookId; readonly occurrenceId: OccurrenceId }
   | { readonly kind: 'invalidEffectiveDate'; readonly bookId: BookId; readonly detail: string }
   | { readonly kind: 'rebaseNotNeeded'; readonly bookId: BookId; readonly cycleId: CycleId }
+  | { readonly kind: 'invalidRebase'; readonly bookId: BookId; readonly cycleId: CycleId; readonly detail: string }
   | { readonly kind: 'unknownSettlement'; readonly bookId: BookId; readonly settlementId: SettlementId }
   | {
       readonly kind: 'crossBookSettlement';
@@ -1294,6 +1295,8 @@ export function describeCommandFailure(failure: CommandFailure): string {
       return `invalid effective date: ${failure.detail}`;
     case 'rebaseNotNeeded':
       return `cycle ${failure.cycleId} already uses the requested settings; no rebase written`;
+    case 'invalidRebase':
+      return `invalid rebase of cycle ${failure.cycleId}: ${failure.detail}`;
     case 'unknownSettlement':
       return `settlement ${failure.settlementId} is unknown in book ${failure.bookId}`;
     case 'crossBookSettlement':

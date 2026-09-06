@@ -18,6 +18,7 @@ import {
   currencyMismatchFailure,
   newEntryId,
   occurredInstantOf,
+  activeVersionTimeZone,
   requireDateInOpenCycle,
   requireOpenCycle,
   resolveOccurredAt,
@@ -41,11 +42,12 @@ export function appendExpenseEntry(
   if (amount.currency !== state.book.currency) {
     return currencyMismatchFailure(bookId, state.book.currency, amount.currency);
   }
-  const localDate = resolveOccurredAt(occurredAt, state.book.timeZone, bookId);
+  const localDate = resolveOccurredAt(occurredAt, activeVersionTimeZone(state), bookId);
   if (!localDate.ok) return localDate;
   const inCycle = requireDateInOpenCycle(localDate.value, cycle, bookId);
   if (!inCycle.ok) return inCycle;
 
+  const entryTimeZone = activeVersionTimeZone(state);
   const entryId = newEntryId(context, 'obligation-payment');
   const entry: ExpenseEntry = {
     kind: 'expense',
@@ -53,7 +55,7 @@ export function appendExpenseEntry(
     bookId,
     cycleId: cycle.cycleId,
     localDate: localDate.value,
-    timeZone: state.book.timeZone,
+    timeZone: entryTimeZone,
     amount,
     note,
     category,
@@ -62,7 +64,7 @@ export function appendExpenseEntry(
     replacesEntryId: null,
     occurredAtInstantMs: occurredInstantOf(occurredAt),
     capturedAtInstantMs: context.clock.nowMs(),
-    capturedInTimeZone: state.book.timeZone,
+    capturedInTimeZone: entryTimeZone,
     calculationVersion: context.calculationVersion,
     sourceOperationId: operationId,
   };
@@ -105,11 +107,12 @@ export function appendObligationReturnEntry(
   if (amount.currency !== state.book.currency) {
     return currencyMismatchFailure(bookId, state.book.currency, amount.currency);
   }
-  const localDate = resolveOccurredAt(occurredAt, state.book.timeZone, bookId);
+  const localDate = resolveOccurredAt(occurredAt, activeVersionTimeZone(state), bookId);
   if (!localDate.ok) return localDate;
   const inCycle = requireDateInOpenCycle(localDate.value, cycle, bookId);
   if (!inCycle.ok) return inCycle;
 
+  const entryTimeZone = activeVersionTimeZone(state);
   const entryId = newEntryId(context, 'obligation-return');
   const entry: ExpenseReturnEntry = {
     kind: 'expenseReturn',
@@ -117,7 +120,7 @@ export function appendObligationReturnEntry(
     bookId,
     cycleId: cycle.cycleId,
     localDate: localDate.value,
-    timeZone: state.book.timeZone,
+    timeZone: entryTimeZone,
     amount,
     linkedExpenseEntryId: null,
     linkedObligationId,
@@ -125,7 +128,7 @@ export function appendObligationReturnEntry(
     note,
     occurredAtInstantMs: occurredInstantOf(occurredAt),
     capturedAtInstantMs: context.clock.nowMs(),
-    capturedInTimeZone: state.book.timeZone,
+    capturedInTimeZone: entryTimeZone,
     calculationVersion: context.calculationVersion,
     sourceOperationId: operationId,
   };

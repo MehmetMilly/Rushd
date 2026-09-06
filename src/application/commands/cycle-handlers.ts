@@ -21,12 +21,15 @@ import { makeMoney, type Money } from '../../domain/primitives/money';
 import {
   carryActionFor,
   countEntriesOutsideWindow,
+  countFactsOutsideWindow,
   downstreamConsumedKinds,
+  downstreamState,
   effectiveAnchorForDate,
   effectiveSettlementRemainder,
   effectiveTimeZoneForDate,
   fitsWithinRemainder,
   nextSettlementSeq,
+  overlapsOtherCycle,
   subtractOrThrow,
   sumDispositionTotal,
 } from '../../domain/cycles/derive';
@@ -69,7 +72,7 @@ import type {
   UpdateBookSettingsCommand,
 } from '../../domain/contracts/commands';
 import type { MonthlyCycleAnchor } from '../../domain/primitives/monthly-cycle';
-import type { BookId, CycleId, EntryId, OperationId } from '../../domain/contracts/identity';
+import type { CycleId, EntryId, OperationId } from '../../domain/contracts/identity';
 import type { CommandContext } from './context';
 import type { ApplyResult, HandlerRefs } from './handlers';
 import {
@@ -182,6 +185,35 @@ export function applyRebaseOpenCycle(
   }
 
   const window = monthlyCycleContaining(command.cycleAnchor, current.startDate);
+
+  // Safe rebase: every dated fact attributed to this logical cycle must lie
+  // inside the candidate window, and the window must not overlap any other
+  // logical cycle. A fact outside the new window (or an overlap) needs an
+  // explicit accounting treatment first; the rebase writes nothing.
+  const excluded = countFactsOutsideWindow(state, current.cycleId, window.startDate, window.endDateExclusive);
+  if (excluded > 0) {
+    return {
+      ok: false,
+      failure: {
+        kind: 'invalidRebase',
+        bookId: command.bookId,
+        cycleId: current.cycleId,
+        detail: `${excluded} attributed fact(s) fall outside the candidate window ${window.startDate} to ${window.endDateExclusive}; record an explicit accounting treatment before rebasing`,
+      },
+    };
+  }
+  if (overlapsOtherCycle(state, current.cycleId, window.startDate, window.endDateExclusive)) {
+    return {
+      ok: false,
+      failure: {
+        kind: 'invalidRebase',
+        bookId: command.bookId,
+        cycleId: current.cycleId,
+        detail: `the candidate window ${window.startDate} to ${window.endDateExclusive} overlaps another cycle; rebase must not create gaps or overlaps`,
+      },
+    };
+  }
+
   const versionSeq = current.versionSeq + 1;
   const openedAtInstantMs = context.clock.nowMs();
   // Append-only: the prior version row is untouched; it becomes effectively
@@ -382,21 +414,43 @@ export function applyDisposeCycleRemainder(
 
   const remainder = effectiveSettlementRemainder(state, settlement);
   const disposition = command.disposition;
-  if (disposition.kind === 'carryIn') {
-    if (disposition.amount.currency !== state.book.currency) {
-      return currencyMismatchFailure(command.bookId, state.book.currency, disposition.amount.currency);
-    }
-    if (!isBookCycleId(command.bookId, disposition.destinationCycleId)) {
+  // A carry destination must resolve to an existing open cycle of this
+  // book: committing a remainder to a nonexistent (or closed) cycle would
+  // leave it on no current or known future basis.
+  const requireOpenDestination = (
+    destinationCycleId: CycleId,
+  ): { ok: true } | { ok: false; failure: import('../../domain/contracts/commands').CommandFailure } => {
+    const destination = findEffectiveCycleVersion(state, destinationCycleId);
+    if (destination === null || destination.bookId !== command.bookId) {
       return {
         ok: false,
         failure: {
           kind: 'invalidDisposition',
           bookId: command.bookId,
           settlementId: command.settlementId,
-          detail: `destination ${disposition.destinationCycleId} is not a cycle of this book`,
+          detail: `destination ${destinationCycleId} does not resolve to a cycle of this book`,
         },
       };
     }
+    if (effectiveVersionStatus(state, destination) !== 'open') {
+      return {
+        ok: false,
+        failure: {
+          kind: 'invalidDisposition',
+          bookId: command.bookId,
+          settlementId: command.settlementId,
+          detail: `destination ${destinationCycleId} is not open; carry lands only on an existing open cycle`,
+        },
+      };
+    }
+    return { ok: true };
+  };
+  if (disposition.kind === 'carryIn') {
+    if (disposition.amount.currency !== state.book.currency) {
+      return currencyMismatchFailure(command.bookId, state.book.currency, disposition.amount.currency);
+    }
+    const destination = requireOpenDestination(disposition.destinationCycleId);
+    if (!destination.ok) return destination;
     if (!fitsWithinRemainder(remainder, disposition.amount)) {
       return {
         ok: false,
@@ -429,17 +483,8 @@ export function applyDisposeCycleRemainder(
         return currencyMismatchFailure(command.bookId, state.book.currency, amount.currency);
       }
     }
-    if (!isBookCycleId(command.bookId, disposition.destinationCycleId)) {
-      return {
-        ok: false,
-        failure: {
-          kind: 'invalidDisposition',
-          bookId: command.bookId,
-          settlementId: command.settlementId,
-          detail: `destination ${disposition.destinationCycleId} is not a cycle of this book`,
-        },
-      };
-    }
+    const destination = requireOpenDestination(disposition.destinationCycleId);
+    if (!destination.ok) return destination;
     const total = sumDispositionTotal(disposition);
     if (total === null || !fitsWithinRemainder(remainder, total)) {
       return {
@@ -526,10 +571,6 @@ export function applyDisposeCycleRemainder(
     nextState,
     effects: [{ kind: 'cycleRemainderDisposed', settlementId: command.settlementId, carryId: carry.carryId, dispositionKind: disposition.kind }],
   };
-}
-
-function isBookCycleId(bookId: BookId, cycleId: CycleId): boolean {
-  return (cycleId as string).startsWith(`cyc:${bookId}:`);
 }
 
 function toStoredDisposition(
@@ -1161,9 +1202,14 @@ function buildLinkedClosedCorrection(
 }
 
 /**
- * Appends built correction facts and propagates their signed effect: an
- * exact linked delta while the downstream is untouched, otherwise an
- * explicit unresolved conflict alongside the still-accepted correction.
+ * Appends built correction facts and propagates their signed effect. The
+ * mere existence of a disposition is never a conflict: an untouched
+ * downstream receives the exact delta (linked to the standing action so the
+ * carry basis follows it); only a subsequently changed downstream produces
+ * an explicit unresolved conflict alongside the still-accepted correction.
+ * A tracked funding that already stood works the same way, except the
+ * completed funding movement is never rewritten — the delta joins the
+ * remainder view and the pool records decide touchedness.
  */
 function appendPropagatedCorrection(
   state: BookState,
@@ -1174,14 +1220,16 @@ function appendPropagatedCorrection(
   operationId: OperationId,
   capturedAtInstantMs: number,
 ): ApplyResult {
-  const downstream = downstreamConsumedKinds(state, settlement.settlementId);
-  if (downstream === null) {
+  const downstream = downstreamState(state, settlement.settlementId);
+  if (downstream !== 'changed') {
+    const standing = carryActionFor(state, settlement.settlementId);
     const delta = {
       deltaId: newEntryId(context, 'propagation-delta'),
       bookId: command.bookId,
       settlementId: settlement.settlementId,
       sourceCycleId: command.targetCycleId,
       correctionEntryId: built.primaryEntryId,
+      carryActionId: standing === null ? null : standing.carryId,
       deltaAmount: built.signed,
       note: command.note,
       capturedAtInstantMs,
@@ -1212,6 +1260,10 @@ function appendPropagatedCorrection(
     };
   }
 
+  const kinds = downstreamConsumedKinds(state, settlement.settlementId);
+  if (kinds === null) {
+    throw new TypeError('a changed downstream requires a standing disposition');
+  }
   const conflict = {
     conflictId: newEntryId(context, 'propagation-conflict'),
     bookId: command.bookId,
@@ -1219,8 +1271,7 @@ function appendPropagatedCorrection(
     sourceCycleId: command.targetCycleId,
     correctionEntryId: built.primaryEntryId,
     unpropagatedAmount: built.signed,
-    downstreamKind: downstream,
-    resolved: false,
+    downstreamKind: kinds,
     note: command.note,
     capturedAtInstantMs,
     calculationVersion: context.calculationVersion,
@@ -1257,20 +1308,32 @@ export function applyResolvePropagationConflict(
   operationId: OperationId,
   refs: HandlerRefs,
 ): ApplyResult {
-  void context;
-  void operationId;
   void refs;
   const conflict = state.propagationConflicts.find((candidate) => candidate.conflictId === command.conflictId) ?? null;
   if (conflict === null) {
     return { ok: false, failure: { kind: 'unknownConflict', bookId: command.bookId, conflictId: command.conflictId } };
   }
-  if (conflict.resolved) {
+  // Append-only resolution: the conflict row is never mutated. A second
+  // resolution attempt finds the first and reports it as already resolved.
+  if (state.conflictResolutions.some((resolution) => resolution.conflictId === command.conflictId)) {
     return { ok: false, failure: { kind: 'conflictAlreadyResolved', bookId: command.bookId, conflictId: command.conflictId } };
   }
-  const conflicts = state.propagationConflicts.map((candidate) =>
-    candidate.conflictId === conflict.conflictId ? { ...candidate, resolved: true } : candidate,
-  );
-  const nextState: BookState = { ...state, revision: state.revision + 1, propagationConflicts: conflicts };
+  const resolution = {
+    resolutionId: newEntryId(context, 'conflict-resolution'),
+    bookId: command.bookId,
+    conflictId: command.conflictId,
+    settlementId: conflict.settlementId,
+    resolution: command.resolution,
+    note: command.note,
+    capturedAtInstantMs: context.clock.nowMs(),
+    calculationVersion: context.calculationVersion,
+    sourceOperationId: operationId,
+  };
+  const nextState: BookState = {
+    ...state,
+    revision: state.revision + 1,
+    conflictResolutions: [...state.conflictResolutions, resolution],
+  };
   return {
     ok: true,
     nextState,

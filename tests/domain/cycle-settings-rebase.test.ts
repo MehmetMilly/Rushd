@@ -99,6 +99,64 @@ describe('settings revisions default to the next unopened cycle', () => {
 });
 
 describe('explicit open-cycle rebase', () => {
+  it('resolves new facts in the active version timezone while corrections keep the original fact timezone', async () => {
+    const harness = makeTaskCHarness('book-proof-5-tz');
+    await seedStandardBook(harness);
+    // A pre-rebase fact stamped in Riyadh.
+    const before = await harness.run({
+      kind: 'recordExpense', bookId: harness.bookId, amount: SAR(7_000),
+      occurredAt: { kind: 'civilDate', localDate: '2026-09-04' },
+      note: '', category: 'food', flexibleDefinitionId: null,
+    });
+    const beforeId = (before.effects.find((effect) => effect.kind === 'expenseRecorded') as { entryId: string }).entryId;
+    expect(harness.state().entries.find((entry) => entry.entryId === beforeId)).toMatchObject({ timeZone: 'Asia/Riyadh' });
+
+    await harness.run({
+      kind: 'rebaseOpenCycle', bookId: harness.bookId,
+      timeZone: 'America/New_York', cycleAnchor: { kind: 'firstOfMonth' }, note: 'travel',
+    });
+
+    // 02:00Z on Sept 2 is Sept 1 in New York (EDT, UTC-4).
+    const instant = Date.UTC(2026, 8, 2, 2, 0, 0);
+    await harness.run({
+      kind: 'recordExpense', bookId: harness.bookId, amount: SAR(1_000),
+      occurredAt: { kind: 'instant', instantMs: instant },
+      note: '', category: 'food', flexibleDefinitionId: null,
+    });
+    await harness.run({
+      kind: 'fundAllocationPool', bookId: harness.bookId, amount: SAR(2_000),
+      occurredAt: { kind: 'instant', instantMs: instant }, note: '',
+    });
+    await harness.run({
+      kind: 'createObligation', bookId: harness.bookId, obligationId: 'obl-tz',
+      expectedAmount: SAR(3_000), note: '', category: null,
+    });
+    await harness.run({
+      kind: 'recordObligationPayment', bookId: harness.bookId, obligationId: 'obl-tz', amount: SAR(500),
+      occurredAt: { kind: 'instant', instantMs: instant }, note: '', category: null,
+    });
+    const state = harness.state();
+    const expense = state.entries.find((entry) => entry.kind === 'expense' && entry.amount.minorUnits === 1_000);
+    expect(expense).toMatchObject({ localDate: '2026-09-01', timeZone: 'America/New_York' });
+    const funding = state.allocationRecords.find((record) => record.change.type === 'funding');
+    expect(funding).toMatchObject({ localDate: '2026-09-01' });
+    expect(funding?.capturedInTimeZone).toBe('America/New_York');
+    const payment = state.entries.find((entry) => entry.kind === 'expense' && entry.linkedObligationId === 'obl-tz');
+    expect(payment).toMatchObject({ localDate: '2026-09-01', timeZone: 'America/New_York' });
+
+    // Correcting the pre-rebase Riyadh fact retains Riyadh on both records.
+    await harness.run({
+      kind: 'correctExpense', bookId: harness.bookId, expenseEntryId: beforeId,
+      occurredAt: { kind: 'civilDate', localDate: '2026-09-05' },
+      note: '', replacement: { amount: SAR(6_000) },
+    });
+    const corrected = harness.state();
+    const reversal = corrected.entries.find((entry) => entry.kind === 'expenseReversal');
+    expect(reversal).toMatchObject({ timeZone: 'Asia/Riyadh', localDate: '2026-09-05' });
+    const replacement = corrected.entries.find((entry) => entry.kind === 'expense' && entry.amount.minorUnits === 6_000);
+    expect(replacement).toMatchObject({ timeZone: 'Asia/Riyadh' });
+  });
+
   it('produces one new version with deterministic boundaries and visible deltas', async () => {
     const harness = makeTaskCHarness('book-proof-5-rebase');
     await seedStandardBook(harness);
@@ -168,8 +226,7 @@ describe('explicit open-cycle rebase', () => {
     expect(effectOf(clamp, 'openCycleRebased')['newEndDateExclusive']).toBe('2025-12-31');
   });
 
-  it('replays retries, rejects stale confirmations, and ignores repeated rebases', async () => {
-    const harness = makeTaskCHarness('book-proof-5-retry');
+  it('replays retries, rejects stale confirmations, and ignores repeated rebases', async () => {    const harness = makeTaskCHarness('book-proof-5-retry');
     await seedStandardBook(harness);
     const command = {
       kind: 'rebaseOpenCycle', bookId: harness.bookId,
@@ -212,5 +269,51 @@ describe('explicit open-cycle rebase', () => {
     expect(repeated.ok).toBe(false);
     if (!repeated.ok) expect(repeated.failure.kind).toBe('rebaseNotNeeded');
     expect(harness.state().cycles.length).toBe(versionsBefore);
+  });
+
+  it('rejects a rebase whose window would strand attributed facts, byte-identical', async () => {
+    const harness = makeTaskCHarness('book-proof-5-strand');
+    await seedStandardBook(harness);
+    await harness.run({
+      kind: 'recordExpense', bookId: harness.bookId, amount: SAR(1_000),
+      occurredAt: { kind: 'civilDate', localDate: '2026-09-20' },
+      note: '', category: 'food', flexibleDefinitionId: null,
+    });
+    await harness.run({
+      kind: 'recordRealityCheck', bookId: harness.bookId, observedPool: SAR(99_000),
+      boundary: { kind: 'civilDateTime', localDate: '2026-09-21', localTime: '12:00:00' },
+      currencyLabel: null, classificationNote: 'counted', note: '',
+    });
+    const stateBefore = JSON.stringify(harness.state());
+    const availabilityBefore = harness.availableMinor();
+    // Payday 15 containing Sept 1 runs Aug 15 to Sept 15: the Sept 20
+    // expense and Sept 21 observation would fall outside with no accounting.
+    const rejected = harness.previewRaw({
+      kind: 'rebaseOpenCycle', bookId: harness.bookId,
+      timeZone: 'Asia/Riyadh', cycleAnchor: { kind: 'payday', dayOfMonth: 15 }, note: '',
+    });
+    expect(rejected.ok).toBe(false);
+    if (!rejected.ok) expect(rejected.failure.kind).toBe('invalidRebase');
+    expect(JSON.stringify(harness.state())).toBe(stateBefore);
+    expect(harness.availableMinor()).toBe(availabilityBefore);
+    expect(availabilityBefore).toBe(99_000);
+  });
+
+  it('rejects a rebase whose window would overlap an adjacent cycle', async () => {
+    const harness = makeTaskCHarness('book-proof-5-overlap');
+    await seedStandardBook(harness);
+    await harness.run({ kind: 'closeCycle', bookId: harness.bookId, cycleId: null, note: '' });
+    await harness.run({
+      kind: 'openCycle', bookId: harness.bookId, startDate: '2026-10-01', startingFunds: SAR(10_000),
+    });
+    const stateBefore = JSON.stringify(harness.state());
+    // Payday 15 containing Oct 1 runs Sept 15 to Oct 15: overlaps September.
+    const rejected = harness.previewRaw({
+      kind: 'rebaseOpenCycle', bookId: harness.bookId,
+      timeZone: 'Asia/Riyadh', cycleAnchor: { kind: 'payday', dayOfMonth: 15 }, note: '',
+    });
+    expect(rejected.ok).toBe(false);
+    if (!rejected.ok) expect(rejected.failure.kind).toBe('invalidRebase');
+    expect(JSON.stringify(harness.state())).toBe(stateBefore);
   });
 });

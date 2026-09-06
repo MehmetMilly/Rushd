@@ -36,7 +36,7 @@ describe('recurring plans across a short month', () => {
       kind: 'materializePlanOccurrences', bookId: harness.bookId, planId: 'plan-rent', throughDate: '2026-11-30',
     });
     const ids = effectOf(materialized, 'planOccurrencesMaterialized')['occurrenceIds'] as string[];
-    expect(ids).toEqual(['occ:plan-rent:2026-09-05', 'occ:plan-rent:2026-10-05', 'occ:plan-rent:2026-11-05']);
+    expect(ids).toEqual(['occ:plan-rent:2026-09', 'occ:plan-rent:2026-10', 'occ:plan-rent:2026-11']);
     const [septId, octId, novId] = ids as [string, string, string];
 
     // Materializing again creates nothing: stable identities, no duplicates.
@@ -111,11 +111,52 @@ describe('recurring plans across a short month', () => {
     const materialized = await harness.run({
       kind: 'materializePlanOccurrences', bookId: harness.bookId, planId: 'plan-month-end', throughDate: '2026-02-28',
     });
-    // 2026 is not a leap year: February clamps to the 28th.
+    // 2026 is not a leap year: February clamps to the 28th. Identity is
+    // the monthly slot; the clamped due date lives on the row.
     expect(effectOf(materialized, 'planOccurrencesMaterialized')['occurrenceIds']).toEqual([
-      'occ:plan-month-end:2026-01-31',
-      'occ:plan-month-end:2026-02-28',
+      'occ:plan-month-end:2026-01',
+      'occ:plan-month-end:2026-02',
     ]);
+    const dueDates = harness.state().planOccurrences.map((occurrence) => occurrence.dueDate);
+    expect(dueDates).toEqual(['2026-01-31', '2026-02-28']);
+  });
+
+  it('keeps one stable occurrence across schedule-day revisions with no duplicate payable', async () => {
+    const harness = makeTaskCHarness('book-proof-4-resched');
+    await seedStandardBook(harness);
+    await harness.run({
+      kind: 'createRecurringPlan', bookId: harness.bookId, planId: 'plan-move', name: 'Mover',
+      amount: SAR(10_000), scheduleDay: 5, effectiveDate: '2026-09-01', flexibleDefinitionId: null,
+    });
+    await harness.run({
+      kind: 'materializePlanOccurrences', bookId: harness.bookId, planId: 'plan-move', throughDate: '2026-10-31',
+    });
+    await harness.run({
+      kind: 'reviseRecurringPlan', bookId: harness.bookId, planId: 'plan-move',
+      effectiveDate: '2026-10-01', amount: SAR(10_000), scheduleDay: 10, note: 'moved',
+    });
+    // Rematerialization finds the same October slot, now due October 10:
+    // still exactly one October occurrence, and it remains payable once.
+    const again = await harness.run({
+      kind: 'materializePlanOccurrences', bookId: harness.bookId, planId: 'plan-move', throughDate: '2026-10-31',
+    });
+    expect(effectOf(again, 'planOccurrencesMaterialized')['occurrenceIds']).toEqual([]);
+    const october = harness.state().planOccurrences.filter((occurrence) => occurrence.occurrenceId === 'occ:plan-move:2026-10');
+    expect(october).toHaveLength(1);
+    expect(october[0]).toMatchObject({ dueDate: '2026-10-10', state: 'managed' });
+    await harness.run({
+      kind: 'reservePlanOccurrence', bookId: harness.bookId,
+      occurrenceId: 'occ:plan-move:2026-10', obligationId: 'obl-move-oct', note: '',
+    });
+    await harness.run({ kind: 'closeCycle', bookId: harness.bookId, cycleId: null, note: '' });
+    await harness.run({
+      kind: 'openCycle', bookId: harness.bookId, startDate: '2026-10-01', startingFunds: SAR(50_000),
+    });
+    await harness.run({
+      kind: 'recordObligationPayment', bookId: harness.bookId, obligationId: 'obl-move-oct', amount: SAR(10_000),
+      occurredAt: { kind: 'civilDate', localDate: '2026-10-10' }, note: '', category: null,
+    });
+    expect(harness.state().obligations.filter((obligation) => obligation.obligationId === 'obl-move-oct')).toHaveLength(1);
   });
 
   it('keeps flexible-definition links arithmetic-neutral', async () => {
@@ -162,8 +203,7 @@ describe('recurring plans across a short month', () => {
     expect(harness.state().revision).toBe(revisionBefore);
   });
 
-  it('pays a reserved occurrence across cycles while the expectation keeps its due-cycle identity', async () => {
-    const harness = makeTaskCHarness('book-proof-4-cross');
+  it('pays a reserved occurrence across cycles while the expectation keeps its due-cycle identity', async () => {    const harness = makeTaskCHarness('book-proof-4-cross');
     await seedStandardBook(harness);
     await harness.run({
       kind: 'createRecurringPlan', bookId: harness.bookId, planId: 'plan-sub', name: 'Subscription',
@@ -174,7 +214,7 @@ describe('recurring plans across a short month', () => {
     });
     await harness.run({
       kind: 'reservePlanOccurrence', bookId: harness.bookId,
-      occurrenceId: 'occ:plan-sub:2026-09-05', obligationId: 'obl-sub-sept', note: '',
+      occurrenceId: 'occ:plan-sub:2026-09', obligationId: 'obl-sub-sept', note: '',
     });
     // September closes with the subscription still reserved.
     await harness.run({ kind: 'closeCycle', bookId: harness.bookId, cycleId: null, note: '' });
@@ -193,5 +233,37 @@ describe('recurring plans across a short month', () => {
     expect(payment?.cycleId).toBe(`cyc:${harness.bookId}:2026-10-01`);
     // 50 start - 10 paid - 0 residual = 40, counted once.
     expect(harness.availableMinor()).toBe(40_000);
+  });
+
+  it('freezes a reserved occurrence on revision so it never desynchronizes from its obligation', async () => {
+    const harness = makeTaskCHarness('book-proof-4-freeze');
+    await seedStandardBook(harness);
+    await harness.run({
+      kind: 'createRecurringPlan', bookId: harness.bookId, planId: 'plan-pin', name: 'Pinned',
+      amount: SAR(10_000), scheduleDay: 5, effectiveDate: '2026-09-01', flexibleDefinitionId: null,
+    });
+    await harness.run({
+      kind: 'materializePlanOccurrences', bookId: harness.bookId, planId: 'plan-pin', throughDate: '2026-10-31',
+    });
+    await harness.run({
+      kind: 'reservePlanOccurrence', bookId: harness.bookId,
+      occurrenceId: 'occ:plan-pin:2026-10', obligationId: 'obl-pin-oct', note: '',
+    });
+    const before = harness.state().planOccurrences.find((occurrence) => occurrence.occurrenceId === 'occ:plan-pin:2026-10');
+    // Revising effective October 1 leaves the reserved October occurrence on
+    // its original revision: one authoritative unpaid expectation shared
+    // with the 10,000 obligation.
+    const revised = await harness.run({
+      kind: 'reviseRecurringPlan', bookId: harness.bookId, planId: 'plan-pin',
+      effectiveDate: '2026-10-01', amount: SAR(20_000), scheduleDay: 5, note: 'raise',
+    });
+    expect(effectOf(revised, 'recurringPlanRevised')['updatedOccurrences']).toBe(0);
+    const after = harness.state().planOccurrences.find((occurrence) => occurrence.occurrenceId === 'occ:plan-pin:2026-10');
+    expect(after?.revisionId).toBe(before?.revisionId);
+    expect(after?.dueDate).toBe('2026-10-05');
+    expect(occurrenceExpectedAmount(harness.state(), after!)).toEqual(SAR(10_000));
+    expect(harness.state().obligations.find((candidate) => candidate.obligationId === 'obl-pin-oct')?.expectedAmount).toEqual(SAR(10_000));
+    // September predates the revision, so it keeps its original revision too.
+    expect(occurrenceExpectedAmount(harness.state(), harness.state().planOccurrences.find((candidate) => candidate.occurrenceId === 'occ:plan-pin:2026-09')!)).toEqual(SAR(10_000));
   });
 });

@@ -19,6 +19,7 @@ import {
   boundaryFromObservation,
   classifyCurrencyLabel,
   compareOccurrenceToBoundary,
+  compareResolvedBoundaries,
   deriveLedgerPoolAt,
   earliestCoveringObservation,
   type ResolvedBoundary,
@@ -270,6 +271,25 @@ export function applyRecordRealityCheck(
       ok: false,
       failure: { kind: 'duplicateObservation', bookId: command.bookId, cycleId: cycle.cycleId, observationId: duplicate.observationId },
     };
+  }
+
+  // Observations chain forward in boundary order. Inserting a boundary
+  // before an accepted later boundary would stack the same observed gap
+  // twice: the later adjustment's ledger would newly include this one while
+  // keeping its recorded amount. Reject with no write instead of accepting
+  // a materially wrong money answer.
+  for (const existing of state.observations) {
+    if (existing.cycleId !== cycle.cycleId) continue;
+    if (compareResolvedBoundaries(boundaryFromObservation(existing), boundary.value) > 0) {
+      return {
+        ok: false,
+        failure: {
+          kind: 'invalidBoundary',
+          bookId: command.bookId,
+          detail: `boundary ${boundary.value.localDate} precedes the accepted boundary ${existing.boundaryLocalDate} in this cycle; observations chain forward and a backdated boundary needs an explicit observation correction`,
+        },
+      };
+    }
   }
 
   const ledgerPool = deriveLedgerPoolAt(state, cycle, boundary.value);

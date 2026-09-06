@@ -108,7 +108,8 @@ describe('reality-check reference scenario (hand-calculated)', () => {
     expect(availability.components.netInflows).toEqual(SAR(0));
   });
 
-  it('holds the pool Current while an unclassified adjustment keeps classification Needs Attention', async () => {    const harness = makeTaskCHarness('book-proof-1-split');
+  it('holds the pool Current while an unclassified adjustment keeps classification Needs Attention', async () => {
+    const harness = makeTaskCHarness('book-proof-1-split');
     await seedStandardBook(harness);
     await harness.run({
       kind: 'recordRealityCheck',
@@ -123,6 +124,29 @@ describe('reality-check reference scenario (hand-calculated)', () => {
     expect(completeness.pool.state).toBe('current');
     expect(completeness.classification.state).toBe('needsAttention');
     expect(completeness.classification.reasons.some((reason) => reason.type === 'unclassifiedAdjustment')).toBe(true);
+  });
+
+  it('treats an accepted nonzero reconciliation as pool truth with classification pending', async () => {
+    const harness = makeTaskCHarness('book-proof-1-nonzero');
+    await seedStandardBook(harness);
+    await harness.run({
+      kind: 'recordRealityCheck',
+      bookId: harness.bookId,
+      observedPool: SAR(90_000),
+      boundary: SEPT_5_NOON,
+      currencyLabel: null,
+      classificationNote: null,
+      note: '',
+    });
+    // Availability still reflects the accepted shortfall exactly.
+    expect(harness.availableMinor()).toBe(90_000);
+    const completeness = completenessOf(harness);
+    expect(completeness.pool.state).toBe('current');
+    expect(completeness.pool.reasons).toEqual([]);
+    expect(completeness.classification.state).toBe('needsAttention');
+    expect(completeness.classification.reasons).toEqual([
+      expect.objectContaining({ type: 'unclassifiedAdjustment' }),
+    ]);
   });
 });
 
@@ -289,6 +313,34 @@ describe('successive observations with recovered, corrected, and reversed activi
       if (adjustment === null) throw new Error('unreachable');
       expect(ledger.minorUnits + adjustmentResidual(state, adjustment).minorUnits).toBe(expected);
     }
+  });
+
+  it('rejects a backdated boundary after a later one with byte-identical state', async () => {
+    const harness = makeTaskCHarness('book-proof-2-backdate');
+    await seedStandardBook(harness);
+    // Later boundary first: 100,000 ledger against a 90,000 pool.
+    await harness.run({
+      kind: 'recordRealityCheck', bookId: harness.bookId, observedPool: SAR(90_000),
+      boundary: { kind: 'civilDateTime', localDate: '2026-09-10', localTime: '12:00:00' },
+      currencyLabel: null, classificationNote: 'counted', note: '',
+    });
+    expect(harness.availableMinor()).toBe(90_000);
+    // The earlier boundary would stack the same gap twice: the later
+    // adjustment's ledger would newly include it while keeping -10,000,
+    // dragging the pool to 80,000. Reject with no write instead.
+    const stateBefore = JSON.stringify(harness.state());
+    const revisionBefore = revisionOf(harness);
+    const backdated = harness.previewRaw({
+      kind: 'recordRealityCheck', bookId: harness.bookId, observedPool: SAR(90_000),
+      boundary: SEPT_5_NOON, currencyLabel: null, classificationNote: 'counted', note: '',
+    });
+    expect(backdated.ok).toBe(false);
+    if (!backdated.ok) expect(backdated.failure.kind).toBe('invalidBoundary');
+    expect(JSON.stringify(harness.state())).toBe(stateBefore);
+    expect(revisionOf(harness)).toBe(revisionBefore);
+    expect(harness.availableMinor()).toBe(90_000);
+    expect(harness.state().observations).toHaveLength(1);
+    expect(harness.state().adjustments).toHaveLength(1);
   });
 });
 

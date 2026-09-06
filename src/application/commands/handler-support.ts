@@ -25,6 +25,19 @@ export function requireOpenCycle(state: BookState): { ok: true; value: CycleReco
   return { ok: true, value: openCycle };
 }
 
+/**
+ * The single choke point for occurrence resolution and stamping of new
+ * facts: the active version's governing timezone, falling back to the
+ * creation timezone when no cycle is open. After a timezone rebase, new
+ * facts resolve civil dates and cycles in the active version timezone.
+ * Correction records instead retain their original fact's timezone (see the
+ * activity handlers), so history is never re-dated by later settings.
+ */
+export function activeVersionTimeZone(state: BookState): TimeZoneName {
+  const openCycle = findOpenCycle(state);
+  return openCycle === null ? state.book.timeZone : openCycle.timeZone;
+}
+
 export function resolveOccurredAt(
   occurredAt: OccurredAt,
   timeZone: TimeZoneName,

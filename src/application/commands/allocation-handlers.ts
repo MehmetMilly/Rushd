@@ -34,6 +34,7 @@ import {
   currencyMismatchFailure,
   newAllocationRecordId,
   occurredInstantOf,
+  activeVersionTimeZone,
   requireDateInOpenCycle,
   requireOpenCycle,
   resolveOccurredAt,
@@ -60,7 +61,7 @@ function allocationRecord(
     note,
     occurredAtInstantMs,
     capturedAtInstantMs: context.clock.nowMs(),
-    capturedInTimeZone: state.book.timeZone,
+    capturedInTimeZone: activeVersionTimeZone(state),
     calculationVersion: context.calculationVersion,
     sourceOperationId: operationId,
   };
@@ -141,7 +142,7 @@ export function applyCreateGoal(
     name: command.name,
     targetAmount: command.targetAmount,
     createdAtInstantMs: context.clock.nowMs(),
-    createdInTimeZone: state.book.timeZone,
+    createdInTimeZone: activeVersionTimeZone(state),
     calculationVersion: context.calculationVersion,
     sourceOperationId: operationId,
   };
@@ -169,7 +170,7 @@ export function applyFundAllocationPool(
   if (command.amount.currency !== state.book.currency) {
     return currencyMismatchFailure(command.bookId, state.book.currency, command.amount.currency);
   }
-  const localDate = resolveOccurredAt(command.occurredAt, state.book.timeZone, command.bookId);
+  const localDate = resolveOccurredAt(command.occurredAt, activeVersionTimeZone(state), command.bookId);
   if (!localDate.ok) return localDate;
   const inCycle = requireDateInOpenCycle(localDate.value, openCycle.value, command.bookId);
   if (!inCycle.ok) return inCycle;
@@ -302,7 +303,7 @@ export function applyReleaseAllocation(
   );
   if (!funds.ok) return funds;
 
-  const localDate = resolveOccurredAt(command.occurredAt, state.book.timeZone, command.bookId);
+  const localDate = resolveOccurredAt(command.occurredAt, activeVersionTimeZone(state), command.bookId);
   if (!localDate.ok) return localDate;
   const inCycle = requireDateInOpenCycle(localDate.value, openCycle.value, command.bookId);
   if (!inCycle.ok) return inCycle;

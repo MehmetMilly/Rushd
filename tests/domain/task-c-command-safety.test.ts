@@ -98,7 +98,7 @@ describe('cross-book references', () => {
     await harness.run({
       kind: 'materializePlanOccurrences', bookId: harness.bookId, planId: 'plan-shared', throughDate: '2026-09-30',
     });
-    const occurrenceId = 'occ:plan-shared:2026-09-03';
+    const occurrenceId = 'occ:plan-shared:2026-09';
     await harness.run({ kind: 'closeCycle', bookId: harness.bookId, cycleId: null, note: '' });
     const settlementId = harness.state().settlements[0].settlementId;
 

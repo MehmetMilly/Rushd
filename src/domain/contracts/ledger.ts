@@ -438,6 +438,8 @@ export interface BookState {
   readonly propagationDeltas: readonly PropagationDelta[];
   /** Unresolved downstream conflicts awaiting explicit resolution. */
   readonly propagationConflicts: readonly PropagationConflict[];
+  /** Explicit append-only decisions on propagation conflicts. */
+  readonly conflictResolutions: readonly ConflictResolution[];
 }
 
 /**
@@ -649,9 +651,13 @@ export interface CarryAction {
 
 /**
  * An exact linked delta from a backdated correction into a closed source
- * cycle, applied only while no downstream carry/allocation has consumed the
- * affected settlement. The historical snapshot never changes; the delta is
- * the visible forward propagation.
+ * cycle. Deltas always join the settlement's effective remainder view. When
+ * a carry to a downstream cycle already stood untouched, the delta carries
+ * that action's identity and additionally adjusts the downstream carry
+ * basis by exactly its signed amount (derivation, never a rewrite of the
+ * carry row). Deltas created before any disposition only ever shaped the
+ * remainder the disposition was sized from. The historical snapshot never
+ * changes; the delta is the visible forward propagation.
  */
 export interface PropagationDelta {
   readonly deltaId: EntryId;
@@ -659,6 +665,8 @@ export interface PropagationDelta {
   readonly settlementId: SettlementId;
   readonly sourceCycleId: CycleId;
   readonly correctionEntryId: EntryId;
+  /** The carry disposition standing when this delta was appended, if any. */
+  readonly carryActionId: EntryId | null;
   /** Signed effect on the settlement remainder in the book currency. */
   readonly deltaAmount: Money;
   readonly note: string;
@@ -671,7 +679,9 @@ export interface PropagationDelta {
  * A backdated correction that arrived after its downstream carry or tracked
  * allocation had already changed. The correction itself is always accepted
  * (history is never hidden); this record keeps the unpropagated intent
- * visible and degrades completeness until an explicit resolution.
+ * visible and degrades completeness until an explicit resolution, which is
+ * itself an appended `ConflictResolution` record. The conflict row is never
+ * mutated: effective resolution derives from the resolution family.
  */
 export interface PropagationConflict {
   readonly conflictId: EntryId;
@@ -682,8 +692,25 @@ export interface PropagationConflict {
   /** Signed amount that could not be propagated exactly. */
   readonly unpropagatedAmount: Money;
   readonly downstreamKind: 'carry' | 'trackedAllocation' | 'both';
-  /** True once `resolvePropagationConflict` records an explicit decision. */
-  readonly resolved: boolean;
+  readonly note: string;
+  readonly capturedAtInstantMs: number;
+  readonly calculationVersion: string;
+  readonly sourceOperationId: OperationId;
+}
+
+/**
+ * An explicit decision on a propagation conflict. An acknowledgement carries
+ * no monetary action: the downstream stands exactly as recorded and the
+ * accepted correction stays recorded. The resolution is a visibility
+ * decision — completeness recovers because a human reviewed the divergence
+ * — never a money movement and never a rewrite of the conflict.
+ */
+export interface ConflictResolution {
+  readonly resolutionId: EntryId;
+  readonly bookId: BookId;
+  readonly conflictId: EntryId;
+  readonly settlementId: SettlementId;
+  readonly resolution: 'acknowledgedDownstreamStands';
   readonly note: string;
   readonly capturedAtInstantMs: number;
   readonly calculationVersion: string;

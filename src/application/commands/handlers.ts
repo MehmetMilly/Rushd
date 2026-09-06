@@ -36,6 +36,7 @@ import {
   monthParts,
   newCycleVersionId,
   occurredInstantOf,
+  activeVersionTimeZone,
   requireOpenCycle,
   resolveOccurredAt,
 } from './handler-support';
@@ -232,6 +233,7 @@ function applyCreateBook(command: CreateBookCommand, context: CommandContext): A
     carryActions: [],
     propagationDeltas: [],
     propagationConflicts: [],
+    conflictResolutions: [],
   };
   return {
     ok: true,
@@ -363,7 +365,7 @@ function applyRecordInflow(
     return currencyMismatchFailure(command.bookId, state.book.currency, command.amount.currency);
   }
 
-  const localDate = resolveOccurredAt(command.occurredAt, state.book.timeZone, command.bookId);
+  const localDate = resolveOccurredAt(command.occurredAt, activeVersionTimeZone(state), command.bookId);
   if (!localDate.ok) return localDate;
   if (!isDateWithinOpenCycle(localDate.value, cycle)) {
     return {
@@ -372,6 +374,7 @@ function applyRecordInflow(
     };
   }
 
+  const entryTimeZone = activeVersionTimeZone(state);
   const entryId = newLedgerEntryId(context, 'inflow');
   const entry = {
     kind: 'inflow' as const,
@@ -379,12 +382,12 @@ function applyRecordInflow(
     bookId: command.bookId,
     cycleId: cycle.cycleId,
     localDate: localDate.value,
-    timeZone: state.book.timeZone,
+    timeZone: entryTimeZone,
     amount: command.amount,
     note: command.note,
     occurredAtInstantMs: occurredInstantOf(command.occurredAt),
     capturedAtInstantMs: context.clock.nowMs(),
-    capturedInTimeZone: state.book.timeZone,
+    capturedInTimeZone: entryTimeZone,
     calculationVersion: context.calculationVersion,
     sourceOperationId: operationId,
   };
@@ -457,7 +460,9 @@ function applyReverseInflow(
   // the clock at execution: the preview and the execution of the same
   // confirmation must attribute the reversal to the same day. Capture
   // timestamps below still reflect execution time.
-  const reversalDate = resolveOccurredAt(command.occurredAt, state.book.timeZone, command.bookId);
+  // The reversal retains the original inflow's timezone by design (see the
+  // activity handlers): it belongs to the reversed history.
+  const reversalDate = resolveOccurredAt(command.occurredAt, target.timeZone, command.bookId);
   if (!reversalDate.ok) return reversalDate;
   if (!isDateWithinOpenCycle(reversalDate.value, cycle)) {
     return {
@@ -478,13 +483,13 @@ function applyReverseInflow(
     bookId: command.bookId,
     cycleId: cycle.cycleId,
     localDate: reversalDate.value,
-    timeZone: state.book.timeZone,
+    timeZone: target.timeZone,
     amount: negated.value,
     reversesEntryId: target.entryId,
     note: command.note,
     occurredAtInstantMs: occurredInstantOf(command.occurredAt),
     capturedAtInstantMs: context.clock.nowMs(),
-    capturedInTimeZone: state.book.timeZone,
+    capturedInTimeZone: target.timeZone,
     calculationVersion: context.calculationVersion,
     sourceOperationId: operationId,
   };

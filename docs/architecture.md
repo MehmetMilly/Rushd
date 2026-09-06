@@ -150,11 +150,14 @@ still backend-only: the legacy UI does not call it.
   Recoveries attach to the earliest covering boundary, which keeps every
   observed pool exact. Successive observations chain forward; a backdated
   boundary stacks an independent adjustment without rewriting later ones.
-- `src/domain/plans/`: effective-dated revisions with stable deterministic
-  occurrence identities, short-month clamping, and idempotent
-  materialization. Revisions move future unpaid managed occurrences only;
-  paid and detached occurrences keep their historical revision. Reserving
-  creates the obligation with its due-cycle identity; paying moves actual
+- `src/domain/plans/`: effective-dated revisions with stable
+  period-slot occurrence identities (`occ:<plan>:<YYYY-MM>`), short-month
+  clamping, and idempotent materialization. Revisions move future unpaid
+  managed occurrences only; paid, detached, and reserved occurrences keep
+  their historical revision, so a revision can never desynchronize an
+  occurrence from its linked obligation. One monthly slot stays one
+  occurrence across schedule-day revisions: the due date lives on the row,
+  rematerialization never duplicates a payable, and paying moves actual
   money in the payment's cycle. Detach is the explicit pre-editing escape
   and later revisions never retake a detached occurrence. Flexible links
   stay descriptive and arithmetic-neutral.
@@ -163,37 +166,47 @@ still backend-only: the legacy UI does not call it.
   carry attribution, and overlap accounting. Week-start is display policy
   and never changes financial occurrence.
 - Cycle versions are append-only rows with derived effective status: a
-  version referenced by a settlement is closed, one named by another
-  version's `supersedesVersionId` is superseded, otherwise the latest is
+  version referenced by a settlement is closed, versions named by another
+  version's `supersedesVersionId` are superseded, otherwise the latest is
   open. Rebase and close never mutate a row; reopen appends a new version
   that acts as the reversal record while the closed snapshot and version
-  stay byte-for-byte. Managed unpaid occurrences and unresolved conflict
-  flags are lifecycle pointers that advance by replacement; paid, detached,
-  closed, and settled facts are never overwritten, and every transition is
-  journaled through the operation record.
+  stay byte-for-byte. A rebase is rejected with no write when any dated
+  fact attributed to the cycle would fall outside the candidate window, or
+  when the window would overlap another cycle. Managed unpaid occurrences
+  advance by replacement (except reserved ones, which are pinned to their
+  obligation); conflict resolutions append a separate record while the
+  conflict row stays byte-identical. Paid, detached, closed, and settled
+  facts are never overwritten, and every transition is journaled through
+  the operation record.
 - Reality Check, recovery, plans, settings/rebase, close, explicit
   remainder disposition (carry-in, tracked funding, split, independent),
   reopen, closed-cycle corrections (new facts plus linked corrections and
   voids with live-command refund/net guards), and conflict resolution all
   run through the shared command protocol. Foreign-currency and ambiguous
-  inputs clarify with no writes. Backdated corrections are always accepted:
-  exact linked deltas while the downstream is untouched, explicit
-  unresolved conflicts (pool degraded until resolution) otherwise.
+  inputs clarify with no writes. Observations chain forward in boundary
+  order; a backdated boundary is rejected with no write rather than
+  stacking the same gap twice. Carry destinations must resolve to an
+  existing open cycle. Backdated corrections are always accepted: an
+  untouched downstream receives the exact linked delta (the carry basis
+  follows it by derivation; completed tracked funding stands while the
+  remainder view records the delta), while a subsequently changed
+  downstream produces an explicit unresolved conflict that degrades
+  completeness until an appended acknowledgement resolves it. The
+  acknowledgement carries no monetary action.
 - Availability is cycle-scoped (starting funds plus signed carry-in, this
   cycle's cash facts, signed reconciliation residuals, once-counted open
   reservations, per-cycle allocation attribution, buffer) with extra
   components `carryIn` and `netAdjustments`. Completeness covers the active
   basis: old unclassified history never contaminates a newer pool, while
-  unexplained residuals, unclassified adjustments, and unresolved
+  unclassified adjustments and unresolved
   propagation conflicts stay visible. A pool may be Current while
-  classification remains Needs Attention.
-- Known Task C boundaries for later phases: pre-C commands keep resolving
-  instants and capturing in the book creation timezone (unchanged behavior
-  when no settings revision exists); new commands use the version or
-  boundary timezone. Successive observations chain forward in boundary
-  order; a backdated boundary stacks an independent adjustment without
-  rewriting later ones, so contradictory repeated claims add rather than
-  cancel. Detach is the occurrence cancellation path; there is no separate
+  classification remains Needs Attention: an accepted adjustment reconciles
+  the pool by definition, so only disputes, released residuals, and
+  unresolved conflicts keep the pool stale.
+- New facts resolve and stamp in the active version timezone through one
+  centralized helper; correction records retain their original fact's
+  timezone by design, so history is never re-dated by later settings.
+  Detach is the occurrence cancellation path; there is no separate
   plan-cancellation command.
 
 Not implemented yet (P03 Task D and later phases): the provider-neutral

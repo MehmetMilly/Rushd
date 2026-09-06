@@ -40,7 +40,7 @@ import type {
 import type { OperationId } from '../../domain/contracts/identity';
 import type { CommandContext } from './context';
 import type { ApplyResult, HandlerRefs } from './handlers';
-import { currencyMismatchFailure, newEntryId } from './handler-support';
+import { currencyMismatchFailure, activeVersionTimeZone, newEntryId } from './handler-support';
 
 export function applyCreateRecurringPlan(
   command: CreateRecurringPlanCommand,
@@ -74,7 +74,7 @@ export function applyCreateRecurringPlan(
     anchor: effectiveAnchorForDate(state, command.effectiveDate),
     flexibleDefinitionId: command.flexibleDefinitionId,
     createdAtInstantMs: capturedAtInstantMs,
-    createdInTimeZone: state.book.timeZone,
+    createdInTimeZone: activeVersionTimeZone(state),
     calculationVersion: context.calculationVersion,
     sourceOperationId: operationId,
   };
@@ -160,15 +160,18 @@ export function applyReviseRecurringPlan(
   };
 
   // Future unpaid managed occurrences follow the new revision from its
-  // effective date. Paid and detached occurrences are never rewritten; a
-  // schedule change moves the due date (clamped) while the stable identity
-  // stays put.
+  // effective date. Paid, detached, and reserved occurrences are never
+  // rewritten: a reservation pins the occurrence to the obligation created
+  // from it, so a later revision must not desynchronize the occurrence from
+  // its linked obligation. A schedule change moves the due date (clamped)
+  // while the stable identity stays put.
   let updated = 0;
   const occurrences = state.planOccurrences.map((occurrence): PlanOccurrence => {
     if (occurrence.planId !== command.planId) return occurrence;
     if (occurrence.state !== 'managed') return occurrence;
     if (compareCivilDates(occurrence.dueDate, command.effectiveDate) < 0) return occurrence;
     if (isOccurrencePaid(state, occurrence)) return occurrence;
+    if (occurrence.linkedObligationId !== null) return occurrence;
     updated += 1;
     if (command.scheduleDay === scheduleDayOf(state, occurrence)) {
       return { ...occurrence, revisionId: revision.revisionId };
@@ -396,7 +399,7 @@ export function applyReservePlanOccurrence(
     note: command.note,
     category: null,
     createdAtInstantMs: capturedAtInstantMs,
-    createdInTimeZone: state.book.timeZone,
+    createdInTimeZone: activeVersionTimeZone(state),
     calculationVersion: context.calculationVersion,
     sourceOperationId: operationId,
   };

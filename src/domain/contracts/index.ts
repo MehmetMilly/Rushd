@@ -52,6 +52,7 @@ export {
   type BookState,
   type BufferSetting,
   type CarryAction,
+  type ConflictResolution,
   type CycleRecord,
   type CycleSettlement,
   type CycleVersionStatus,
