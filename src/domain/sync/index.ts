@@ -1,0 +1,109 @@
+/**
+ * Provider-neutral storage/sync contract (P03 Task D).
+ *
+ * This barrel is the public surface P04 local persistence and P08 account
+ * sync must implement. It defines and proves contracts only: no IndexedDB,
+ * service worker, authentication, cloud networking, or sync daemon lives
+ * here. Those implementations remain P04/P08 scope behind future adapters.
+ */
+
+export {
+  makeAccountId,
+  makeDeviceId,
+  makeGuestKey,
+  makeRepositoryScopeId,
+  makeServerIdempotencyKey,
+  repositoryScopeIdFor,
+  serverIdempotencyKeyFor,
+  validateLocalPrincipal,
+  type AccountId,
+  type CommandOrigin,
+  type DeviceId,
+  type GuestKey,
+  type LocalPrincipal,
+  type PrincipalValidation,
+  type RepositoryScopeId,
+  type ScopeIdFailure,
+  type ScopeIdResult,
+  type ServerIdempotencyKey,
+} from './scope';
+export {
+  SYNC_CURSOR_SCHEMA_VERSION,
+  dedupePulledOperations,
+  equalSyncCursors,
+  isBatchAlreadyApplied,
+  isNextBatchFor,
+  makeReplicationStreamId,
+  makeSyncCursor,
+  validatePulledBatchShape,
+  type CheckpointRecord,
+  type CursorResult,
+  type PulledBatch,
+  type PulledBatchShapeFailure,
+  type PulledBatchShapeResult,
+  type ReplicatedOperationRef,
+  type ReplicationStreamId,
+  type SyncCursor,
+  type SyncCursorSchemaVersion,
+} from './cursors';
+export {
+  SYNC_TOMBSTONE_SCHEMA_VERSION,
+  isTombstoneCompactable,
+  validateTombstone,
+  type SyncEntityKind,
+  type SyncTombstoneSchemaVersion,
+  type TombstoneRecord,
+  type TombstoneRetentionAssessment,
+  type TombstoneValidation,
+} from './tombstones';
+export {
+  SYNC_CONFLICT_KINDS,
+  SYNC_CONFLICT_SCHEMA_VERSION,
+  assertSyncSafeForSensitiveAction,
+  decideDeleteVsEdit,
+  hasUnresolvedConflicts,
+  latestResolutionFor,
+  resolveSyncConflict,
+  type ConflictResolutionInput,
+  type DeleteVsEditInput,
+  type DeleteVsEditIntent,
+  type SyncConflict,
+  type SyncConflictKind,
+  type SyncConflictResolution,
+  type SyncConflictSchemaVersion,
+  type SyncResolutionPolicy,
+  type SyncSafetyGate,
+} from './conflicts';
+export {
+  GUEST_MERGE_SCHEMA_VERSION,
+  advanceMergePlan,
+  isMergeComplete,
+  pendingMergeUploads,
+  planGuestMerge,
+  type GuestMergePlan,
+  type GuestMergeSchemaVersion,
+  type GuestMergeStatus,
+  type GuestOperationSummary,
+  type MergeChoice,
+  type PlanGuestMergeInput,
+  type PlanGuestMergeResult,
+} from './merge';
+export {
+  SIGNOUT_SCHEMA_VERSION,
+  authorizeCacheErasure,
+  evaluateSignOutCache,
+  type CacheErasureAuthorization,
+  type CacheErasureRequest,
+  type DestructiveConfirmation,
+  type SignOutAssessment,
+  type SignOutCacheDecision,
+  type SignOutSyncState,
+  type SignoutSchemaVersion,
+  type VerifiedExportRef,
+} from './signout';
+export {
+  PROVIDER_AMENDMENT_GATES,
+  PROVIDER_SUBSTITUTION_CHECKLIST,
+  meetsProviderMinimum,
+  type SyncProviderCapabilities,
+} from './provider';

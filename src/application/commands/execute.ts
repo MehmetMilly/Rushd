@@ -10,8 +10,10 @@
  *    the committed revision — a stale preview fails with `revisionConflict`
  *    and requires a refreshed preview;
  * 3. applies the pure handler and commits state, receipt, and outbox
- *    together. Any exception between tentative writes leaves all three
- *    unchanged.
+ *    together, stamping the record schema version, the context origin
+ *    (scope and source device), and one durable enqueue sequence shared by
+ *    all three records. Any exception between tentative writes leaves all
+ *    three unchanged.
  *
  * Validation of the raw command happens before the transaction; stateful and
  * revision checks happen inside it. Infrastructure errors from the adapter
@@ -19,13 +21,14 @@
  */
 
 import { canonicalJson, stableDigest } from '../../domain/contracts/canonical';
-import type {
-  CommandConfirmation,
-  CommandExecutionResult,
-  CommandFailure,
-  CommandReceipt,
-  OperationRecord,
-  OutboxEnvelope,
+import {
+  SYNC_RECORD_SCHEMA_VERSION,
+  type CommandConfirmation,
+  type CommandExecutionResult,
+  type CommandFailure,
+  type CommandReceipt,
+  type OperationRecord,
+  type OutboxEnvelope,
 } from '../../domain/contracts/commands';
 import type { TransactionalRepository } from '../../domain/contracts/repository';
 import { requireCommandContext, type CommandContext } from './context';
@@ -128,6 +131,11 @@ export async function executeCommand(
     const revisionBefore = state === null ? 0 : state.revision;
     const committedAtInstantMs = context.clock.nowMs();
     const canonicalDigest = stableDigest(canonicalCommand);
+    // Durable local order is assigned here, inside the committing
+    // transaction: fixed-clock commits still receive a strict sequence, and
+    // the same value binds the receipt, the journal entry, and the outbox
+    // intent together.
+    const enqueueSequence = transaction.nextEnqueueSequence();
     const receipt: CommandReceipt = {
       operationId: confirmed.operationId,
       commandKind: command.kind,
@@ -138,6 +146,10 @@ export async function executeCommand(
       canonicalDigest,
       calculationVersion: context.calculationVersion,
       effects: applied.effects,
+      schemaVersion: SYNC_RECORD_SCHEMA_VERSION,
+      scopeId: context.origin.scopeId,
+      sourceDeviceId: context.origin.deviceId,
+      enqueueSequence,
     };
     const record: OperationRecord = {
       operationId: confirmed.operationId,
@@ -145,6 +157,10 @@ export async function executeCommand(
       canonicalCommand,
       receipt,
       committedAtInstantMs,
+      schemaVersion: SYNC_RECORD_SCHEMA_VERSION,
+      scopeId: context.origin.scopeId,
+      sourceDeviceId: context.origin.deviceId,
+      enqueueSequence,
     };
     const envelope: OutboxEnvelope = {
       outboxId: `outbox:${confirmed.operationId}`,
@@ -155,6 +171,10 @@ export async function executeCommand(
       canonicalDigest,
       createdAtInstantMs: committedAtInstantMs,
       status: 'pending',
+      schemaVersion: SYNC_RECORD_SCHEMA_VERSION,
+      scopeId: context.origin.scopeId,
+      sourceDeviceId: context.origin.deviceId,
+      enqueueSequence,
     };
 
     transaction.putBookState(applied.nextState);

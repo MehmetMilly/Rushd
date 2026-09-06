@@ -212,9 +212,193 @@ still backend-only: the legacy UI does not call it.
   Detach is the occurrence cancellation path; there is no separate
   plan-cancellation command.
 
-Not implemented yet (P03 Task D and later phases): the provider-neutral
-storage/sync contract, persistent storage, obligation due dates beyond plan
-occurrences, and sync.
+Not implemented yet (later phases): persistent storage, obligation due
+dates beyond plan occurrences, and sync.
+
+## Storage/sync contract ADR (P03 Task D, binding)
+
+This ADR freezes the provider-neutral contract P04 local persistence and
+P08 account sync must implement. It defines and proves contracts only: no
+IndexedDB, service worker, authentication, cloud networking, RLS, Supabase,
+PowerSync, migration, or sync daemon is added by this task, and nothing here
+claims that cloud or persistent storage exists. P04 owns the persistent
+adapter (proved by rerunning the conformance suite after reload, multi-tab,
+quota, and physical-device scenarios); P08 owns the server, authenticated
+ownership, and replication.
+
+### 1. Identity ownership
+
+- The repository passed to `previewCommand`/`executeCommand` is scoped to
+  exactly one local principal (`src/domain/sync/scope.ts`): a device-local
+  guest (`GuestKey` on a `DeviceId`), an authenticated account (`AccountId`
+  on a `DeviceId`), or one device/install identity. The scope namespace
+  (`RepositoryScopeId`, `scope:guest:<key>:<device>` or
+  `scope:account:<account>:<device>`) is derived, never caller-chosen per
+  command.
+- `BookId` and every entity ID identify records; none grants authorization.
+  Finance commands carry no `ownerId`/`accountId` field, and strict
+  validation rejects such fields as unknown input. The cloud adapter/server
+  derives account ownership from the authenticated session and stamps it
+  itself; client-supplied ownership is data to reject, never authority to
+  trust.
+- Uniqueness: an operation ID is unique per identity-scoped repository (the
+  journal is keyed by operation ID inside one scope). Across account/device
+  boundaries the server keys idempotency on `(accountId, operationId)`
+  (`serverIdempotencyKeyFor`). The same raw `BookId` may exist in isolated
+  guest/account repositories without collision or accidental lookup.
+
+### 2. Local scope
+
+One local principal owns one repository namespace; books live inside it.
+Cross-scope references fail explicitly (`unknownBook`/`unknownEntry` — a
+lookup in one scope can never observe another scope's records), and
+cross-book references fail as typed `crossBook*` failures without mutation.
+Two scopes may reuse the same raw book/entity IDs as unrelated records, and
+the same raw operation ID commits independently in each scope.
+
+### 3. Operation/outbox schema
+
+- Every sync-facing record carries `schemaVersion: 1`
+  (`SYNC_RECORD_SCHEMA_VERSION`). Unknown versions must be rejected
+  explicitly; no reader guesses a version.
+- One accepted command still atomically produces one next `BookState`,
+  one immutable `OperationRecord`/receipt, and one immutable outbox intent —
+  now additionally bound to `scopeId`, `sourceDeviceId`, and one shared
+  durable `enqueueSequence` assigned inside the committing transaction.
+- The operation journal is the single normalized source of truth for the
+  canonical command payload. The outbox intent references it by
+  `operationId` (same sequence, same digest, same scope/device) and never
+  duplicates the payload; both records are written in the same transaction
+  and one must never exist without the other.
+- Immutable intent is separated from mutable delivery metadata
+  (`OutboxDeliveryState`: attempts, last error, lease, acknowledgement,
+  retry time, owned by the adapter/transport). Delivery activity cannot
+  change the canonical command, receipt, book revision, or effect, and
+  acknowledgement names exactly the intended operation (mismatch and
+  duplicate acks are explicit rejections).
+- The preview digest stays an application confirmation mechanism: a short
+  stable (non-cryptographic) digest binding a confirmation to its preview.
+  It is not authentication, authorization, or a cryptographic integrity
+  proof.
+
+### 4. Ordering
+
+Durable order comes from the local enqueue sequence plus per-book
+optimistic revisions, never from clocks: `createdAtInstantMs`, financial
+occurrence time, local date, string ID order, and provider timestamps are
+not replication sequence numbers. Allocation is tentative until commit, so
+an aborted transaction leaves the whole attempt byte-identical; the commit
+finalizes atomically and fails when another transaction moved the counter
+(first-committer-wins extends to the sequence counter). A later server
+acceptance never makes a stale base revision silently valid
+(`revisionConflict` still requires a refreshed preview).
+
+### 5. Cursor/checkpoint
+
+A pull cursor is an opaque replication position scoped to one
+identity/provider stream (`src/domain/sync/cursors.ts`). Only
+construction, validation, and equality comparison are legal; there is
+deliberately no ordering comparison, so no code can substitute timestamp
+or lexical order for durable sequence/revision. Applying a pulled batch
+and advancing its checkpoint is atomic: a failed apply leaves cursor and
+applied set unchanged, a stale base is an explicit `baseCursorMismatch`,
+and replaying an applied batch is a no-op success — reordered, duplicated,
+or delayed delivery yields one canonical effect or an explicit conflict,
+never a drop or an invisible stall.
+
+### 6. Tombstone/conflict
+
+Tombstones (`src/domain/sync/tombstones.ts`) name scope, entity
+kind/ID, book, source operation, base revision, durable sequence, and
+schema version, and remain until acknowledgement plus the retention window
+makes compaction safe. Delete-versus-edit, stale revision, ownership
+mismatch, duplicate ID with changed payload, and incompatible schema are
+explicit conflict kinds (`src/domain/sync/conflicts.ts`); canonical money
+never uses last-write-wins and neither side's intent is erased. Conflict
+history is immutable; resolution appends a separate decision preserving the
+local operation, the remote reference, and the chosen policy. An
+unresolved conflict stays discoverable and blocks sync-sensitive actions
+via `assertSyncSafeForSensitiveAction`.
+
+### 7. Guest merge
+
+Decisions only, no UI or network (`src/domain/sync/merge.ts`). Guest data
+never contacts the cloud automatically: merge starts only from an explicit
+`mergeThisDeviceData` choice, while `keepLocal` leaves the guest
+repository isolated with zero cloud intent. A merge plan is resumable and
+idempotent, preserves stable IDs, and records ID collisions as
+recoverable `duplicateIdChangedPayload` conflicts instead of replacing
+remote data. The source guest repository stays intact until the merge is
+fully acknowledged; safe cleanup is separately confirmed under the
+sign-out/cache policy, never by the merge plan.
+
+### 8. Sign-out/cache
+
+Decisions only (`src/domain/sync/signout.ts`). Sign-out distinguishes
+session termination (always allowed, never deletes) from local
+account-cache deletion (gated). The safe default under offline, failed, or
+unknown sync state is retain-and-retry. Erasure is blocked while
+unacknowledged outbox items or unresolved conflicts exist. The only
+destructive override requires both a verified export reference and an
+explicit destructive confirmation carrying the literal phrase
+`ERASE-LOCAL-ACCOUNT-CACHE`, validated from unknown input at runtime — a
+boolean named `force` is a type error and a runtime rejection, never a
+bypass.
+
+### 9. Schema evolution
+
+Record versions are explicit on every sync-facing envelope (records,
+cursors/checkpoints, tombstones, conflicts, merge plans). Version 1 is
+frozen here; future versions extend the records with new versioned
+envelopes and explicit migration/rejection rules. Incompatible schemas
+surface as explicit conflicts or rejections, never as guessed parses.
+
+### 10. Provider substitution
+
+The preferred candidate remains Supabase Auth/Postgres plus PowerSync,
+subject to the founder's residency, provider, billing, and region gates.
+No provider is approved by this task: table names, tokens, SDK types,
+retry codes, and cursors stay behind future adapters. Any substitute must
+prove every capability in `SyncProviderCapabilities`
+(`src/domain/sync/provider.ts`): server-stamped ownership,
+transactional validated writes, idempotency, ordered replication
+checkpoints, recoverable conflicts, export/deletion, backup/restore, and
+residency evidence. A future provider may replace the candidate only after
+the same contract/conformance evidence passes against its adapter plus the
+founder gates; the finance domain and command schema must not require a
+provider-specific rewrite.
+
+### 11. Phase ownership
+
+P03 freezes this contract and proves it against the in-memory reference
+adapter plus the reusable conformance runner
+(`tests/domain/support/repository-conformance.ts`, 12 checks) that P04
+adopts unchanged for the persistent adapter. P04 owns durable local
+persistence, reload/multi-tab/quota/device proof, legacy migration,
+import/export, and the PWA. P08 owns authentication, server-stamped
+ownership, replication, guest merge execution, conflict recovery UX, and
+backup lifecycle. Neither phase may weaken the contract; amendments go
+through the same evidence plus founder gates.
+
+### P03 acceptance evidence (A1-A6)
+
+Every item points to executable proof (test file and test name) or, for
+A5 design decisions, to the ADR heading above. Worker reports and copied
+formulas are not evidence.
+
+| ID | Outcome | Evidence |
+|----|---------|----------|
+| P03-A1 | Checked integer ISO minor-unit money; explicit civil dates and payday/calendar cycles | `tests/domain/money.test.ts` (full file), `tests/domain/civil-date.test.ts`, `tests/domain/monthly-cycle.test.ts`, `tests/domain/instant-resolution.test.ts`, `tests/property/money-properties.test.ts` |
+| P03-A2 | Availability, mid-cycle boundary, completeness, shortfall, pacing, partial/residual obligations, multiple payments, returns, signed adjustments, allocations | `tests/domain/everyday-flow.test.ts`, `tests/domain/completeness-pacing.test.ts`, `tests/domain/reality-check-recovery.test.ts`, `tests/property/everyday-properties.test.ts` |
+| P03-A3 | Plans cannot rewrite paid facts; close/carry/reopen, backdated propagation, allocation funding/assignment/release are explicit, atomic, idempotent | `tests/domain/cycle-lifecycle.test.ts`, `tests/domain/backdated-propagation.test.ts`, `tests/domain/cycle-settings-rebase.test.ts`, `tests/domain/recurring-plans.test.ts`, `tests/domain/correction-chains.test.ts`, `tests/property/task-c-lifecycle-properties.test.ts`, `tests/property/task-c-recovery-properties.test.ts` |
+| P03-A4 | Typed commands, invariant validation, receipts, revision/idempotency identity, undo/reversal policy | `tests/domain/command-flow.test.ts`, `tests/domain/idempotency.test.ts` ("replays the original receipt", "lost acknowledgement", "same operation ID with changed content", "stale previews"), `tests/domain/atomicity.test.ts` ("all-or-nothing", "first-committer-wins"), `tests/domain/everyday-command-safety.test.ts`, `tests/domain/task-c-command-safety.test.ts`, `tests/domain/reversal-binding.test.ts`, `tests/property/command-sequence-properties.test.ts`; conformance runner `tests/domain/repository-conformance.test.ts` (12 checks: replay, conflict, stale preview, uncertain commit, rollback) |
+| P03-A5 | Provider-neutral pre-P04 ADR (identity, ownership, operation/outbox, cursors, tombstones, conflicts, guest merge, sign-out/cache, amendment path) plus boundary/property/regression tests over production code | ADR headings 1-11 above; `tests/domain/sync-scope.test.ts`, `tests/domain/sync-records.test.ts`, `tests/domain/sync-uncertain-commit.test.ts`, `tests/domain/sync-tombstone-conflict.test.ts`, `tests/domain/guest-merge-signout.test.ts`, `tests/domain/sync-provider.test.ts`, `tests/property/sync-delivery-properties.test.ts` |
+| P03-A6 | Completeness reducer, recovered classified activity, disputed reservations, refunds, effective dates, rebase, closed-cycle immutability, UTC/DST/short-month boundaries, retry/reopen, Reality Check currency invariants (no FX, clarification-only non-writes) | `tests/domain/reality-check-recovery.test.ts`, `tests/domain/cycle-lifecycle.test.ts`, `tests/domain/cycle-settings-rebase.test.ts`, `tests/domain/recurring-plans.test.ts`, `tests/property/cycle-properties.test.ts` |
+
+P04/P08 ownership is explicit in ADR heading 11: the contract is frozen
+here; persistence, reload/multi-tab/quota/device proof, auth, server
+ownership, replication, and backup lifecycle belong to their phases and
+must satisfy this contract rather than renegotiate it.
 
 ## Main Screens
 

@@ -13,6 +13,8 @@
  * implemented cloud authorization.
  */
 
+import { makeDeviceId, makeRepositoryScopeId, type CommandOrigin } from '../../domain/sync/scope';
+
 export interface DomainClock {
   nowMs(): number;
 }
@@ -25,6 +27,15 @@ export interface CommandContext {
   readonly clock: DomainClock;
   readonly ids: DomainIdFactory;
   readonly calculationVersion: string;
+  /**
+   * Execution origin stamped into every receipt, operation journal entry,
+   * and outbox intent: which device committed, inside which identity-scoped
+   * repository. Required so sync-facing records always bind scope, device,
+   * and durable order; the finance commands themselves carry no ownership
+   * fields, and this origin is a local record-stamping claim, never cloud
+   * authorization (P08 derives ownership from the session server-side).
+   */
+  readonly origin: CommandOrigin;
 }
 
 export function requireCommandContext(value: unknown): CommandContext {
@@ -44,6 +55,19 @@ export function requireCommandContext(value: unknown): CommandContext {
   }
   if (typeof candidate.calculationVersion !== 'string' || candidate.calculationVersion.length === 0) {
     throw new TypeError('command context requires a non-empty calculationVersion string');
+  }
+  const origin = (candidate as { origin?: unknown }).origin;
+  if (typeof origin !== 'object' || origin === null || Array.isArray(origin)) {
+    throw new TypeError('command context requires an origin with deviceId and scopeId');
+  }
+  const originRecord = origin as Record<string, unknown>;
+  const deviceId = makeDeviceId(originRecord['deviceId']);
+  if (!deviceId.ok) {
+    throw new TypeError(`command context origin deviceId is invalid: ${deviceId.failure.detail}`);
+  }
+  const scopeId = makeRepositoryScopeId(originRecord['scopeId']);
+  if (!scopeId.ok) {
+    throw new TypeError(`command context origin scopeId is invalid: ${scopeId.failure.detail}`);
   }
   return value as CommandContext;
 }

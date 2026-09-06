@@ -44,7 +44,7 @@ function makeHarness(): {
       return value;
     },
   };
-  const context = requireCommandContext({ clock, ids: deterministic.ids, calculationVersion: deterministic.calculationVersion });
+  const context = requireCommandContext({ clock, ids: deterministic.ids, calculationVersion: deterministic.calculationVersion, origin: deterministic.origin });
   return { repo, context, jumpTo: (ms: number) => { now = ms; } };
 }
 

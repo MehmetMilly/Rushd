@@ -35,6 +35,7 @@ import type {
   SettlementId,
 } from './identity';
 import type { AllocationChange } from './ledger';
+import type { DeviceId, RepositoryScopeId } from '../sync/scope';
 
 /** The change types an allocation record can carry. */
 export type AllocationChangeType = AllocationChange['type'];
@@ -699,6 +700,11 @@ export const COMMAND_REVERSAL_POLICY: Readonly<Record<CommandKind, ReversalPolic
  * What the caller must present at execution time. `expectedRevision` and
  * `previewDigest` come from a preview; the digest binds the exact canonical
  * payload and revision the preview covered. Retries reuse the same triple.
+ *
+ * The preview digest is an application confirmation mechanism: a short
+ * stable (non-cryptographic, FNV-style) digest that binds a confirmation to
+ * its preview. It is not authentication, not authorization, and not a
+ * cryptographic integrity proof.
  */
 export interface CommandConfirmation {
   readonly operationId: OperationId;
@@ -974,7 +980,27 @@ export interface CommandReceipt {
   readonly canonicalDigest: string;
   readonly calculationVersion: string;
   readonly effects: readonly CommandEffect[];
+  /**
+   * Sync-contract binding (P03 Task D). The receipt names the schema version
+   * it was written under, the identity-scoped repository it committed in,
+   * the source device, and the durable local enqueue sequence assigned
+   * inside the committing transaction. Ordering across operations comes from
+   * `enqueueSequence` (and per-book revisions), never from
+   * `committedAtInstantMs`, which is capture evidence only.
+   */
+  readonly schemaVersion: SyncRecordSchemaVersion;
+  readonly scopeId: RepositoryScopeId;
+  readonly sourceDeviceId: DeviceId;
+  readonly enqueueSequence: number;
 }
+
+/**
+ * Schema version of every sync-facing record (receipt, operation journal,
+ * outbox intent, delivery state). P04/P08 must reject unknown versions
+ * explicitly; no reader may guess a record version.
+ */
+export const SYNC_RECORD_SCHEMA_VERSION = 1 as const;
+export type SyncRecordSchemaVersion = typeof SYNC_RECORD_SCHEMA_VERSION;
 
 export interface OperationRecord {
   readonly operationId: OperationId;
@@ -983,12 +1009,32 @@ export interface OperationRecord {
   readonly canonicalCommand: string;
   readonly receipt: CommandReceipt;
   readonly committedAtInstantMs: number;
+  /**
+   * The operation journal is the single normalized source of truth for the
+   * canonical command payload: the outbox intent references it by
+   * operation ID and never duplicates the payload. Both records are written
+   * in the same repository transaction; one must never exist without the
+   * other. Base and resulting revisions live on the receipt
+   * (`revisionBefore`/`revisionAfter`); scope, device, and durable order are
+   * stamped here so P04/P08 can bind, retry, and replicate without guessing.
+   */
+  readonly schemaVersion: SyncRecordSchemaVersion;
+  readonly scopeId: RepositoryScopeId;
+  readonly sourceDeviceId: DeviceId;
+  /** Same durable sequence as the receipt and the outbox intent for this operation. */
+  readonly enqueueSequence: number;
 }
 
 /**
  * A pending replication/sync entry written in the same transaction as the
  * state change and receipt. Task A never drains it; P04 owns persistence and
  * sync behavior. Device-local only: it implies no cloud authorization.
+ *
+ * The envelope is immutable intent: it references the operation journal by
+ * `operationId` and carries no mutable transport state. Attempts, last
+ * error, lease, acknowledgement, and retry time live in the separate
+ * `OutboxDeliveryState`, owned by the adapter/transport, so delivery
+ * activity can never rewrite financial history.
  */
 export interface OutboxEnvelope {
   readonly outboxId: string;
@@ -999,6 +1045,71 @@ export interface OutboxEnvelope {
   readonly canonicalDigest: string;
   readonly createdAtInstantMs: number;
   readonly status: 'pending';
+  readonly schemaVersion: SyncRecordSchemaVersion;
+  readonly scopeId: RepositoryScopeId;
+  readonly sourceDeviceId: DeviceId;
+  /** Same durable sequence as the operation journal entry for this operation. */
+  readonly enqueueSequence: number;
+}
+
+/**
+ * Mutable delivery metadata for one outbox intent, owned by the
+ * adapter/transport. Mutating this record must never change the canonical
+ * command, receipt, book revision, or effect: it is keyed by operation ID
+ * and acknowledges exactly the intended operation.
+ */
+export interface OutboxDeliveryState {
+  readonly schemaVersion: SyncRecordSchemaVersion;
+  readonly outboxId: string;
+  readonly operationId: OperationId;
+  readonly attempts: number;
+  readonly lastError: string | null;
+  readonly leaseHolder: string | null;
+  readonly leaseExpiresAtMs: number | null;
+  readonly acknowledged: boolean;
+  readonly nextRetryAtMs: number | null;
+}
+
+/** Initial delivery state for a freshly committed outbox intent. */
+export function initialOutboxDelivery(envelope: OutboxEnvelope): OutboxDeliveryState {
+  return {
+    schemaVersion: SYNC_RECORD_SCHEMA_VERSION,
+    outboxId: envelope.outboxId,
+    operationId: envelope.operationId,
+    attempts: 0,
+    lastError: null,
+    leaseHolder: null,
+    leaseExpiresAtMs: null,
+    acknowledged: false,
+    nextRetryAtMs: null,
+  };
+}
+
+export type DeliveryAttemptOutcome = { readonly ok: true } | { readonly ok: false; readonly error: string; readonly nextRetryAtMs: number | null };
+
+/** Records one transport attempt. Pure: the canonical records are untouched by construction. */
+export function recordDeliveryAttempt(state: OutboxDeliveryState, outcome: DeliveryAttemptOutcome): OutboxDeliveryState {
+  if (!outcome.ok) {
+    return { ...state, attempts: state.attempts + 1, lastError: outcome.error, nextRetryAtMs: outcome.nextRetryAtMs };
+  }
+  return { ...state, attempts: state.attempts + 1, lastError: null };
+}
+
+export type OutboxAcknowledgement = { readonly ok: true; readonly delivery: OutboxDeliveryState } | { readonly ok: false; readonly reason: 'operationMismatch' | 'alreadyAcknowledged' };
+
+/**
+ * Acknowledges exactly the intended operation. A mismatched operation ID or
+ * a duplicate acknowledgement is an explicit rejection, never a silent
+ * second effect.
+ */
+export function acknowledgeOutboxDelivery(state: OutboxDeliveryState, operationId: OperationId): OutboxAcknowledgement {
+  if ((state.operationId as string) !== (operationId as string)) {
+    return { ok: false, reason: 'operationMismatch' };
+  }
+  if (state.acknowledged) {
+    return { ok: false, reason: 'alreadyAcknowledged' };
+  }
+  return { ok: true, delivery: { ...state, acknowledged: true, nextRetryAtMs: null } };
 }
 
 export type CommandFailure =

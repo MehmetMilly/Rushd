@@ -25,6 +25,7 @@ import type {
   OperationRecord,
   OutboxEnvelope,
 } from '../../../src/domain/contracts/commands';
+import { canonicalJson } from '../../../src/domain/contracts/canonical';
 import type { BookState } from '../../../src/domain/contracts/ledger';
 import type { BookId, EntryId, GoalId, ObligationId, ObservationId, OccurrenceId, OperationId, PlanId, SettlementId } from '../../../src/domain/contracts/identity';
 import type {
@@ -48,6 +49,8 @@ interface CommittedStore {
   books: Map<string, BookState>;
   operations: Map<string, OperationRecord>;
   outbox: OutboxEnvelope[];
+  /** Durable local enqueue counter. Monotonic, not gapless: an aborted transaction may leave a gap. */
+  enqueueSequence: number;
   entryIndex: Map<string, EntryLocation>;
   obligationIndex: Map<string, ObligationLocation>;
   goalIndex: Map<string, GoalLocation>;
@@ -55,6 +58,22 @@ interface CommittedStore {
   planIndex: Map<string, PlanLocation>;
   occurrenceIndex: Map<string, OccurrenceLocation>;
   settlementIndex: Map<string, SettlementLocation>;
+}
+
+function createCommittedStore(): CommittedStore {
+  return {
+    books: new Map(),
+    operations: new Map(),
+    outbox: [],
+    enqueueSequence: 0,
+    entryIndex: new Map(),
+    obligationIndex: new Map(),
+    goalIndex: new Map(),
+    observationIndex: new Map(),
+    planIndex: new Map(),
+    occurrenceIndex: new Map(),
+    settlementIndex: new Map(),
+  };
 }
 
 function cloneValue<T>(value: T): T {
@@ -79,23 +98,41 @@ function frozenCopy<T>(value: T): T {
 }
 
 export class InMemoryFinanceRepository implements TransactionalRepository, FinanceReadModel {
-  private readonly store: CommittedStore = {
-    books: new Map(),
-    operations: new Map(),
-    outbox: [],
-    entryIndex: new Map(),
-    obligationIndex: new Map(),
-    goalIndex: new Map(),
-    observationIndex: new Map(),
-    planIndex: new Map(),
-    occurrenceIndex: new Map(),
-    settlementIndex: new Map(),
-  };
+  private readonly store: CommittedStore;
   private injectedFailure: { method: WriteMethodName; remaining: number } | null = null;
+
+  constructor(sharedStore?: CommittedStore) {
+    this.store = sharedStore ?? createCommittedStore();
+  }
 
   /** Simulates an adapter crash on the next N calls to the given write method. */
   injectWriteFailure(method: WriteMethodName, occurrences = 1): void {
     this.injectedFailure = { method, remaining: occurrences };
+  }
+
+  /**
+   * Test-adapter-specific handle reacquisition over the same durable state:
+   * the uncertain-commit proof commits through one handle, drops the
+   * acknowledgement, then retries through this fresh handle. P04's
+   * persistent adapter reacquires a real database connection instead; the
+   * behavioral contract (exact idempotent replay) is identical.
+   */
+  reopen(): InMemoryFinanceRepository {
+    return new InMemoryFinanceRepository(this.store);
+  }
+
+  /**
+   * Test-adapter-specific canonical snapshot of everything the adapter has
+   * committed (books, journal, outbox, sequence counter). Rollback proofs
+   * compare this string before and after a failed attempt: byte-identical
+   * means the attempt left no trace.
+   */
+  snapshotBytes(): string {
+    const books = [...this.store.books.entries()].sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)).map(([, state]) => state);
+    const operations = [...this.store.operations.entries()]
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+      .map(([, record]) => record);
+    return canonicalJson({ books, operations, outbox: this.store.outbox, enqueueSequence: this.store.enqueueSequence });
   }
 
   getBookState(bookId: BookId): BookState | null {
@@ -188,6 +225,8 @@ class InMemoryTransaction implements RepositoryTransaction {
   private readonly operationWrites = new Map<string, OperationRecord>();
   private readonly outboxWrites: OutboxEnvelope[] = [];
   private readonly bookRevisionAtRead = new Map<string, number>();
+  private sequenceBase: number | null = null;
+  private sequencesAllocated = 0;
   private active = true;
 
   constructor(
@@ -342,8 +381,32 @@ class InMemoryTransaction implements RepositoryTransaction {
     this.outboxWrites.push(cloneValue(envelope));
   }
 
+  nextEnqueueSequence(): number {
+    this.assertActive();
+    // Allocated tentatively against the committed counter and finalized at
+    // commit time, so an aborted transaction leaves no gap behind: rollback
+    // is byte-identical. Two operations that share a capture millisecond
+    // still receive a strict durable order. The commit rejects when another
+    // transaction moved the counter meanwhile (first-committer-wins extends
+    // to the sequence counter), so P04 adapters must finalize the sequence
+    // atomically with the commit.
+    if (this.sequenceBase === null) {
+      this.sequenceBase = this.store.enqueueSequence;
+    }
+    this.sequencesAllocated += 1;
+    return this.sequenceBase + this.sequencesAllocated;
+  }
+
   commit(): void {
     this.assertActive();
+    if (this.sequenceBase !== null) {
+      if (this.store.enqueueSequence !== this.sequenceBase) {
+        throw new ConcurrencyConflictError(
+          `enqueue sequence changed during the transaction: read ${this.sequenceBase}, committed ${this.store.enqueueSequence}`,
+        );
+      }
+      this.store.enqueueSequence = this.sequenceBase + this.sequencesAllocated;
+    }
     for (const [bookId, state] of this.bookWrites) {
       this.store.books.set(bookId, state);
     }

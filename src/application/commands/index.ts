@@ -54,9 +54,8 @@
  *   completeness (old unclassified history excluded; propagation and
  *   recovery gaps stay visible).
  *
- * Not implemented yet (P03 Task D and later phases): the provider-neutral
- * storage/sync contract, persistent storage, obligation due dates beyond
- * plan occurrences, and sync.
+ * Not implemented yet (later phases): persistent storage, obligation due
+ * dates beyond plan occurrences, and sync.
  * Nothing here claims PWA, sync, account, security, or release readiness.
  *
  * Usage:
@@ -89,6 +88,7 @@ export { previewCommand } from './preview';
 export { executeCommand } from './execute';
 export { validateFinanceCommand, type CommandValidation, type ValidationIssue } from './validation';
 export { requireCommandContext, type CommandContext, type DomainClock, type DomainIdFactory } from './context';
+export type { CommandOrigin } from '../../domain/sync/scope';
 export type { ApplyResult, HandlerRefs } from './handlers';
 export {
   computeAvailability,
@@ -139,6 +139,10 @@ export {
 export {
   COMMAND_REVERSAL_POLICY,
   describeCommandFailure,
+  SYNC_RECORD_SCHEMA_VERSION,
+  acknowledgeOutboxDelivery,
+  initialOutboxDelivery,
+  recordDeliveryAttempt,
   type AllocationChangeType,
   type AssignToGoalCommand,
   type CancelObligationCommand,
@@ -157,6 +161,7 @@ export {
   type CreateGoalCommand,
   type CreateObligationCommand,
   type CreateRecurringPlanCommand,
+  type DeliveryAttemptOutcome,
   type DetachPlanOccurrenceCommand,
   type DisposeCycleRemainderCommand,
   type DisputeResolutionReason,
@@ -170,6 +175,8 @@ export {
   type OpenCycleCommand,
   type OpenObligationDisputeCommand,
   type OperationRecord,
+  type OutboxAcknowledgement,
+  type OutboxDeliveryState,
   type OutboxEnvelope,
   type RebaseOpenCycleCommand,
   type RecordClosedCycleCorrectionCommand,
@@ -194,6 +201,7 @@ export {
   type ReviseRecurringPlanCommand,
   type SetBufferCommand,
   type SettleObligationFinallyCommand,
+  type SyncRecordSchemaVersion,
   type UnassignFromGoalCommand,
   type UpdateBookSettingsCommand,
 } from '../../domain/contracts/commands';

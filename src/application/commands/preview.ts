@@ -45,6 +45,7 @@ function previewContext(context: CommandContext): CommandContext {
     clock: context.clock,
     ids: { newId: (prefix: string) => `preview-${prefix}-${String((sequence += 1)).padStart(3, '0')}` },
     calculationVersion: context.calculationVersion,
+    origin: context.origin,
   };
 }
 

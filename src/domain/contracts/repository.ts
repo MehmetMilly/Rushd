@@ -88,13 +88,37 @@ export interface RepositoryTransaction extends FinanceReadModel {
   putBookState(next: BookState): void;
   putOperation(record: OperationRecord): void;
   putOutboxEntry(envelope: OutboxEnvelope): void;
+  /**
+   * Allocates the next monotonic durable enqueue sequence for this
+   * identity-scoped repository. The executor calls it once per committed
+   * command, inside the committing transaction, and stamps the same value
+   * on the receipt, the operation journal entry, and the outbox intent.
+   *
+   * Durable order across operations comes from this sequence (plus per-book
+   * revisions), never from wall clocks, capture timestamps, or string ID
+   * order. Allocation is tentative until commit: an aborted transaction
+   * leaves the counter — and the whole attempted transaction — exactly as
+   * before. The commit finalizes the allocation atomically and fails when
+   * another transaction moved the counter meanwhile (first-committer-wins
+   * extends to the sequence counter). Two operations committed under a
+   * fixed clock still receive a strict durable order.
+   */
+  nextEnqueueSequence(): number;
 }
 
 /**
- * Idempotency scope: the operation journal is keyed by operation ID across
- * the whole repository, independent of book. The same operation ID with the
- * same canonical payload replays the original receipt; with different content
- * it is an explicit conflict.
+ * Idempotency scope: the operation journal is keyed by operation ID inside
+ * one identity-scoped repository (one local principal's namespace),
+ * independent of book. The same operation ID with the same canonical
+ * payload replays the original receipt; with different content it is an
+ * explicit conflict. The same raw operation ID in a different scope is an
+ * unrelated intent: scopes never share a journal, and the server keys
+ * cross-device idempotency on (accountId, operationId), stamped from the
+ * authenticated session rather than any client payload.
+ *
+ * The outbox intent references the journal by operation ID instead of
+ * duplicating the canonical payload; both records are written in the same
+ * transaction and one must never exist without the other.
  *
  * Transaction methods read synchronously so handler code stays pure; the work
  * body may await (P04 adapters will await real storage I/O), and

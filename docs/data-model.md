@@ -204,6 +204,65 @@ the operation journal.
   exists; unclassified adjustments keep classification Needs Attention
   while the pool is Current.
 
+## P03 storage/sync contract records (Task D)
+
+Task D versions the sync-facing records and freezes the provider-neutral
+policy modules. All records below are produced by production code under
+`src/domain/sync/` and `src/domain/contracts/` and proven by the
+conformance runner plus the focused sync suites. No persistent adapter,
+cloud schema, or sync daemon is added here; P04/P08 implement against
+these shapes.
+
+- **Identity scope**: `GuestKey`/`AccountId` on a `DeviceId`
+  (`src/domain/sync/scope.ts`); the derived `RepositoryScopeId`
+  (`scope:guest:<key>:<device>` or `scope:account:<account>:<device>`)
+  namespaces one local principal's storage. The same raw book/entity IDs
+  in different scopes are unrelated records. Server idempotency keys are
+  `idemp:<accountId>:<operationId>`, stamped from the session, never from
+  client payloads. Finance commands carry no ownership fields.
+- **OperationRecord / CommandReceipt / OutboxEnvelope**: each now carries
+  `schemaVersion: 1`, `scopeId`, `sourceDeviceId`, and one shared durable
+  `enqueueSequence` assigned inside the committing transaction (tentative
+  until commit, so aborts are byte-identical). The journal is the single
+  source of truth for the canonical payload; the outbox intent references
+  it by operation ID and never duplicates it. Both commit atomically with
+  the next `BookState`.
+- **OutboxDeliveryState**: mutable transport metadata (attempts, last
+  error, lease, acknowledgement, retry time) owned by the
+  adapter/transport. Pure helpers record attempts and acknowledge exactly
+  the intended operation; delivery changes can never rewrite canonical
+  history.
+- **SyncCursor / CheckpointRecord / PulledBatch**
+  (`src/domain/sync/cursors.ts`): the cursor is opaque and compared by
+  equality only — no timestamp or lexical ordering. Batches apply
+  atomically with the checkpoint advance; stale bases reject explicitly
+  and replays are no-op successes.
+- **TombstoneRecord** (`src/domain/sync/tombstones.ts`): scope, entity
+  kind/ID, book, source operation, base revision, durable sequence, schema
+  version. Retained until peer acknowledgement plus the retention window;
+  never compacted while a delayed edit could need the collision.
+- **SyncConflict / SyncConflictResolution**
+  (`src/domain/sync/conflicts.ts`): `deleteVsEdit`, `staleRevision`,
+  `ownershipMismatch`, `duplicateIdChangedPayload`, `incompatibleSchema`.
+  Conflicts are immutable and unresolved by default; resolutions append
+  separately with the preserved local operation, remote reference, and
+  policy. Unresolved conflicts block sync-sensitive actions.
+- **GuestMergePlan** (`src/domain/sync/merge.ts`): explicit
+  `mergeThisDeviceData` versus `keepLocal`; resumable idempotent
+  acknowledgement sets preserving stable IDs; collisions become conflicts,
+  never remote overwrites; the guest source stays intact until full
+  acknowledgement.
+- **Sign-out/cache decisions** (`src/domain/sync/signout.ts`):
+  retain-and-retry by default under pending/conflicting/offline/failed/
+  unknown state; erasure blocked while outbox intent or conflicts stand;
+  the only override carries both a verified export reference and the
+  literal `ERASE-LOCAL-ACCOUNT-CACHE` destructive confirmation.
+- **SyncProviderCapabilities** (`src/domain/sync/provider.ts`): the
+  minimum every substitute provider must prove (server-stamped ownership,
+  transactional validated writes, idempotency, ordered checkpoints,
+  recoverable conflicts, export/deletion, backup/restore, residency
+  evidence) plus the founder amendment gates. No provider is approved.
+
 ## P02 compatibility boundary
 
 `src/data/legacy-v1/contracts.ts` records the v1 database name, version,
