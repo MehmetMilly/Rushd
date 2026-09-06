@@ -34,6 +34,8 @@ Use `ACTIVE_DELIVERY_PLAN.md` for the current commit, phase, available models, e
 - Keep reviews read-only. The implementation worker owns corrections.
 - Keep each task in one clear commit and leave unrelated changes out.
 - Use external workers and reviewers when reliable and cheaper. Assign an exact report path under `/Users/mehmet/Desktop/Rushd/artifacts/agent-reports/`; the founder transfers a short start instruction and later says the task finished. Read its saved report directly, following Workflow Lite. Do not assume automatic notifications or cross-app messaging. Use isolated worktrees for concurrent writers and keep one integration owner.
+- For a long delegated task, offer the founder Workflow Lite's unattended-worker option before launch. After explicit approval, freeze the prompt, launch one cheap writer asynchronously (CLI/API directly or a user-authorized UI through a Luna xHigh operator), hand liveness checks and bounded same-session continuation to Luna Low/Medium, notify on completion/blocker, and end the Development Master's turn instead of polling.
+- Always tell the founder their exact next action. For an unattended run, that action is normally “wait for the completion/failure notification, then return here.”
 - Prefer Luna Max for clear demanding tasks, Terra up to xHigh for harder intelligence-heavy work, and Sol Medium/High only when the task is legitimately hard. Never route delegated work to Terra Max or Sol Max.
 - Do not push unless the founder asks.
 - Preserve the master plan's full feature scope. Speed comes from better task sizing, model routing, and parallel preparation—not from cutting approved features.

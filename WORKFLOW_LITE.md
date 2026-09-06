@@ -109,6 +109,75 @@ Report content includes:
 
 No receipts, manifests, lifecycle transcripts, or state transitions are required unless explicitly requested.
 
+## Unattended worker execution
+
+Use unattended execution whenever a long task can run safely in a cheaper worker while the
+Development Master is idle. This is a cost-control pattern, not blanket authorization.
+Before every new unattended run, ask the founder one clear question:
+
+> Would you like me to run this task unattended, have a cheaper subagent monitor and resume it when safe, and report back when it finishes?
+
+Proceed only after explicit approval for that task. The approval covers launching the named
+worker and monitor under the stated free/paid route; it does not authorize a paid fallback,
+provider change, login, purchase, secret entry, destructive action, publication, or a second
+product writer.
+
+### Launch path
+
+1. Freeze a worker-ready task card with outcome, product base, owned paths, acceptance,
+   validation, commit/report requirements, model, reasoning setting, and routing reason.
+2. Tell the founder exactly what will run, what will monitor it, and that their next action is
+   to wait for completion or failure notification.
+3. Record durable local run metadata under `artifacts/agent-reports/`: task ID, prompt path,
+   product base, worker model/setting, process/session/tab identity, log path, report path, and
+   monitor identity. Keep secrets out.
+4. Start one product-source writer asynchronously. Prefer a detached CLI/API session when the
+   route supports it. Verify the process/session accepted the prompt once, then stop reading
+   partial output.
+5. When the model is available only through a user-authorized UI, assign a capable low-cost
+   operator such as Luna xHigh to use computer control to open the exact app/tab, select the
+   approved model/setting, submit the frozen prompt, and capture the resulting session identity.
+   The operator may use already-authorized accounts; it may not solve a CAPTCHA, change billing,
+   accept new terms, expose secrets, or choose a paid route without a separate founder decision.
+
+The launch operator does not become a second implementation worker. After it verifies a live
+run, it hands monitoring to the cheapest model that can reliably read status and resume the
+same session—normally Luna Low for CLI/process checks or Luna Medium for UI state.
+
+### Monitor path
+
+The monitor is a liveness coordinator, not a reviewer or developer.
+
+- Wait with long adaptive intervals, normally 3–10 minutes based on expected task duration.
+  Prefer one sleeping process/tool call over repeated model turns.
+- Check only liveness, terminal/app status, final report presence, and the minimal log tail needed
+  to classify a stop. Do not stream partial reasoning, inspect evolving diffs, run tests, or make
+  product decisions while the worker is active.
+- Preserve one-writer ownership. Resume the same worker session; never start a replacement writer
+  against its partial tree without Development Master and founder approval.
+- Automatically resume the same session after a clearly transient stop such as a connection drop,
+  rate limit, terminal detachment, or incomplete stop with no final report. Re-send a short
+  continuation that preserves the frozen task, working tree, model, and report requirement.
+- Limit automatic continuation to two consecutive transient resumes. A third stop, an unavailable
+  session, contradictory state, merge conflict, approval request, login/CAPTCHA, paid fallback,
+  destructive action, or ambiguous product question is a blocker to report—not permission to
+  improvise.
+- On completion or blocker, save a concise monitor summary, notify the Development Master, and use
+  an available user notification channel (Codex task notification or local OS notification) so
+  the founder knows to return.
+
+### Development Master sleep rule
+
+After launch verification and monitor assignment, the Development Master ends its turn. It does
+not hold an expensive foreground process, call `wait` repeatedly, poll the log, or remain active
+to narrate progress. The manager resumes only when the monitor reports completion/blocker or the
+founder sends new input.
+
+When the manager resumes, it reads the final worker report and commit, performs the risk-tiered
+verification/review loop, updates status, and again tells the founder the exact next action.
+Detached workers and monitors still consume their own provider/model allowances; this pattern
+prevents unnecessary Development Master usage but does not make delegated work free.
+
 ## Git discipline
 
 - Keep each coherent task in one commit.

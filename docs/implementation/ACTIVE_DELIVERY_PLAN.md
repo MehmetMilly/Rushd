@@ -41,6 +41,8 @@ The founder explicitly treats ambitious animation and visual-design quality as n
 - High-consequence finance, migration, sync, security, AI-write, release, and major visual work receives independent review. Ordinary low-risk changes receive direct Master review. Sol High is not the automatic reviewer for every high-risk task.
 - When practical, worker and reviewer come from different model families.
 - Assign external workers/reviewers a fixed report path under `/Users/mehmet/Desktop/Rushd/artifacts/agent-reports/`. They save results there; the founder only says which task finished. The Master reads the report directly. Do not assume automatic notifications. Use isolated worktrees for concurrent writers, return corrections to the original worker, and integrate dependencies before starting dependent work.
+- For long delegated work, offer the founder the unattended-worker option before launch. With explicit approval, run the named cheap worker asynchronously, delegate long-interval liveness checks and bounded same-session continuation to Luna Low/Medium (using a separate Luna xHigh UI operator when the worker is only reachable through computer control), notify on completion/blocker, and end the Development Master's turn. Do not keep Sol/Astra alive to poll partial output.
+- Every founder-facing handoff ends with an explicit instruction for what the founder should do next.
 - Tests cover production behavior and the important failure boundary. Full matrices run at integration or phase gates rather than after every small edit.
 - No receipt ceremony, patch manifest, lifecycle transcript, or manual state transition is part of normal development.
 
