@@ -186,7 +186,10 @@ the operation journal.
   snapshots (funds, cash, residuals, reservations, allocations, buffer,
   signed availability, completeness states, versions, data-as-of);
   explicit once-consumed dispositions (carry-in, tracked funding, split,
-  independent) whose destinations must resolve to an existing open cycle;
+  independent) whose destinations must resolve to an existing open cycle
+  and which freeze per-family append cursors (entries, allocations,
+  obligations, settlements) so later intent detection never depends on
+  wall-clock ordering;
   exact linked forward deltas (carrying the standing action's identity so
   an untouched carry basis follows by derivation); explicit unresolved
   conflicts with signed unpropagated amounts and downstream kinds; and

@@ -636,6 +636,12 @@ export type RemainderDisposition =
  * source is consumed only once; a shortfall stays visible and moves only
  * through an explicit disposition. Dispositions never move money
  * automatically.
+ *
+ * `downstreamCursors` freezes the per-family append positions at
+ * disposition time so later intent detection never depends on wall-clock
+ * ordering: any entry, allocation, obligation, or settlement appended after
+ * these counts is subsequent to the disposition even when clocks are fixed
+ * or repeat a millisecond.
  */
 export interface CarryAction {
   readonly carryId: EntryId;
@@ -643,6 +649,12 @@ export interface CarryAction {
   readonly settlementId: SettlementId;
   readonly sourceCycleId: CycleId;
   readonly disposition: RemainderDisposition;
+  readonly downstreamCursors: {
+    readonly entryCount: number;
+    readonly allocationCount: number;
+    readonly obligationCount: number;
+    readonly settlementCount: number;
+  };
   readonly note: string;
   readonly capturedAtInstantMs: number;
   readonly calculationVersion: string;

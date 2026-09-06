@@ -520,6 +520,15 @@ export function applyDisposeCycleRemainder(
     settlementId: command.settlementId,
     sourceCycleId: settlement.cycleId,
     disposition: toStoredDisposition(disposition),
+    // Frozen append positions: later intent detection inspects only records
+    // appended after these counts, so fixed or repeated clock values can
+    // never reorder the disposition behind subsequent facts.
+    downstreamCursors: {
+      entryCount: state.entries.length,
+      allocationCount: state.allocationRecords.length,
+      obligationCount: state.obligations.length,
+      settlementCount: state.settlements.length,
+    },
     note: command.note,
     capturedAtInstantMs,
     calculationVersion: context.calculationVersion,

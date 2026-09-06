@@ -73,9 +73,19 @@ export interface TaskCHarness {
   availableMinor(): number;
 }
 
-export function makeTaskCHarness(bookId = 'book-task-c'): TaskCHarness {
+export interface TaskCHarnessOptions {
+  /** Fixed clock step in milliseconds; 0 freezes the clock (same captured millisecond for every command). */
+  readonly stepMs?: number;
+  readonly baseInstantMs?: number;
+}
+
+export function makeTaskCHarness(bookId = 'book-task-c', options: TaskCHarnessOptions = {}): TaskCHarness {
   const repo = new InMemoryFinanceRepository();
-  const { context } = createDeterministicContext({ calculationVersion: 'p03-task-c-1' });
+  const { context } = createDeterministicContext({
+    calculationVersion: 'p03-task-c-1',
+    ...(options.stepMs !== undefined ? { stepMs: options.stepMs } : {}),
+    ...(options.baseInstantMs !== undefined ? { baseInstantMs: options.baseInstantMs } : {}),
+  });
   const theBookId = asBookId(bookId);
   let sequence = 0;
 

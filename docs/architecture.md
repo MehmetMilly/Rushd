@@ -191,7 +191,10 @@ still backend-only: the legacy UI does not call it.
   follows it by derivation; completed tracked funding stands while the
   remainder view records the delta), while a subsequently changed
   downstream produces an explicit unresolved conflict that degrades
-  completeness until an appended acknowledgement resolves it. The
+  completeness until an appended acknowledgement resolves it. Downstream
+  ordering is durable append order (per-family cursors frozen on the carry
+  action), never wall-clock comparison, so fixed or repeated capture
+  milliseconds cannot reorder intent. The
   acknowledgement carries no monetary action.
 - Availability is cycle-scoped (starting funds plus signed carry-in, this
   cycle's cash facts, signed reconciliation residuals, once-counted open

@@ -351,3 +351,72 @@ describe('linked corrections and voids of closed-cycle facts', () => {
     expect(state.propagationDeltas).toHaveLength(2);
   });
 });
+
+describe('same-millisecond downstream ordering (fixed clock)', () => {
+  it('conflicts when the destination was spent at the same captured millisecond', async () => {
+    const harness = makeTaskCHarness('book-proof-7-fixed-conflict', { stepMs: 0 });
+    await seedStandardBook(harness);
+    await harness.run({ kind: 'closeCycle', bookId: harness.bookId, cycleId: null, note: '' });
+    const settlementId = harness.state().settlements[0].settlementId;
+    await harness.run({
+      kind: 'openCycle', bookId: harness.bookId, startDate: '2026-10-01', startingFunds: SAR(0),
+    });
+    await harness.run({
+      kind: 'disposeCycleRemainder', bookId: harness.bookId, settlementId,
+      disposition: { kind: 'carryIn', amount: SAR(100_000), destinationCycleId: `cyc:${harness.bookId}:2026-10-01` },
+      note: '',
+    });
+    // Same captured millisecond as the carry, but a strictly later command:
+    // append-order proves the destination changed.
+    await harness.run({
+      kind: 'recordExpense', bookId: harness.bookId, amount: SAR(1_000),
+      occurredAt: { kind: 'civilDate', localDate: '2026-10-06' },
+      note: '', category: 'food', flexibleDefinitionId: null,
+    });
+
+    const corrected = await harness.run(
+      closedCorrection(harness, `cyc:${harness.bookId}:2026-09-01`, 'expense', 10_000, '2026-09-10'),
+    );
+    const effect = effectOf(corrected, 'closedCycleCorrectionRecorded');
+    expect(effect['propagation']).toBe('conflicted');
+    expect(effect['deltaAmount']).toEqual(SAR(-10_000));
+    const state = harness.state();
+    expect(state.propagationDeltas).toHaveLength(0);
+    expect(state.propagationConflicts).toHaveLength(1);
+    // October keeps its spent intent: 0 + 100,000 carry - 1,000, not 89,000.
+    expect(harness.availableMinor()).toBe(99_000);
+    expect(completenessOf(harness).pool.state).toBe('needsAttention');
+
+    await harness.run({
+      kind: 'resolvePropagationConflict', bookId: harness.bookId,
+      conflictId: state.propagationConflicts[0].conflictId,
+      resolution: 'acknowledgedDownstreamStands', note: 'reviewed',
+    });
+    expect(completenessOf(harness).pool.state).toBe('current');
+    expect(harness.availableMinor()).toBe(99_000);
+  });
+
+  it('applies the exact delta when the same-millisecond destination is untouched', async () => {
+    const harness = makeTaskCHarness('book-proof-7-fixed-clean', { stepMs: 0 });
+    await seedStandardBook(harness);
+    await harness.run({ kind: 'closeCycle', bookId: harness.bookId, cycleId: null, note: '' });
+    const settlementId = harness.state().settlements[0].settlementId;
+    await harness.run({
+      kind: 'openCycle', bookId: harness.bookId, startDate: '2026-10-01', startingFunds: SAR(0),
+    });
+    await harness.run({
+      kind: 'disposeCycleRemainder', bookId: harness.bookId, settlementId,
+      disposition: { kind: 'carryIn', amount: SAR(100_000), destinationCycleId: `cyc:${harness.bookId}:2026-10-01` },
+      note: '',
+    });
+
+    const corrected = await harness.run(
+      closedCorrection(harness, `cyc:${harness.bookId}:2026-09-01`, 'expense', 10_000, '2026-09-10'),
+    );
+    const effect = effectOf(corrected, 'closedCycleCorrectionRecorded');
+    expect(effect['propagation']).toBe('applied');
+    expect(harness.state().propagationConflicts).toHaveLength(0);
+    expect(harness.availableMinor()).toBe(90_000);
+    expect(completenessOf(harness).pool.state).toBe('current');
+  });
+});

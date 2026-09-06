@@ -236,7 +236,8 @@ describe('settlement and carry properties (bounded, seeded)', () => {
               closeOrder.push(id);
               openCycle = null;
               // Closing a carry destination after the carry landed changes
-              // downstream intent for settlements carried there.
+              // downstream intent for settlements carried there. Earlier
+              // history predates the disposition cursors and does not count.
               for (const model of settlements) {
                 if (model.consumed && model.dest === id) model.touched = true;
               }

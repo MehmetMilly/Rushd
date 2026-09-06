@@ -109,18 +109,22 @@ export type DownstreamState = 'none' | 'untouched' | 'changed';
  * `leaveIndependent`): corrections append informational deltas. `untouched`
  * means the disposition stands but its destination has seen no later
  * intent: corrections append exact deltas that also adjust the carry basis.
- * `changed` means destination activity (entries, allocation attributions,
- * obligations, or closing) landed after the disposition: corrections append
- * explicit unresolved conflicts instead. Observations are measurements, not
- * intent, and never count as changes. The disposition's own same-operation
- * funding record never counts.
+ * `changed` means destination activity landed after the disposition:
+ * corrections append explicit unresolved conflicts instead.
+ *
+ * Ordering is durable, never wall-clock: the disposition freezes
+ * per-family append cursors, and only records appended after those
+ * positions count as subsequent — even when the clock is fixed or repeats
+ * a millisecond. Observations are measurements, not intent, and never
+ * count. The disposition's own same-operation funding record is excluded
+ * by operation identity, not by timestamp.
  */
 export function downstreamState(state: BookState, settlementId: SettlementId): DownstreamState {
   const action = carryActionFor(state, settlementId);
   if (action === null) return 'none';
   const disposition = action.disposition;
   if (disposition.kind === 'leaveIndependent') return 'none';
-  const after = action.capturedAtInstantMs;
+  const cursors = action.downstreamCursors;
   const ownOperation = action.sourceOperationId;
 
   const carryDestination =
@@ -134,27 +138,32 @@ export function downstreamState(state: BookState, settlementId: SettlementId): D
   if (carryDestination !== null) {
     const version = state.cycles.find((candidate) => candidate.cycleId === carryDestination);
     if (version === undefined) return 'changed';
-    if (state.settlements.some((candidate) => candidate.cycleId === carryDestination)) carryChanged = true;
+    if (state.settlements.slice(cursors.settlementCount).some((candidate) => candidate.cycleId === carryDestination)) {
+      carryChanged = true;
+    }
     if (
-      state.entries.some((entry) => entry.cycleId === carryDestination && entry.capturedAtInstantMs > after) ||
-      state.allocationRecords.some(
-        (record) =>
-          (record.cycleId === carryDestination || isReleaseTo(record, carryDestination)) &&
-          record.capturedAtInstantMs > after &&
-          record.sourceOperationId !== ownOperation,
-      ) ||
-      state.obligations.some(
-        (obligation) => obligation.cycleId === carryDestination && obligation.createdAtInstantMs > after,
-      )
+      state.entries
+        .slice(cursors.entryCount)
+        .some((entry) => entry.cycleId === carryDestination) ||
+      state.allocationRecords
+        .slice(cursors.allocationCount)
+        .some(
+          (record) =>
+            (record.cycleId === carryDestination || isReleaseTo(record, carryDestination)) &&
+            record.sourceOperationId !== ownOperation,
+        ) ||
+      state.obligations
+        .slice(cursors.obligationCount)
+        .some((obligation) => obligation.cycleId === carryDestination)
     ) {
       carryChanged = true;
     }
   }
   if (tracksFunding) {
     if (
-      state.allocationRecords.some(
-        (record) => record.capturedAtInstantMs > after && record.sourceOperationId !== ownOperation,
-      )
+      state.allocationRecords
+        .slice(cursors.allocationCount)
+        .some((record) => record.sourceOperationId !== ownOperation)
     ) {
       trackedChanged = true;
     }
