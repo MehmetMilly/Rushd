@@ -52,4 +52,8 @@ Run targeted tests during implementation. At handoff run lint, typecheck, `npm t
 
 ## Finish
 
-After checks pass, commit only Task B files as `Rushd P03: implement everyday finance behavior`. Do not amend A or push. Stop before C. Return the commit/base, actual thinking setting, delivered behaviors and API entry points, commands/results, remaining limitations, and any semantic choice that materially affects C. Keep the report concise; the founder will forward it to Astra.
+After checks pass, commit only Task B files as `Rushd P03: implement everyday finance behavior`. Do not amend A or push. Stop before C.
+
+Then save your concise final report to **`/Users/mehmet/Desktop/Rushd/artifacts/agent-reports/P03-B.md`**, creating the directory if needed. This report path is explicitly authorized in addition to your product-file scope and is Git-ignored; do not commit it. Include task ID `P03-B`, complete/blocked status, completion time, actual repository/worktree path, commit/base, actual model/thinking setting, delivered behaviors and API entry points, commands/results, remaining limitations, and any semantic choice that materially affects C. If blocked, save the honest partial result there instead.
+
+Your final chat reply should simply confirm the report was saved and give its path. The founder only needs to tell Astra that B finished; Astra reads the file directly. If this filesystem path is inaccessible, say so in chat rather than claiming success.

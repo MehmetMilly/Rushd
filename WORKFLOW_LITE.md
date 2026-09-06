@@ -79,13 +79,19 @@ Every Worker assignment includes:
 4. acceptance criteria;
 5. tests to run;
 6. out-of-scope items;
-7. expected concise report.
+7. expected concise report and its exact absolute output path.
 
 Workers read only what they need. They do not reread the whole governance corpus for every slice.
 
 ## Worker report
 
-The Worker returns:
+The Worker saves its final report at the exact path in the task prompt, normally `/Users/mehmet/Desktop/Rushd/artifacts/agent-reports/<task-id>.md`. This local directory is already Git-ignored. Write the report after the implementation commit so it can name the actual commit; do not commit the report. Use a separate named report for each correction/review assignment. A blocked task writes its current result at its assigned path too.
+
+Include task ID, complete/blocked status, completion time, actual repository/worktree path, base and result commit when present, actual model/reasoning setting, and the implementation/test/limitation details below. Markdown is fine; a prescribed JSON ceremony is unnecessary. Keep secrets and real user data out of reports.
+
+The Worker's chat reply need only say the report is saved and identify its path. The founder then tells the Development Master that the task finished; the Master reads the assigned report and checks the relevant code/evidence. This shared-file handoff requires access to the same filesystem. If unavailable, report that limitation in chat rather than claiming the file was saved.
+
+Report content includes:
 
 ```json
 {

@@ -1,6 +1,6 @@
 # Rushd active delivery plan
 
-**Updated:** 5 September 2026
+**Updated:** 6 September 2026
 
 This file records the current delivery position and resource strategy. It does not replace the product contract in `docs/RUSHD_MASTER_PLAN_FINAL.md`, the phase outcomes in `docs/implementation/phase-plan.json`, or the working method in `WORKFLOW_LITE.md`.
 
@@ -22,8 +22,11 @@ The working target is a feature-complete build ready for private founder use wit
 - P01 is closed. The duplicate English translation key was addressed in P02. The display-only monthly-day check remains a nearby cleanup candidate when that UI is changed.
 - P02 is closed. The app now has a Vite build, local runtime assets, owned modules, strict checks for new glue, preserved `MicroSaveOS_DB` v1 data, and verified visual parity apart from six documented English translation corrections.
 - P03 Task A is implemented at `557c556`, corrected at `51659e6`. Luna Max independently ran the original 50 domain tests, then 9 focused correction tests. Reversal-date binding and unrepresentable-instant rejection are fixed. A remaining BCE/year-zero-to-CE alias in `instant.ts` is a narrow prerequisite included in `P03_TASK_B_PROMPT.md`; proceed with B rather than opening another separate correction cycle. This was focused verification, not a full P03 review or phase PASS.
+- P03 Task B is closed at `28d4608`, following initial implementation `e68926f` and corrections `f255bac`. Muse independently reviewed B; Terra High verified the corrections and found a final live-return validation gap, now fixed and independently reproduced as passing. The Master reran lint, typecheck, `npm test` (99 domain tests plus repository/legacy checks), 16 property tests, and build successfully on 6 September. This closes B's domain/application scope, not P03 or legacy UI integration. The founder reports over 100 minutes for the initial implementation; include correction work when evaluating throughput.
 
 ## Working method
+
+**Model recommendation, 5 September:** use Sol High as the regular Development Master and Astra for bounded architecture/escalation decisions. This is a recommendation awaiting a UI model switch, not a claim the switch happened. Most recent manager turns were report triage, prompt writing, file handoffs, and status maintenance; Luna/Muse supplied much of the independent bug evidence. Astra added useful cross-task judgment, but no controlled comparison establishes that Sol High could not do it. Official standard API rates are $10/$50 per million input/output for Astra versus $4/$20 for Sol; these do not establish the same ratio in Plus usage or total cost at different reasoning efforts. Judge the routing by task completion, correction rate, and actual allowance consumption. Reduce repeated manager reads/status edits regardless of model.
 
 - GPT-6 Astra is now the Development Master. It owns task design, technical direction, integration, and risk-based verification. Delegate code exploration, implementation, testing, and review when cheaper agents can deliver reliably.
 - Each implementation task has one product-source writer and one coherent commit.
@@ -34,7 +37,7 @@ The working target is a feature-complete build ready for private founder use wit
 - Preserve Codex capacity for Development Master continuity. External models should handle most implementation, testing, and routine independent review when they can do so reliably.
 - High-consequence finance, migration, sync, security, AI-write, release, and major visual work receives independent review. Ordinary low-risk changes receive direct Master review. Sol High is not the automatic reviewer for every high-risk task.
 - When practical, worker and reviewer come from different model families.
-- External workers usually report through the founder. Do not assume cross-app messaging. Use isolated worktrees for concurrent writers, return corrections to the original worker, and integrate dependencies before starting dependent work.
+- Assign external workers/reviewers a fixed report path under `/Users/mehmet/Desktop/Rushd/artifacts/agent-reports/`. They save results there; the founder only says which task finished. The Master reads the report directly. Do not assume automatic notifications. Use isolated worktrees for concurrent writers, return corrections to the original worker, and integrate dependencies before starting dependent work.
 - Tests cover production behavior and the important failure boundary. Full matrices run at integration or phase gates rather than after every small edit.
 - No receipt ceremony, patch manifest, lifecycle transcript, or manual state transition is part of normal development.
 
@@ -76,7 +79,7 @@ If an external app does not expose the suggested setting, use its highest suitab
 
 1. P01 is closed at reviewed commit `075317e`.
 2. P02 is closed at `f80cfc9`.
-3. P03's execution plan is agreed. Task A's focused correction check is complete. Issue B to GLM with the small date-era correction included.
+3. P03's execution plan is agreed. B and its focused correction review are complete. Prepare C's recovery, recurring-plan, and cycle-lifecycle task next; concentrate subsequent review on C and its interactions rather than repeating B's full audit.
 4. Keep the remaining foundation spine sequential: P03 finance domain, then P04 local data and PWA.
 5. After P02 creates stable module boundaries, allow at most two isolated product writers. Start design foundations, provider preparation, AI schemas, eval assets, and release preparation early when they do not depend on unfinished production interfaces.
 6. Integrate through the Development Master. Use short-lived branches or isolated worktrees for parallel writers and keep one integration owner.
@@ -84,7 +87,13 @@ If an external app does not expose the suggested setting, use its highest suitab
 
 ## Next action and continuity
 
-Send `P03_TASK_B_PROMPT.md` to a fresh GLM 5.3 Flash chat in the same repository. Request Max if available; report only the actual exposed thinking setting. The prompt includes one small era-validation correction followed by the full everyday-finance slice. B is ready to send, not confirmed running. Inspect its result before C; keep broad independent finance review at the A–C integration point. Deterministic cycle IDs and synchronous repository methods remain C/D design seams, not blockers by themselves. P02 research is historical context; the implemented architecture and P03 contract govern the next work.
+B review is complete: actual reviewer Muse Spark 1.3 contributor-free, default reasoning, not requested Grok. `artifacts/agent-reports/P03-B-REVIEW.md` reports independently passing existing gates and five material findings: allocation reversals omitted from availability, corrected payments double-counted by obligations, refunds exceeding corrected expenses, automatic dispute resolution on refunds, and missing return corrections. Astra corroborated the key source paths and accepts the findings. Complete cross-generation refund caps now and require explicit dispute resolution even after a full refund; the review's narrower recommendations are not sufficient.
+
+The B corrections are committed at `f255bac`, parent `e68926f`, by Muse Spark 1.3 contributor-free, not GLM. Report: `artifacts/agent-reports/P03-B-FIX-01.md`. Terra High's scoped review found one remaining interaction: a voided return can still validate `returnReceived` dispute resolution. The correction suite and property suite passed, but its independent production-API probe reproduced the defect. Review: `artifacts/agent-reports/P03-B-FIX-01-REVIEW.md`.
+
+The Master resumed the original Muse OpenCode session for this narrow correction, limited to the obligation handler and correction-chain tests. Commit `28d4608` rejects dead originals and accepts live replacement returns. Report: `artifacts/agent-reports/P03-B-FIX-02.md`. Terra reran its independent probe successfully and confirmed permanent no-write regressions; its existing review contains the closure addendum. Master integration gates all passed. B is closed. C remains unstarted; next prepare its task against the agreed Reality Check basis and current command contracts, checking external-model availability before routing. The overnight request was to finish B, not launch C.
+
+The founder requested a Luna monitoring task. Created `01a072db-a6c3-7da0-b0fc-b731a666e37b` with Luna Low, solely to confirm completion and notify this Master (`01a02647-0425-7833-aee2-8e4c7bdeff29`). Pinned OpenCode session `ses_f8d78c148ffeZEzGcLLGjzl1XV` was already finished: final assistant message `msg_072d8d93f001gqCejivHxlgySp`, finish `stop`, completion `1788633214165`, names the correction report. No recurring polling/automation is needed after that completion. Monitor does not review or edit code.
 
 Keep current status and resource changes in this file, and task interfaces in the phase execution plan. `DEVELOPMENT_MASTER_HANDOFF.md` explains how to resume after compaction. No additional personal AGENTS file is needed.
 

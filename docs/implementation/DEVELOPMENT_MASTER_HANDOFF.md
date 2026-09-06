@@ -33,7 +33,7 @@ Use `ACTIVE_DELIVERY_PLAN.md` for the current commit, phase, available models, e
 - Use an independent reviewer for expensive mistakes or subjective quality, not by default.
 - Keep reviews read-only. The implementation worker owns corrections.
 - Keep each task in one clear commit and leave unrelated changes out.
-- Use external workers and reviewers when reliable and cheaper. The founder transfers their prompts/results between apps; do not assume cross-app messaging. Use isolated worktrees for concurrent writers and keep one integration owner.
+- Use external workers and reviewers when reliable and cheaper. Assign an exact report path under `/Users/mehmet/Desktop/Rushd/artifacts/agent-reports/`; the founder transfers a short start instruction and later says the task finished. Read its saved report directly, following Workflow Lite. Do not assume automatic notifications or cross-app messaging. Use isolated worktrees for concurrent writers and keep one integration owner.
 - Prefer Luna Max for clear demanding tasks, Terra up to xHigh for harder intelligence-heavy work, and Sol Medium/High only when the task is legitimately hard. Never route delegated work to Terra Max or Sol Max.
 - Do not push unless the founder asks.
 - Preserve the master plan's full feature scope. Speed comes from better task sizing, model routing, and parallel preparation—not from cutting approved features.
