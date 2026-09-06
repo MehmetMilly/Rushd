@@ -20,6 +20,7 @@
 
 import type { BookState, LedgerEntry } from './ledger';
 import type { OperationRecord, OutboxEnvelope } from './commands';
+import type { DeviceId, RepositoryScopeId } from '../sync/scope';
 import type {
   BookId,
   EntryId,
@@ -128,4 +129,21 @@ export interface RepositoryTransaction extends FinanceReadModel {
  */
 export interface TransactionalRepository {
   runTransaction<T>(work: (transaction: RepositoryTransaction) => T | Promise<T>): Promise<T>;
+}
+
+/**
+ * A repository handle bound to exactly one local principal's namespace.
+ * The binding is immutable for the handle's lifetime: `reopen()` preserves
+ * it, and a handle never serves another scope.
+ *
+ * `previewCommand`/`executeCommand` verify the caller's context origin
+ * against this binding before any read, replay, or mutation. A mismatched
+ * origin fails with an explicit `scopeMismatch` failure: it can neither
+ * mutate the bound scope's books nor replay another scope's receipts.
+ * Adapters that accept a mismatched caller-controlled scope do not satisfy
+ * this port, and the conformance suite proves it with two bound scopes.
+ */
+export interface ScopedRepository extends TransactionalRepository {
+  readonly boundScope: RepositoryScopeId;
+  readonly boundDevice: DeviceId;
 }

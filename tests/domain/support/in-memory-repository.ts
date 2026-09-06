@@ -22,11 +22,16 @@
  */
 
 import type {
+  DeliveryAttemptOutcome,
   OperationRecord,
+  OutboxDeliveryState,
   OutboxEnvelope,
 } from '../../../src/domain/contracts/commands';
+import { initialOutboxDelivery, recordDeliveryAttempt } from '../../../src/domain/contracts/commands';
 import { canonicalJson } from '../../../src/domain/contracts/canonical';
 import type { BookState } from '../../../src/domain/contracts/ledger';
+import { makeDeviceId, makeGuestKey, repositoryScopeIdFor, type DeviceId, type RepositoryScopeId } from '../../../src/domain/sync/scope';
+import { DEFAULT_DEVICE_ID, DEFAULT_GUEST_KEY } from './deterministic-context';
 import type { BookId, EntryId, GoalId, ObligationId, ObservationId, OccurrenceId, OperationId, PlanId, SettlementId } from '../../../src/domain/contracts/identity';
 import type {
   EntryLocation,
@@ -43,13 +48,15 @@ import type {
 
 export class ConcurrencyConflictError extends Error {}
 
-export type WriteMethodName = 'putBookState' | 'putOperation' | 'putOutboxEntry';
+export type WriteMethodName = 'putBookState' | 'putOperation' | 'putOutboxEntry' | 'putDeliveryState';
 
 interface CommittedStore {
   books: Map<string, BookState>;
   operations: Map<string, OperationRecord>;
   outbox: OutboxEnvelope[];
-  /** Durable local enqueue counter. Monotonic, not gapless: an aborted transaction may leave a gap. */
+  /** Mutable delivery metadata per operation, owned by the adapter. Canonical records never live here. */
+  delivery: Map<string, OutboxDeliveryState>;
+  /** Durable local enqueue counter, finalized atomically at commit; aborted transactions leave it untouched. */
   enqueueSequence: number;
   entryIndex: Map<string, EntryLocation>;
   obligationIndex: Map<string, ObligationLocation>;
@@ -65,6 +72,7 @@ function createCommittedStore(): CommittedStore {
     books: new Map(),
     operations: new Map(),
     outbox: [],
+    delivery: new Map(),
     enqueueSequence: 0,
     entryIndex: new Map(),
     obligationIndex: new Map(),
@@ -97,12 +105,39 @@ function frozenCopy<T>(value: T): T {
   return deepFreeze(cloneValue(value));
 }
 
+/** Construction options for the reference adapter. The scope/device binding is immutable per handle. */
+export interface InMemoryRepositoryOptions {
+  readonly boundScope?: RepositoryScopeId;
+  readonly boundDevice?: DeviceId;
+  readonly sharedStore?: CommittedStore;
+}
+
+function defaultTestDevice(): DeviceId {
+  const made = makeDeviceId(DEFAULT_DEVICE_ID);
+  if (!made.ok) throw new Error(`invalid test device default: ${made.failure.detail}`);
+  return made.value;
+}
+
+function defaultTestScope(deviceId: DeviceId): RepositoryScopeId {
+  const guest = makeGuestKey(DEFAULT_GUEST_KEY);
+  if (!guest.ok) throw new Error(`invalid test guest default: ${guest.failure.detail}`);
+  return repositoryScopeIdFor({ kind: 'guest', guestKey: guest.value, deviceId });
+}
+
 export class InMemoryFinanceRepository implements TransactionalRepository, FinanceReadModel {
+  /**
+   * Immutable scope binding for this handle. The command layer verifies the
+   * caller origin against it before any read, replay, or mutation.
+   */
+  readonly boundScope: RepositoryScopeId;
+  readonly boundDevice: DeviceId;
   private readonly store: CommittedStore;
   private injectedFailure: { method: WriteMethodName; remaining: number } | null = null;
 
-  constructor(sharedStore?: CommittedStore) {
-    this.store = sharedStore ?? createCommittedStore();
+  constructor(options: InMemoryRepositoryOptions = {}) {
+    this.store = options.sharedStore ?? createCommittedStore();
+    this.boundDevice = options.boundDevice ?? defaultTestDevice();
+    this.boundScope = options.boundScope ?? defaultTestScope(this.boundDevice);
   }
 
   /** Simulates an adapter crash on the next N calls to the given write method. */
@@ -113,26 +148,30 @@ export class InMemoryFinanceRepository implements TransactionalRepository, Finan
   /**
    * Test-adapter-specific handle reacquisition over the same durable state:
    * the uncertain-commit proof commits through one handle, drops the
-   * acknowledgement, then retries through this fresh handle. P04's
-   * persistent adapter reacquires a real database connection instead; the
-   * behavioral contract (exact idempotent replay) is identical.
+   * acknowledgement, then retries through this fresh handle. The scope
+   * binding is preserved: a reopened handle never serves another scope.
+   * P04's persistent adapter reacquires a real database connection instead;
+   * the behavioral contract (exact idempotent replay) is identical.
    */
   reopen(): InMemoryFinanceRepository {
-    return new InMemoryFinanceRepository(this.store);
+    return new InMemoryFinanceRepository({ boundScope: this.boundScope, boundDevice: this.boundDevice, sharedStore: this.store });
   }
 
   /**
    * Test-adapter-specific canonical snapshot of everything the adapter has
-   * committed (books, journal, outbox, sequence counter). Rollback proofs
-   * compare this string before and after a failed attempt: byte-identical
-   * means the attempt left no trace.
+   * committed (books, journal, outbox, delivery metadata, sequence
+   * counter). Rollback proofs compare this string before and after a failed
+   * attempt: byte-identical means the attempt left no trace.
    */
   snapshotBytes(): string {
     const books = [...this.store.books.entries()].sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)).map(([, state]) => state);
     const operations = [...this.store.operations.entries()]
       .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
       .map(([, record]) => record);
-    return canonicalJson({ books, operations, outbox: this.store.outbox, enqueueSequence: this.store.enqueueSequence });
+    const delivery = [...this.store.delivery.entries()]
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+      .map(([, state]) => state);
+    return canonicalJson({ books, operations, outbox: this.store.outbox, delivery, enqueueSequence: this.store.enqueueSequence });
   }
 
   getBookState(bookId: BookId): BookState | null {
@@ -186,6 +225,38 @@ export class InMemoryFinanceRepository implements TransactionalRepository, Finan
     return frozenCopy(this.store.outbox);
   }
 
+  /** Test-adapter-specific accessor to persisted delivery metadata. */
+  getDeliveryState(operationId: OperationId): OutboxDeliveryState | null {
+    const state = this.store.delivery.get(operationId);
+    return state === undefined ? null : frozenCopy(state);
+  }
+
+  /**
+   * Test-adapter-specific delivery persistence boundary: records one
+   * transport attempt for a committed operation inside its own atomic
+   * transaction. The conformance suite injects `putDeliveryState` failures
+   * here to prove byte-identical rollback and exactly-one retry. Unknown
+   * operations throw: delivery metadata never exists without its intent.
+   */
+  async updateDeliveryState(operationId: OperationId, outcome: DeliveryAttemptOutcome): Promise<OutboxDeliveryState> {
+    return this.runTransaction((transaction) => {
+      const committed = this.store.delivery.get(operationId);
+      let current: OutboxDeliveryState;
+      if (committed !== undefined) {
+        current = committed;
+      } else {
+        const intent = this.store.outbox.find((envelope) => (envelope.operationId as string) === (operationId as string));
+        if (intent === undefined) {
+          throw new Error(`unknown operation for delivery update: ${operationId as string}`);
+        }
+        current = initialOutboxDelivery(intent);
+      }
+      const next = recordDeliveryAttempt(cloneValue(current), outcome);
+      (transaction as InMemoryTransaction).putDeliveryState(next);
+      return frozenCopy(next);
+    });
+  }
+
   async runTransaction<T>(work: (transaction: RepositoryTransaction) => T | Promise<T>): Promise<T> {
     const transaction = new InMemoryTransaction(this.store, (method: WriteMethodName) => this.takeInjectedFailure(method));
     let result: T;
@@ -224,6 +295,7 @@ class InMemoryTransaction implements RepositoryTransaction {
   private readonly bookWrites = new Map<string, BookState>();
   private readonly operationWrites = new Map<string, OperationRecord>();
   private readonly outboxWrites: OutboxEnvelope[] = [];
+  private readonly deliveryWrites = new Map<string, OutboxDeliveryState>();
   private readonly bookRevisionAtRead = new Map<string, number>();
   private sequenceBase: number | null = null;
   private sequencesAllocated = 0;
@@ -381,6 +453,21 @@ class InMemoryTransaction implements RepositoryTransaction {
     this.outboxWrites.push(cloneValue(envelope));
   }
 
+  /**
+   * Test-adapter-specific tentative delivery write. Delivery metadata is
+   * transactional like every other write: injection fails before the
+   * overlay mutates, and abandon/commit semantics match the finance
+   * records, so the conformance suite can prove byte-identical rollback
+   * at the delivery boundary.
+   */
+  putDeliveryState(next: OutboxDeliveryState): void {
+    this.assertActive();
+    if (this.takeInjectedFailure('putDeliveryState')) {
+      throw new Error(`injected adapter failure at putDeliveryState (operation ${next.operationId as string})`);
+    }
+    this.deliveryWrites.set(next.operationId as string, cloneValue(next));
+  }
+
   nextEnqueueSequence(): number {
     this.assertActive();
     // Allocated tentatively against the committed counter and finalized at
@@ -414,6 +501,9 @@ class InMemoryTransaction implements RepositoryTransaction {
       this.store.operations.set(operationId, record);
     }
     this.store.outbox.push(...this.outboxWrites);
+    for (const [operationId, delivery] of this.deliveryWrites) {
+      this.store.delivery.set(operationId, delivery);
+    }
     for (const state of this.bookWrites.values()) {
       for (const entry of state.entries) {
         this.store.entryIndex.set(entry.entryId, { bookId: entry.bookId, entryId: entry.entryId, kind: entry.kind });
@@ -444,6 +534,7 @@ class InMemoryTransaction implements RepositoryTransaction {
     this.bookWrites.clear();
     this.operationWrites.clear();
     this.outboxWrites.length = 0;
+    this.deliveryWrites.clear();
     this.bookRevisionAtRead.clear();
     this.active = false;
   }

@@ -246,10 +246,25 @@ ownership, and replication.
   boundaries the server keys idempotency on `(accountId, operationId)`
   (`serverIdempotencyKeyFor`). The same raw `BookId` may exist in isolated
   guest/account repositories without collision or accidental lookup.
+- Composite keys are injective: scope IDs (`scope:guest:` /
+  `scope:account:` plus length-prefixed components) and server idempotency
+  keys (`idemp:` plus length-prefixed components) frame each component as
+  `<length>:<bytes>`, so tuples like (`a:b`, `c`) and (`a`, `b:c`) never
+  encode to the same key even though components may contain separators.
+  `parseRepositoryScopeId` / `parseServerIdempotencyKey` recover the exact
+  tuple; malformed encodings are rejected, never guessed.
 
 ### 2. Local scope
 
 One local principal owns one repository namespace; books live inside it.
+Every repository handle carries an immutable scope/device binding
+(`ScopedRepository.boundScope` / `boundDevice`, preserved across
+reopen). `previewCommand`/`executeCommand` verify the caller origin
+against that binding before any read, replay, or mutation: a mismatched
+origin fails with an explicit `scopeMismatch` failure, can neither mutate
+the bound scope's books nor replay another scope's receipts, and leaves
+bound state byte-identical. Adapters that accept a mismatched
+caller-controlled scope do not satisfy the port.
 Cross-scope references fail explicitly (`unknownBook`/`unknownEntry` — a
 lookup in one scope can never observe another scope's records), and
 cross-book references fail as typed `crossBook*` failures without mutation.
@@ -299,12 +314,20 @@ A pull cursor is an opaque replication position scoped to one
 identity/provider stream (`src/domain/sync/cursors.ts`). Only
 construction, validation, and equality comparison are legal; there is
 deliberately no ordering comparison, so no code can substitute timestamp
-or lexical order for durable sequence/revision. Applying a pulled batch
+or lexical order for durable sequence/revision. Pulled operations travel
+as content envelopes (operation ID, provider sequence, scope, book, base
+and resulting revision with exactly-one advancement, canonical digest,
+schema version), and each batch carries an identity plus a content digest
+the receiver recomputes — a digest that does not match the operations is
+tampering or corruption, not a replay. Applying a pulled batch
 and advancing its checkpoint is atomic: a failed apply leaves cursor and
 applied set unchanged, a stale base is an explicit `baseCursorMismatch`,
-and replaying an applied batch is a no-op success — reordered, duplicated,
-or delayed delivery yields one canonical effect or an explicit conflict,
-never a drop or an invisible stall.
+an exact replay (same next cursor and same content digest) is a no-op
+success, and the same cursor with changed operations — or the same
+operation ID with a changed canonical digest — is an explicit
+`contentConflict` that advances nothing. Reordered, duplicated, or
+delayed delivery therefore yields one canonical applied record or an
+explicit conflict, never a drop, a duplicate, or an invisible stall.
 
 ### 6. Tombstone/conflict
 
@@ -338,12 +361,14 @@ Decisions only (`src/domain/sync/signout.ts`). Sign-out distinguishes
 session termination (always allowed, never deletes) from local
 account-cache deletion (gated). The safe default under offline, failed, or
 unknown sync state is retain-and-retry. Erasure is blocked while
-unacknowledged outbox items or unresolved conflicts exist. The only
-destructive override requires both a verified export reference and an
-explicit destructive confirmation carrying the literal phrase
-`ERASE-LOCAL-ACCOUNT-CACHE`, validated from unknown input at runtime — a
-boolean named `force` is a type error and a runtime rejection, never a
-bypass.
+unacknowledged outbox items or unresolved conflicts exist — unless the
+caller presents the destructive override: both a verified export reference
+and an explicit destructive confirmation carrying the literal phrase
+`ERASE-LOCAL-ACCOUNT-CACHE`, validated from unknown input at runtime
+(master plan 778-784, P08-A2). The override covers enumerated pending
+outbox/conflict intent; missing/invalid proof, unknown counts, and unknown
+(offline/failed) sync states stay blocked. A boolean named `force` is a
+type error and a runtime rejection, never a bypass.
 
 ### 9. Schema evolution
 
@@ -391,8 +416,8 @@ formulas are not evidence.
 | P03-A1 | Checked integer ISO minor-unit money; explicit civil dates and payday/calendar cycles | `tests/domain/money.test.ts` (full file), `tests/domain/civil-date.test.ts`, `tests/domain/monthly-cycle.test.ts`, `tests/domain/instant-resolution.test.ts`, `tests/property/money-properties.test.ts` |
 | P03-A2 | Availability, mid-cycle boundary, completeness, shortfall, pacing, partial/residual obligations, multiple payments, returns, signed adjustments, allocations | `tests/domain/everyday-flow.test.ts`, `tests/domain/completeness-pacing.test.ts`, `tests/domain/reality-check-recovery.test.ts`, `tests/property/everyday-properties.test.ts` |
 | P03-A3 | Plans cannot rewrite paid facts; close/carry/reopen, backdated propagation, allocation funding/assignment/release are explicit, atomic, idempotent | `tests/domain/cycle-lifecycle.test.ts`, `tests/domain/backdated-propagation.test.ts`, `tests/domain/cycle-settings-rebase.test.ts`, `tests/domain/recurring-plans.test.ts`, `tests/domain/correction-chains.test.ts`, `tests/property/task-c-lifecycle-properties.test.ts`, `tests/property/task-c-recovery-properties.test.ts` |
-| P03-A4 | Typed commands, invariant validation, receipts, revision/idempotency identity, undo/reversal policy | `tests/domain/command-flow.test.ts`, `tests/domain/idempotency.test.ts` ("replays the original receipt", "lost acknowledgement", "same operation ID with changed content", "stale previews"), `tests/domain/atomicity.test.ts` ("all-or-nothing", "first-committer-wins"), `tests/domain/everyday-command-safety.test.ts`, `tests/domain/task-c-command-safety.test.ts`, `tests/domain/reversal-binding.test.ts`, `tests/property/command-sequence-properties.test.ts`; conformance runner `tests/domain/repository-conformance.test.ts` (12 checks: replay, conflict, stale preview, uncertain commit, rollback) |
-| P03-A5 | Provider-neutral pre-P04 ADR (identity, ownership, operation/outbox, cursors, tombstones, conflicts, guest merge, sign-out/cache, amendment path) plus boundary/property/regression tests over production code | ADR headings 1-11 above; `tests/domain/sync-scope.test.ts`, `tests/domain/sync-records.test.ts`, `tests/domain/sync-uncertain-commit.test.ts`, `tests/domain/sync-tombstone-conflict.test.ts`, `tests/domain/guest-merge-signout.test.ts`, `tests/domain/sync-provider.test.ts`, `tests/property/sync-delivery-properties.test.ts` |
+| P03-A4 | Typed commands, invariant validation, receipts, revision/idempotency identity, undo/reversal policy | `tests/domain/command-flow.test.ts`, `tests/domain/idempotency.test.ts` ("replays the original receipt", "lost acknowledgement", "same operation ID with changed content", "stale previews"), `tests/domain/atomicity.test.ts` ("all-or-nothing", "first-committer-wins"), `tests/domain/everyday-command-safety.test.ts`, `tests/domain/task-c-command-safety.test.ts`, `tests/domain/reversal-binding.test.ts`, `tests/property/command-sequence-properties.test.ts`; conformance runner `tests/domain/repository-conformance.test.ts` (16 checks: replay, conflict, stale preview, uncertain commit, delivery persistence boundary, scope binding and mismatched-context rejection, content-bound pull replay) |
+| P03-A5 | Provider-neutral pre-P04 ADR (identity, ownership, operation/outbox, cursors, tombstones, conflicts, guest merge, sign-out/cache, amendment path) plus boundary/property/regression tests over production code | ADR headings 1-11 above; `tests/domain/sync-scope.test.ts` ("isolated across scopes", "adversarial separator tuples", "scope binding enforcement"), `tests/domain/sync-records.test.ts`, `tests/domain/sync-uncertain-commit.test.ts` ("lost acknowledgement and reacquisition", "delivery boundary retry"), `tests/domain/sync-tombstone-conflict.test.ts`, `tests/domain/guest-merge-signout.test.ts` ("verified-export override", "unknown states stay blocked"), `tests/domain/sync-provider.test.ts`, `tests/property/sync-delivery-properties.test.ts` ("changed-digest conflicts", "exact-replay classification") |
 | P03-A6 | Completeness reducer, recovered classified activity, disputed reservations, refunds, effective dates, rebase, closed-cycle immutability, UTC/DST/short-month boundaries, retry/reopen, Reality Check currency invariants (no FX, clarification-only non-writes) | `tests/domain/reality-check-recovery.test.ts`, `tests/domain/cycle-lifecycle.test.ts`, `tests/domain/cycle-settings-rebase.test.ts`, `tests/domain/recurring-plans.test.ts`, `tests/property/cycle-properties.test.ts` |
 
 P04/P08 ownership is explicit in ADR heading 11: the contract is frozen

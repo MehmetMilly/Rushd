@@ -15,9 +15,10 @@ import type {
   CommandPreview,
   CommandPreviewResult,
 } from '../../domain/contracts/commands';
-import type { FinanceReadModel } from '../../domain/contracts/repository';
+import type { FinanceReadModel, ScopedRepository } from '../../domain/contracts/repository';
 import { requireCommandContext, type CommandContext } from './context';
 import { dispatchApply } from './handlers';
+import { checkScopeBinding } from './scope-check';
 import { validateFinanceCommand } from './validation';
 
 const PREVIEW_OPERATION_ID: OperationId = makeOrThrow('p03-preview');
@@ -50,11 +51,18 @@ function previewContext(context: CommandContext): CommandContext {
 }
 
 export function previewCommand(
-  readModel: FinanceReadModel,
+  readModel: FinanceReadModel & ScopedRepository,
   rawCommand: unknown,
   context: CommandContext,
 ): CommandPreviewResult {
   requireCommandContext(context);
+
+  // The scope binding is verified before any read: a mismatched origin
+  // cannot observe bound state, let alone preview against it.
+  const binding = checkScopeBinding(readModel, context.origin);
+  if (!binding.ok) {
+    return { ok: false, failure: binding.failure };
+  }
 
   const validation = validateFinanceCommand(rawCommand);
   if (!validation.ok) {

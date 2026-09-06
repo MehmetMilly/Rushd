@@ -53,9 +53,9 @@ export type ScopeIdFailure = { readonly reason: 'invalidId'; readonly provided: 
 
 export type ScopeIdResult<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly failure: ScopeIdFailure };
 
-/** Printable ASCII without whitespace. Scope IDs allow composed namespaces up to 220 characters. */
+/** Printable ASCII without whitespace. Scope IDs allow composed namespaces up to 240 characters. */
 const SCOPE_ID_PATTERN = /^[\x21-\x7e]{1,100}$/;
-const COMPOSED_SCOPE_ID_PATTERN = /^[\x21-\x7e]{1,220}$/;
+const COMPOSED_SCOPE_ID_PATTERN = /^[\x21-\x7e]{1,240}$/;
 
 function makeScopedId<T extends string>(value: unknown, pattern: RegExp, what: string): ScopeIdResult<T> {
   if (typeof value !== 'string') {
@@ -100,24 +100,106 @@ export type LocalPrincipal =
   | { readonly kind: 'account'; readonly accountId: AccountId; readonly deviceId: DeviceId };
 
 /**
- * Derives the storage namespace for one local principal. Guest and account
- * namespaces never overlap, and two devices never share a namespace, so the
- * same raw book/entity IDs in different scopes are unrelated records.
+ * Injective length-prefixed encoding for composite key components.
+ * Components may contain any printable non-whitespace ASCII — including
+ * `:` and `/` — because each component is framed as `<length>:<bytes>` and
+ * consumed by length, never by scanning for a separator. Distinct tuples
+ * therefore never encode to the same key.
+ *
+ * Wire form: parts joined by `/`, e.g. `5:guest1/8:device-01`.
  */
-export function repositoryScopeIdFor(principal: LocalPrincipal): RepositoryScopeId {
-  if (principal.kind === 'guest') {
-    return `scope:guest:${principal.guestKey}:${principal.deviceId}` as RepositoryScopeId;
-  }
-  return `scope:account:${principal.accountId}:${principal.deviceId}` as RepositoryScopeId;
+export function encodeKeyComponents(parts: readonly string[]): string {
+  return parts.map((part) => `${part.length}:${part}`).join('/');
 }
 
 /**
- * The server-side idempotency key across account and device boundaries:
- * `idemp:<accountId>:<operationId>`. The account half comes from the
- * authenticated session, never from a client payload.
+ * Decodes a length-prefixed component string. Returns null when the input
+ * is malformed (bad length, truncation, or trailing garbage), so a forged
+ * or corrupt key is rejected rather than guessed.
+ */
+export function decodeKeyComponents(value: string): readonly string[] | null {
+  const parts: string[] = [];
+  let rest = value;
+  while (rest.length > 0) {
+    const colon = rest.indexOf(':');
+    if (colon <= 0) return null;
+    const lengthText = rest.slice(0, colon);
+    if (!/^[0-9]+$/.test(lengthText)) return null;
+    const length = Number.parseInt(lengthText, 10);
+    if (!Number.isSafeInteger(length)) return null;
+    const start = colon + 1;
+    const end = start + length;
+    if (end > rest.length) return null;
+    parts.push(rest.slice(start, end));
+    rest = rest.slice(end);
+    if (rest.length > 0) {
+      if (!rest.startsWith('/')) return null;
+      rest = rest.slice(1);
+      if (rest.length === 0) return null;
+    }
+  }
+  return parts;
+}
+
+/**
+ * Derives the storage namespace for one local principal. Guest and account
+ * namespaces never overlap, and two devices never share a namespace, so the
+ * same raw book/entity IDs in different scopes are unrelated records.
+ *
+ * The encoding is injective: `scope:guest:<len-prefixed guestKey/deviceId>`
+ * can never equal the encoding of a different tuple, even when components
+ * contain separator characters.
+ */
+export function repositoryScopeIdFor(principal: LocalPrincipal): RepositoryScopeId {
+  if (principal.kind === 'guest') {
+    return `scope:guest:${encodeKeyComponents([principal.guestKey as string, principal.deviceId as string])}` as RepositoryScopeId;
+  }
+  return `scope:account:${encodeKeyComponents([principal.accountId as string, principal.deviceId as string])}` as RepositoryScopeId;
+}
+
+export type ParsedRepositoryScope =
+  | { readonly ok: true; readonly kind: 'guest'; readonly guestKey: string; readonly deviceId: string }
+  | { readonly ok: true; readonly kind: 'account'; readonly accountId: string; readonly deviceId: string }
+  | { readonly ok: false };
+
+/**
+ * Parses a scope ID back into its principal tuple. Adapters and the server
+ * use this to route storage; finance code must not parse business meaning
+ * out of it beyond routing.
+ */
+export function parseRepositoryScopeId(value: RepositoryScopeId): ParsedRepositoryScope {
+  const text = value as string;
+  const prefix = text.startsWith('scope:guest:') ? 'scope:guest:' : text.startsWith('scope:account:') ? 'scope:account:' : null;
+  if (prefix === null) return { ok: false };
+  const parts = decodeKeyComponents(text.slice(prefix.length));
+  if (parts === null || parts.length !== 2) return { ok: false };
+  if (prefix === 'scope:guest:') {
+    return { ok: true, kind: 'guest', guestKey: parts[0] as string, deviceId: parts[1] as string };
+  }
+  return { ok: true, kind: 'account', accountId: parts[0] as string, deviceId: parts[1] as string };
+}
+
+/**
+ * The server-side idempotency key across account and device boundaries. The
+ * account half comes from the authenticated session, never from a client
+ * payload. Length-prefixed framing keeps distinct (account, operation)
+ * tuples distinct even when either half contains `:`.
  */
 export function serverIdempotencyKeyFor(accountId: AccountId, operationId: OperationId): ServerIdempotencyKey {
-  return `idemp:${accountId}:${operationId}` as ServerIdempotencyKey;
+  return `idemp:${encodeKeyComponents([accountId as string, operationId as string])}` as ServerIdempotencyKey;
+}
+
+export type ParsedServerIdempotencyKey =
+  | { readonly ok: true; readonly accountId: string; readonly operationId: string }
+  | { readonly ok: false };
+
+/** Parses a server idempotency key back into its (account, operation) tuple. */
+export function parseServerIdempotencyKey(value: ServerIdempotencyKey): ParsedServerIdempotencyKey {
+  const text = value as string;
+  if (!text.startsWith('idemp:')) return { ok: false };
+  const parts = decodeKeyComponents(text.slice('idemp:'.length));
+  if (parts === null || parts.length !== 2) return { ok: false };
+  return { ok: true, accountId: parts[0] as string, operationId: parts[1] as string };
 }
 
 /**

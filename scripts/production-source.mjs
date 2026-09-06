@@ -33,6 +33,7 @@ export const ownedProductionFiles = Object.freeze([
     'src/application/commands/cycle-handlers.ts',
     'src/application/commands/preview.ts',
     'src/application/commands/execute.ts',
+    'src/application/commands/scope-check.ts',
     'src/application/commands/index.ts',
     'src/domain/primitives/currency.ts',
     'src/domain/primitives/money.ts',

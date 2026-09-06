@@ -27,12 +27,14 @@ import {
   makeAccountId,
   makeDeviceId,
   makeGuestKey,
+  parseRepositoryScopeId,
+  parseServerIdempotencyKey,
   repositoryScopeIdFor,
   serverIdempotencyKeyFor,
   validateLocalPrincipal,
 } from '../../src/domain/sync/scope';
-import { createDeterministicContext } from './support/deterministic-context';
 import { InMemoryFinanceRepository } from './support/in-memory-repository';
+import { makeScopedHarness } from './support/scoped-harness';
 
 function branded<T>(result: { ok: true; value: T } | { ok: false; failure: { detail: string } }): T {
   if (!result.ok) throw new Error(`invalid test id: ${result.failure.detail}`);
@@ -52,15 +54,11 @@ interface ScopeHarness {
 }
 
 function guestHarness(deviceId: string): ScopeHarness {
-  const repo = new InMemoryFinanceRepository();
-  const { context } = createDeterministicContext({ deviceId });
-  return { repo, context };
+  return makeScopedHarness({ deviceId });
 }
 
 function accountHarness(deviceId: string, accountId: string): ScopeHarness {
-  const repo = new InMemoryFinanceRepository();
-  const { context } = createDeterministicContext({ deviceId, accountId });
-  return { repo, context };
+  return makeScopedHarness({ deviceId, accountId });
 }
 
 const createBook = {
@@ -121,8 +119,8 @@ describe('identity scope separation', () => {
 
     // Server idempotency keys bind the session account, never a client payload.
     const key = serverIdempotencyKeyFor(accountId, op('op-1'));
-    expect(key as string).toBe(`idemp:${accountId as string}:${'op-1'}`);
-    expect((key as string).startsWith(`idemp:${accountId as string}:`)).toBe(true);
+    const parsedKey = parseServerIdempotencyKey(key);
+    expect(parsedKey).toEqual({ ok: true, accountId: accountId as string, operationId: 'op-1' });
   });
 
   it('rejects malformed principals at adapter boundaries', () => {
@@ -133,6 +131,41 @@ describe('identity scope separation', () => {
     expect(guest.ok).toBe(true);
     const account = validateLocalPrincipal({ kind: 'account', accountId: 'a', deviceId: 'd' });
     expect(account.ok).toBe(true);
+  });
+
+  it('never collides across separator-containing tuples (adversarial)', () => {
+    const device = (raw: string) => branded(makeDeviceId(raw));
+    const guest = (raw: string) => branded(makeGuestKey(raw));
+    const account = (raw: string) => branded(makeAccountId(raw));
+
+    // The classic collision: ('a:b', 'c') vs ('a', 'b:c') must differ.
+    const left = repositoryScopeIdFor({ kind: 'account', accountId: account('a:b'), deviceId: device('c') });
+    const right = repositoryScopeIdFor({ kind: 'account', accountId: account('a'), deviceId: device('b:c') });
+    expect(left as string).not.toBe(right as string);
+    expect(parseRepositoryScopeId(left)).toEqual({ ok: true, kind: 'account', accountId: 'a:b', deviceId: 'c' });
+    expect(parseRepositoryScopeId(right)).toEqual({ ok: true, kind: 'account', accountId: 'a', deviceId: 'b:c' });
+
+    // Guest tuples with separators and slashes round-trip exactly.
+    const guestScope = repositoryScopeIdFor({ kind: 'guest', guestKey: guest('g/x:y'), deviceId: device('d:1/2') });
+    expect(parseRepositoryScopeId(guestScope)).toEqual({ ok: true, kind: 'guest', guestKey: 'g/x:y', deviceId: 'd:1/2' });
+
+    // Guest and account namespaces can never overlap, even adversarially.
+    const guestAsAccount = repositoryScopeIdFor({ kind: 'guest', guestKey: guest('account'), deviceId: device('x') });
+    const realAccount = repositoryScopeIdFor({ kind: 'account', accountId: account('x'), deviceId: device('y') });
+    expect(guestAsAccount as string).not.toBe(realAccount as string);
+
+    // Server idempotency keys: ('a:b', 'c') vs ('a', 'b:c') must differ.
+    const keyLeft = serverIdempotencyKeyFor(account('a:b'), op('c'));
+    const keyRight = serverIdempotencyKeyFor(account('a'), op('b:c'));
+    expect(keyLeft as string).not.toBe(keyRight as string);
+    expect(parseServerIdempotencyKey(keyLeft)).toEqual({ ok: true, accountId: 'a:b', operationId: 'c' });
+    expect(parseServerIdempotencyKey(keyRight)).toEqual({ ok: true, accountId: 'a', operationId: 'b:c' });
+
+    // Malformed encodings are rejected, never guessed.
+    expect(parseRepositoryScopeId('scope:account:bogus' as never)).toEqual({ ok: false });
+    expect(parseRepositoryScopeId('scope:account:3:ab' as never)).toEqual({ ok: false });
+    expect(parseServerIdempotencyKey('idemp:2:a:extra' as never)).toEqual({ ok: false });
+    expect(parseServerIdempotencyKey('other:1:a/1:b' as never)).toEqual({ ok: false });
   });
 
   it('keeps the same raw book and entity IDs isolated across scopes', async () => {
@@ -214,5 +247,68 @@ describe('identity scope separation', () => {
     const clean = canonicalJson(inflow(100, '2026-09-10'));
     const forgedPayload = { ...inflow(100, '2026-09-10'), ownerId: 'account-1' };
     expect(stableDigest(`${canonicalJson(forgedPayload)}\n0`)).not.toBe(stableDigest(`${clean}\n0`));
+  });
+});
+
+describe('scope binding enforcement', () => {
+  it('rejects a mismatched origin before any read, replay, or mutation', async () => {
+    const owner = accountHarness('device-owner', 'account-owner');
+    const intruder = accountHarness('device-intruder', 'account-intruder');
+
+    const receipt = await run(owner, 'op-create', createBook);
+    expect(receipt.scopeId).toBe(owner.repo.boundScope);
+
+    const ownerBytes = owner.repo.snapshotBytes();
+
+    // Preview with the intruder origin against the bound book: scopeMismatch,
+    // proved before any bound state is observed.
+    const intruderPreview = previewCommand(owner.repo, inflow(5, '2026-09-10'), intruder.context);
+    expect(intruderPreview.ok).toBe(false);
+    if (!intruderPreview.ok) {
+      expect(intruderPreview.failure.kind).toBe('scopeMismatch');
+      if (intruderPreview.failure.kind === 'scopeMismatch') {
+        expect(intruderPreview.failure.expectedScope).toBe(owner.repo.boundScope);
+        expect(intruderPreview.failure.actualScope).toBe(intruder.repo.boundScope);
+      }
+    }
+
+    // Execution with the intruder origin: no mutation and no replay.
+    const intruderCommand = inflow(5, '2026-09-10');
+    const intruderExecute = await executeCommand(
+      owner.repo,
+      intruderCommand,
+      { operationId: op('op-intruder'), expectedRevision: 1, previewDigest: stableDigest(`${canonicalJson(intruderCommand)}\n1`) },
+      intruder.context,
+    );
+    expect(intruderExecute.ok).toBe(false);
+    if (!intruderExecute.ok) expect(intruderExecute.failure.kind).toBe('scopeMismatch');
+
+    // Replaying the owner's committed receipt through the intruder origin
+    // does not return the owner's receipt.
+    const replay = await executeCommand(
+      owner.repo,
+      createBook,
+      { operationId: op('op-create'), expectedRevision: 0, previewDigest: stableDigest(`${canonicalJson(createBook)}\n0`) },
+      intruder.context,
+    );
+    expect(replay.ok).toBe(false);
+    if (!replay.ok) expect(replay.failure.kind).toBe('scopeMismatch');
+
+    expect(owner.repo.snapshotBytes()).toBe(ownerBytes);
+    expect(owner.repo.getBookState(bookId)?.revision).toBe(1);
+  });
+
+  it('keeps reopened handles bound to their original scope', async () => {
+    const owner = accountHarness('device-owner', 'account-owner');
+    const intruder = accountHarness('device-intruder', 'account-intruder');
+    await run(owner, 'op-create', createBook);
+
+    const reopened = owner.repo.reopen();
+    expect(reopened.boundScope).toBe(owner.repo.boundScope);
+    expect(reopened.boundDevice).toBe(owner.repo.boundDevice);
+
+    const intruderAttempt = previewCommand(reopened, inflow(5, '2026-09-10'), intruder.context);
+    expect(intruderAttempt.ok).toBe(false);
+    if (!intruderAttempt.ok) expect(intruderAttempt.failure.kind).toBe('scopeMismatch');
   });
 });

@@ -171,20 +171,32 @@ describe('sign-out and cache-erasure safety', () => {
     expect(evaluateSignOutCache({ syncState: 'acknowledged', pendingOutboxCount: -1, unresolvedConflictCount: 0 }).kind).toBe('retainAndRetry');
   });
 
-  it('rejects erasure while outbox intent or conflicts are outstanding, even with full proof', () => {
+  it('allows the verified-export override for enumerated pending outbox/conflict intent', () => {
     const proof = {
       verifiedExport: { exportId: 'export-1', verifiedAtInstantMs: 5_000, recordCount: 42, schemaVersion: 1 },
       destructiveConfirmation: { acknowledgementPhrase: 'ERASE-LOCAL-ACCOUNT-CACHE', confirmed: true },
     } as const;
-    const blockedOutbox = authorizeCacheErasure({ syncState: 'pendingOutbox', pendingOutboxCount: 1, unresolvedConflictCount: 0 }, proof);
-    expect(blockedOutbox.ok).toBe(false);
-    expect(blockedOutbox.decision.kind).toBe('eraseBlocked');
-    const blockedConflict = authorizeCacheErasure({ syncState: 'unresolvedConflicts', pendingOutboxCount: 0, unresolvedConflictCount: 1 }, proof);
-    expect(blockedConflict.ok).toBe(false);
-    expect(blockedConflict.decision.kind).toBe('eraseBlocked');
+    // Master plan 778-784: the override is the allowed path while
+    // unacknowledged outbox or unresolved conflicts exist.
+    const overrideOutbox = authorizeCacheErasure({ syncState: 'pendingOutbox', pendingOutboxCount: 1, unresolvedConflictCount: 0 }, proof);
+    expect(overrideOutbox.ok).toBe(true);
+    expect(overrideOutbox.decision).toEqual({ kind: 'erased' });
+    const overrideConflict = authorizeCacheErasure({ syncState: 'unresolvedConflicts', pendingOutboxCount: 0, unresolvedConflictCount: 2 }, proof);
+    expect(overrideConflict.ok).toBe(true);
+    expect(overrideConflict.decision).toEqual({ kind: 'erased' });
+
+    // Unknown sync states stay blocked even with full proof: the override
+    // covers enumerated intent only.
     const blockedUnknown = authorizeCacheErasure({ syncState: 'offlineUnknown', pendingOutboxCount: 0, unresolvedConflictCount: 0 }, proof);
     expect(blockedUnknown.ok).toBe(false);
     expect(blockedUnknown.decision.kind).not.toBe('erased');
+    const blockedFailed = authorizeCacheErasure({ syncState: 'failedUnknown', pendingOutboxCount: 1, unresolvedConflictCount: 0 }, proof);
+    expect(blockedFailed.ok).toBe(false);
+    expect(blockedFailed.decision.kind).not.toBe('erased');
+    // Unknown counts stay blocked even with full proof.
+    const blockedCounts = authorizeCacheErasure({ syncState: 'pendingOutbox', pendingOutboxCount: -1, unresolvedConflictCount: 0 }, proof);
+    expect(blockedCounts.ok).toBe(false);
+    expect(blockedCounts.decision.kind).not.toBe('erased');
   });
 
   it('erases only with both a verified export and the exact destructive confirmation', () => {

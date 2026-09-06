@@ -215,11 +215,17 @@ these shapes.
 
 - **Identity scope**: `GuestKey`/`AccountId` on a `DeviceId`
   (`src/domain/sync/scope.ts`); the derived `RepositoryScopeId`
-  (`scope:guest:<key>:<device>` or `scope:account:<account>:<device>`)
-  namespaces one local principal's storage. The same raw book/entity IDs
+  (`scope:guest:` / `scope:account:` plus length-prefixed
+  `<length>:<bytes>` components, e.g. `scope:account:7:account-1/8:device-01`)
+  namespaces one local principal's storage, injectively: distinct tuples
+  never collide even when components contain separators, and parsers
+  recover the exact tuple. The same raw book/entity IDs
   in different scopes are unrelated records. Server idempotency keys are
-  `idemp:<accountId>:<operationId>`, stamped from the session, never from
-  client payloads. Finance commands carry no ownership fields.
+  `idemp:` plus length-prefixed `(accountId, operationId)`, stamped from
+  the session, never from client payloads. Finance commands carry no
+  ownership fields. Every repository handle binds its scope/device
+  immutably (`ScopedRepository`); mismatched caller origins fail with
+  `scopeMismatch` before any read, replay, or mutation.
 - **OperationRecord / CommandReceipt / OutboxEnvelope**: each now carries
   `schemaVersion: 1`, `scopeId`, `sourceDeviceId`, and one shared durable
   `enqueueSequence` assigned inside the committing transaction (tentative
@@ -229,14 +235,19 @@ these shapes.
   the next `BookState`.
 - **OutboxDeliveryState**: mutable transport metadata (attempts, last
   error, lease, acknowledgement, retry time) owned by the
-  adapter/transport. Pure helpers record attempts and acknowledge exactly
-  the intended operation; delivery changes can never rewrite canonical
-  history.
-- **SyncCursor / CheckpointRecord / PulledBatch**
+  adapter/transport and persisted transactionally per operation. Pure helpers
+  record attempts and acknowledge exactly the intended operation; delivery
+  changes can never rewrite canonical history. Delivery tentative/commit
+  failures roll back byte-identically with exactly-one retry.
+- **SyncCursor / CheckpointRecord / PulledBatch / PulledOperation**
   (`src/domain/sync/cursors.ts`): the cursor is opaque and compared by
-  equality only — no timestamp or lexical ordering. Batches apply
-  atomically with the checkpoint advance; stale bases reject explicitly
-  and replays are no-op successes.
+  equality only — no timestamp or lexical ordering. Pulled operations are
+  content envelopes (operation ID, provider sequence, scope, book, base and
+  resulting revision with exactly-one advancement, canonical digest,
+  schema version); batches carry an identity plus a recomputed content
+  digest. Application persists canonical pulled records together with the
+  checkpoint: stale bases reject, exact replays are no-op successes, and
+  changed content is an explicit `contentConflict` that advances nothing.
 - **TombstoneRecord** (`src/domain/sync/tombstones.ts`): scope, entity
   kind/ID, book, source operation, base revision, durable sequence, schema
   version. Retained until peer acknowledgement plus the retention window;
@@ -254,9 +265,10 @@ these shapes.
   acknowledgement.
 - **Sign-out/cache decisions** (`src/domain/sync/signout.ts`):
   retain-and-retry by default under pending/conflicting/offline/failed/
-  unknown state; erasure blocked while outbox intent or conflicts stand;
-  the only override carries both a verified export reference and the
-  literal `ERASE-LOCAL-ACCOUNT-CACHE` destructive confirmation.
+  unknown state; erasure blocked while outbox intent or conflicts stand
+  unless the verified-export plus `ERASE-LOCAL-ACCOUNT-CACHE` destructive
+  override is presented (master plan 778-784, P08-A2); missing/invalid
+  proof, unknown counts, and unknown sync states stay blocked.
 - **SyncProviderCapabilities** (`src/domain/sync/provider.ts`): the
   minimum every substitute provider must prove (server-stamped ownership,
   transactional validated writes, idempotency, ordered checkpoints,

@@ -2,6 +2,9 @@
  * Execute: atomically commit a confirmed command.
  *
  * Inside one repository transaction the executor:
+ * 0. verifies the caller origin against the repository's immutable scope
+ *    binding — a mismatch fails with `scopeMismatch` before any read,
+ *    replay, or mutation;
  * 1. checks the operation journal for the operation ID — the same ID with the
  *    same canonical payload returns the original committed receipt with no
  *    second effect, even if the caller still holds an old revision; the same
@@ -30,7 +33,8 @@ import {
   type OperationRecord,
   type OutboxEnvelope,
 } from '../../domain/contracts/commands';
-import type { TransactionalRepository } from '../../domain/contracts/repository';
+import type { ScopedRepository } from '../../domain/contracts/repository';
+import { checkScopeBinding } from './scope-check';
 import { requireCommandContext, type CommandContext } from './context';
 import { dispatchApply } from './handlers';
 import { validateFinanceCommand, validateOperationId } from './validation';
@@ -38,7 +42,7 @@ import { validateFinanceCommand, validateOperationId } from './validation';
 const DIGEST_PATTERN = /^[0-9a-f]{16}$/;
 
 export async function executeCommand(
-  repository: TransactionalRepository,
+  repository: ScopedRepository,
   rawCommand: unknown,
   confirmation: unknown,
   context: CommandContext,
@@ -70,6 +74,14 @@ export async function executeCommand(
         detail: 'confirmation.previewDigest does not bind the submitted command and expectedRevision',
       },
     };
+  }
+
+  // The scope binding is verified before the transaction opens: a
+  // mismatched origin can neither replay a bound receipt nor reach the
+  // journal, state, or outbox.
+  const binding = checkScopeBinding(repository, context.origin);
+  if (!binding.ok) {
+    return { ok: false, failure: binding.failure };
   }
 
   return repository.runTransaction((transaction) => {

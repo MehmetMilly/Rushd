@@ -1125,6 +1125,12 @@ export type CommandFailure =
       readonly actualRevision: number;
     }
   | { readonly kind: 'operationIdConflict'; readonly operationId: OperationId }
+  | {
+      readonly kind: 'scopeMismatch';
+      readonly expectedScope: RepositoryScopeId;
+      readonly actualScope: RepositoryScopeId;
+      readonly detail: string;
+    }
   | { readonly kind: 'noOpenCycle'; readonly bookId: BookId }
   | { readonly kind: 'cycleAlreadyOpen'; readonly bookId: BookId; readonly openCycleId: CycleId }
   | {
@@ -1316,6 +1322,8 @@ export function describeCommandFailure(failure: CommandFailure): string {
       return `revision conflict for ${failure.bookId}: expected ${failure.expectedRevision}, actual ${failure.actualRevision}`;
     case 'operationIdConflict':
       return `operation ${failure.operationId} was already used with different content`;
+    case 'scopeMismatch':
+      return `scope mismatch: repository is bound to ${failure.expectedScope}, caller presented ${failure.actualScope}: ${failure.detail}`;
     case 'noOpenCycle':
       return `book ${failure.bookId} has no open cycle`;
     case 'cycleAlreadyOpen':

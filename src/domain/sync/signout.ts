@@ -11,13 +11,15 @@
  *   retain-and-retry: the cache stays, and the caller gets an explicit retry
  *   path instead of a silent loss.
  * - Cache erasure is blocked while unacknowledged outbox items or unresolved
- *   conflicts exist.
- * - The only destructive override requires BOTH a verified export reference
- *   AND an explicit destructive confirmation. The request type carries both
- *   as structured values with a literal acknowledgement phrase, so an
- *   adapter or UI cannot bypass the gate with a boolean named `force`:
- *   `authorizeCacheErasure` validates unknown input at runtime and rejects
- *   anything that does not carry both proofs.
+ *   conflicts exist — unless the caller presents the destructive override:
+ *   both a verified export reference AND an explicit destructive
+ *   confirmation (master plan 778-784, P08-A2). The override is the
+ *   founder-approved emergency path; it never skips proof validation.
+ * - The request type carries both proofs as structured values with a
+ *   literal acknowledgement phrase, so an adapter or UI cannot bypass the
+ *   gate with a boolean named `force`: `authorizeCacheErasure` validates
+ *   unknown input at runtime and rejects anything that does not carry both
+ *   proofs, as well as unknown counts or unknown sync states.
  */
 
 export const SIGNOUT_SCHEMA_VERSION = 1 as const;
@@ -102,11 +104,15 @@ export function evaluateSignOutCache(assessment: SignOutAssessment): SignOutCach
 }
 
 /**
- * The only destructive override path. The request is validated from unknown
- * input: a `{ force: true }` object, a bare boolean, or a request missing
- * either proof is rejected with explicit issues and the cache is retained.
- * Even a fully proven request is blocked while outbox intent or conflicts
- * are outstanding.
+ * The destructive override path (master plan 778-784, P08-A2). The request
+ * is validated from unknown input: a `{ force: true }` object, a bare
+ * boolean, or a request missing either proof is rejected with explicit
+ * issues and the cache is retained. Unknown counts and unknown sync states
+ * (offline/failed) also stay blocked: the override covers enumerated
+ * pending outbox/conflict intent, never intent that cannot be enumerated.
+ * With valid proof and known state, the override authorizes erasure even
+ * while outbox intent or conflicts stand — the verified export is what
+ * preserves that intent.
  */
 export function authorizeCacheErasure(assessment: SignOutAssessment, request: unknown): CacheErasureAuthorization {
   const issues: string[] = [];
@@ -154,19 +160,20 @@ export function authorizeCacheErasure(assessment: SignOutAssessment, request: un
     };
   }
 
-  const baseline = evaluateSignOutCache(assessment);
-  const clean =
-    assessment.syncState === 'acknowledged' &&
-    assessment.pendingOutboxCount === 0 &&
-    assessment.unresolvedConflictCount === 0;
-  if (!clean) {
-    const blocked: SignOutCacheDecision =
-      baseline.kind === 'erased'
-        ? { kind: 'eraseBlocked', reason: 'unexpected erasure without override' }
-        : baseline.kind === 'retainAndRetry'
-          ? { kind: 'eraseBlocked', reason: baseline.reason }
-          : baseline;
-    return { ok: false, decision: blocked, issues: ['cache has outstanding or unknown sync intent'] };
+  const countsKnown =
+    Number.isSafeInteger(assessment.pendingOutboxCount) &&
+    assessment.pendingOutboxCount >= 0 &&
+    Number.isSafeInteger(assessment.unresolvedConflictCount) &&
+    assessment.unresolvedConflictCount >= 0;
+  if (!countsKnown) {
+    return { ok: false, decision: { kind: 'retainAndRetry', reason: 'pending intent cannot be enumerated; retain the cache and retry' }, issues: ['cache has unknown sync intent'] };
+  }
+  if (assessment.syncState === 'offlineUnknown' || assessment.syncState === 'failedUnknown') {
+    return {
+      ok: false,
+      decision: evaluateSignOutCache(assessment),
+      issues: ['sync state is unknown; the override covers enumerated intent only'],
+    };
   }
   return { ok: true, decision: { kind: 'erased' } };
 }

@@ -28,9 +28,11 @@ import {
 } from '../../src/application/commands';
 import type { CommandContext } from '../../src/application/commands/context';
 import { makeBookId, makeOperationId, type BookId, type OperationId } from '../../src/domain/contracts/identity';
+import { makeAccountId, makeDeviceId, repositoryScopeIdFor } from '../../src/domain/sync/scope';
 import { equalSyncCursors, makeSyncCursor } from '../../src/domain/sync/cursors';
 import { createDeterministicContext } from './support/deterministic-context';
 import { InMemoryFinanceRepository } from './support/in-memory-repository';
+import { makeScopedHarness } from './support/scoped-harness';
 
 function branded<T>(result: { ok: true; value: T } | { ok: false; failure: { detail: string } }): T {
   if (!result.ok) throw new Error(`invalid test id: ${result.failure.detail}`);
@@ -86,14 +88,19 @@ const OPEN_CYCLE = {
 
 describe('sync-facing record schema', () => {
   it('versions every record and binds scope, device, and durable order', async () => {
-    const repo = new InMemoryFinanceRepository();
-    const { context } = createDeterministicContext({ deviceId: 'device-rec', accountId: 'account-rec' });
+    const { repo, context } = makeScopedHarness({ deviceId: 'device-rec', accountId: 'account-rec' });
     await run(repo, context, 'op-create', CREATE_BOOK);
     const receipt = await run(repo, context, 'op-cycle', OPEN_CYCLE);
 
     expect(SYNC_RECORD_SCHEMA_VERSION).toBe(1);
     expect(receipt.schemaVersion).toBe(1);
-    expect(receipt.scopeId as string).toBe('scope:account:account-rec:device-rec');
+    expect(receipt.scopeId).toBe(
+      repositoryScopeIdFor({
+        kind: 'account',
+        accountId: branded(makeAccountId('account-rec')),
+        deviceId: branded(makeDeviceId('device-rec')),
+      }),
+    );
     expect(receipt.sourceDeviceId as string).toBe('device-rec');
     expect(receipt.enqueueSequence).toBeGreaterThan(0);
 

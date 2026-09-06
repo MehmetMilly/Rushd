@@ -13,12 +13,14 @@ import { makeBookId, makeOperationId } from '../../src/domain/contracts/identity
 import type { BookId, OperationId } from '../../src/domain/contracts/identity';
 import { makeDeviceId, makeGuestKey, repositoryScopeIdFor } from '../../src/domain/sync/scope';
 import {
-  dedupePulledOperations,
+  computePulledBatchDigest,
   isBatchAlreadyApplied,
   isNextBatchFor,
   makeReplicationStreamId,
   makeSyncCursor,
+  reconcilePulledOperations,
   type PulledBatch,
+  type PulledOperation,
   type ReplicationStreamId,
   type SyncCursor,
 } from '../../src/domain/sync/cursors';
@@ -56,11 +58,26 @@ function operationId(raw: string): OperationId {
 
 const opIdArb = fc.integer({ min: 1, max: 5 }).map((n) => `prop-op-${n}`);
 
+function envelopeFor(id: string, sequence: number): PulledOperation {
+  return {
+    operationId: operationId(id),
+    sequence,
+    scopeId,
+    bookId,
+    baseRevision: 1,
+    resultingRevision: 2,
+    canonicalDigest: `digest-for-${id}`,
+    schemaVersion: 1,
+  };
+}
+
 describe('sync delivery properties (bounded, seeded)', () => {
   it('delivers duplicate/reordered batches exactly once, first occurrence wins', () => {
     const property = fc.property(fc.array(opIdArb, { minLength: 1, maxLength: 12 }), (ids) => {
-      const operations = ids.map((id, index) => ({ operationId: id, sequence: index }));
-      const deduped = dedupePulledOperations(operations);
+      const operations = ids.map((id, index) => envelopeFor(id, index));
+      const reconciled = reconcilePulledOperations(operations);
+      expect(reconciled.ok).toBe(true);
+      if (!reconciled.ok) throw new Error('unreachable');
       // Independent oracle: unique IDs in first-occurrence order.
       const seen = new Set<string>();
       const expected: string[] = [];
@@ -70,9 +87,24 @@ describe('sync delivery properties (bounded, seeded)', () => {
           expected.push(id);
         }
       }
-      expect(deduped.map((operation) => operation.operationId)).toEqual(expected);
+      expect(reconciled.operations.map((operation) => operation.operationId as string)).toEqual(expected);
     });
     return fc.assert(property, { seed: SEED, numRuns: PROPERTY_RUNS });
+  });
+
+  it('turns same-ID/changed-digest duplicates into explicit conflicts', () => {
+    const property = fc.property(opIdArb, fc.string({ minLength: 1, maxLength: 8 }), (id, extra) => {
+      const first = envelopeFor(id, 0);
+      const changed = { ...envelopeFor(id, 1), canonicalDigest: `digest-for-${id}-${extra}` };
+      if (changed.canonicalDigest === first.canonicalDigest) return;
+      const reconciled = reconcilePulledOperations([first, changed]);
+      expect(reconciled.ok).toBe(false);
+      if (!reconciled.ok) {
+        expect(reconciled.conflict.operationId).toBe(id);
+        expect(reconciled.conflict.digests).toEqual([first.canonicalDigest, changed.canonicalDigest]);
+      }
+    });
+    return fc.assert(property, { seed: SEED + 4, numRuns: PROPERTY_RUNS });
   });
 
   it('keeps merge acknowledgement idempotent under duplicate and unknown acks', () => {
@@ -115,19 +147,25 @@ describe('sync delivery properties (bounded, seeded)', () => {
     const property = fc.property(
       fc.array(fc.integer({ min: 1, max: 4 }), { minLength: 0, maxLength: 5 }),
       fc.integer({ min: 0, max: 5 }),
-      (appliedSequences, candidateBase) => {
+      fc.boolean(),
+      (appliedSequences, candidateBase, digestMatches) => {
         const streamId = stream();
         const cursorFor = (n: number): SyncCursor => cursor(`cursor-prop-${n}`);
+        const storedCursor = appliedSequences.length === 0 ? null : cursorFor(Math.max(...appliedSequences));
         const stored = {
           schemaVersion: 1 as const,
           streamId,
-          cursor: appliedSequences.length === 0 ? null : cursorFor(Math.max(...appliedSequences)),
+          cursor: storedCursor,
+          batchDigest: storedCursor === null ? null : 'digest-stored',
         };
+        const operations: PulledOperation[] = [];
         const batch: PulledBatch = {
           schemaVersion: 1,
           streamId,
+          batchId: 'batch-prop',
+          batchDigest: digestMatches ? 'digest-stored' : computePulledBatchDigest(operations),
           baseCursor: candidateBase === 0 ? null : cursorFor(candidateBase),
-          operations: [],
+          operations,
           nextCursor: cursorFor(99),
         };
         const already = isBatchAlreadyApplied(stored, batch);
@@ -136,6 +174,12 @@ describe('sync delivery properties (bounded, seeded)', () => {
         expect(already && next).toBe(false);
         if (already) {
           expect(stored.cursor).not.toBeNull();
+          expect(stored.batchDigest).not.toBeNull();
+        }
+        // Exact replay requires the same cursor AND the same content digest:
+        // the same cursor with different content is not a replay.
+        if (stored.cursor !== null && batch.nextCursor === stored.cursor && batch.batchDigest !== stored.batchDigest) {
+          expect(already).toBe(false);
         }
         if (stored.cursor === null) {
           // Nothing applied: only the genesis batch (null base) is next; anything else is stale.

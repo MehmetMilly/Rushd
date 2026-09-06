@@ -18,7 +18,7 @@ import {
 } from '../../src/application/commands';
 import type { CommandContext } from '../../src/application/commands/context';
 import { makeBookId, makeOperationId, type BookId, type OperationId } from '../../src/domain/contracts/identity';
-import { makeReplicationStreamId, makeSyncCursor, type PulledBatch } from '../../src/domain/sync/cursors';
+import { computePulledBatchDigest, makeReplicationStreamId, makeSyncCursor, type PulledBatch } from '../../src/domain/sync/cursors';
 import { createDeterministicContext } from './support/deterministic-context';
 import { InMemoryCheckpointStore } from './support/in-memory-checkpoint-store';
 import { InMemoryFinanceRepository } from './support/in-memory-repository';
@@ -147,14 +147,34 @@ describe('uncertain commits', () => {
       expect(repo.getBookState(bookId)?.entries).toHaveLength(1);
     }
 
-    // Delivery boundary: attempts and errors mutate delivery state only.
+    // Delivery boundary: a tentative/commit failure records nothing, and
+    // exactly one retry persists the attempt while canonical history stays
+    // byte-identical.
     {
       const repo = new InMemoryFinanceRepository();
       const { context } = createDeterministicContext();
       await run(repo, context, 'op-create', CREATE_BOOK);
       await run(repo, context, 'op-cycle', OPEN_CYCLE);
       await run(repo, context, 'op-delivery', command);
-      expect(repo.snapshotBytes()).toBe(repo.snapshotBytes());
+      const deliveryOp = op('op-delivery');
+      expect(repo.getDeliveryState(deliveryOp)).toBeNull();
+
+      const before = repo.snapshotBytes();
+      repo.injectWriteFailure('putDeliveryState');
+      await expect(repo.updateDeliveryState(deliveryOp, { ok: false, error: 'timeout', nextRetryAtMs: 1_000 })).rejects.toThrow(
+        'injected adapter failure at putDeliveryState',
+      );
+      expect(repo.snapshotBytes()).toBe(before);
+      expect(repo.getDeliveryState(deliveryOp)).toBeNull();
+
+      const journalBefore = repo.getOperation(deliveryOp)?.canonicalCommand;
+      const recorded = await repo.updateDeliveryState(deliveryOp, { ok: false, error: 'timeout', nextRetryAtMs: 1_000 });
+      expect(recorded.attempts).toBe(1);
+      expect(recorded.lastError).toBe('timeout');
+      expect(repo.getOperation(deliveryOp)?.canonicalCommand).toBe(journalBefore);
+
+      const reacquired = repo.reopen();
+      expect(reacquired.getDeliveryState(deliveryOp)?.attempts).toBe(1);
     }
 
     // Checkpoint boundary: a failed pulled-batch apply leaves cursor and applied set unchanged.
@@ -163,11 +183,28 @@ describe('uncertain commits', () => {
       const streamMade = makeReplicationStreamId('stream-uncertain');
       const cursorMade = makeSyncCursor('cursor-u-1');
       if (!streamMade.ok || !cursorMade.ok) throw new Error('invalid test stream');
+      const repo = new InMemoryFinanceRepository();
+      const { context } = createDeterministicContext();
+      await run(repo, context, 'op-create', CREATE_BOOK);
+      await run(repo, context, 'op-cycle', OPEN_CYCLE);
+      const receipt = await run(repo, context, 'op-remote-u-1', command);
+      const envelope = {
+        operationId: receipt.operationId,
+        sequence: 1,
+        scopeId: receipt.scopeId,
+        bookId: receipt.bookId,
+        baseRevision: receipt.revisionBefore,
+        resultingRevision: receipt.revisionAfter,
+        canonicalDigest: receipt.canonicalDigest,
+        schemaVersion: 1 as const,
+      };
       const batch: PulledBatch = {
         schemaVersion: 1,
         streamId: streamMade.value,
+        batchId: 'batch-uncertain-1',
+        batchDigest: computePulledBatchDigest([envelope]),
         baseCursor: null,
-        operations: [{ operationId: 'remote-u-1', sequence: 1 }],
+        operations: [envelope],
         nextCursor: cursorMade.value,
       };
       const before = checkpoints.snapshotBytes();
@@ -175,6 +212,8 @@ describe('uncertain commits', () => {
       expect(checkpoints.applyBatch(batch)).toEqual({ ok: false, reason: 'injectedFailure' });
       expect(checkpoints.snapshotBytes()).toBe(before);
       expect(checkpoints.applyBatch(batch)).toEqual({ ok: true, replayed: false });
+      // The applied record carries the committed canonical digest.
+      expect(checkpoints.appliedOperations(streamMade.value)[0]?.canonicalDigest).toBe(receipt.canonicalDigest);
     }
   });
 });
