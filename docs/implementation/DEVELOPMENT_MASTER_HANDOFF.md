@@ -42,6 +42,8 @@ Use `ACTIVE_DELIVERY_PLAN.md` for the current commit, phase, available models, e
 
 The founder approved compacting this task and switching from Astra Medium to Sol High on 6 September. Preserve the existing role and product decisions; this is a model handoff, not a planning restart. P03 B is closed. Start by reading the active plan's next action, then prepare C against `P03_EXECUTION_PLAN.md`, especially the agreed Reality Check input basis. Check current worker availability before dispatch. No worker or monitor needs continuing for B, and no new C work has been launched.
 
+The founder subsequently reserved Astra for ambitious animations and selected design work too, including hands-on creation rather than consultation alone. Preserve the active plan's motion/design quality requirements; cheaper routine management is not permission to compromise the intended experience.
+
 Resume the next action recorded in `ACTIVE_DELIVERY_PLAN.md`. Before ending a substantial management turn, update current status, meaningful decisions, unresolved issues, and resource changes there. Put task-specific interfaces and acceptance mapping in the relevant execution plan.
 
 The founder wants the full approved feature set in roughly one month, not a reduced local alpha. Preserve the distinction between implementation progress and external beta/release evidence. Be candid when actual throughput or external dependencies threaten that target.
