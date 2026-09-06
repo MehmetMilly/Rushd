@@ -20,6 +20,7 @@ import {
 import type { CommandContext } from '../../src/application/commands/context';
 import { makeBookId, makeOperationId, type BookId, type OperationId } from '../../src/domain/contracts/identity';
 import { computePulledBatchDigest, makeReplicationStreamId, makeSyncCursor, type PulledBatch } from '../../src/domain/sync/cursors';
+import { makeDeviceId } from '../../src/domain/sync/scope';
 import { createDeterministicContext } from './support/deterministic-context';
 import { InMemoryCheckpointStore } from './support/in-memory-checkpoint-store';
 import { InMemoryFinanceRepository } from './support/in-memory-repository';
@@ -183,7 +184,7 @@ describe('uncertain commits', () => {
     {
       const repo = new InMemoryFinanceRepository();
       const { context } = createDeterministicContext();
-      const checkpoints = new InMemoryCheckpointStore({ boundScope: repo.boundScope });
+      const checkpoints = new InMemoryCheckpointStore({ adapter: repo });
       const finance = { adapter: repo, context };
       const streamMade = makeReplicationStreamId('stream-uncertain');
       const cursorMade = makeSyncCursor('cursor-u-1');
@@ -201,6 +202,8 @@ describe('uncertain commits', () => {
         resultingRevision: revision + 1,
         canonicalCommand: payload,
         canonicalDigest: stableDigest(payload),
+        sourceDeviceId: branded(makeDeviceId('source-device-remote')),
+        sourceEnqueueSequence: 11,
         schemaVersion: 1 as const,
       };
       const batch: PulledBatch = {
@@ -224,6 +227,9 @@ describe('uncertain commits', () => {
       // finance effect is real.
       expect(checkpoints.appliedOperations(streamMade.value)[0]?.canonicalCommand).toBe(payload);
       expect(repo.getOperation(op('op-remote-u-1'))?.canonicalCommand).toBe(payload);
+      expect(repo.getOperation(op('op-remote-u-1'))?.sourceDeviceId as string).toBe('source-device-remote');
+      expect(repo.getOperation(op('op-remote-u-1'))?.enqueueSequence).toBe(11);
+      expect(repo.listOutbox().filter((item) => (item.operationId as string) === 'op-remote-u-1')).toHaveLength(0);
     }
   });
 });

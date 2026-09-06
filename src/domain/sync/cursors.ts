@@ -15,17 +15,19 @@
  * Applying a pulled batch and advancing its checkpoint is atomic: a failed
  * apply leaves the stored cursor and the applied set unchanged, and replaying
  * the exact same batch (same identity and same content digest) is a no-op
- * success, never a second effect. The same cursor carrying changed
- * operations, or the same operation ID carrying changed canonical content,
- * is an explicit conflict: the cursor never advances past unverified
- * content.
+ * success, never a second effect. Finance effects, source-preserving
+ * operation records, and the checkpoint commit through one isolated
+ * boundary; concurrent successful work is never erased. The same cursor
+ * carrying changed operations, or the same operation ID carrying changed
+ * canonical content or provenance, is an explicit conflict: the cursor
+ * never advances past unverified content.
  */
 
 import { canonicalJson, stableDigest } from '../contracts/canonical';
 import { makeBookId, makeOperationId } from '../contracts/identity';
-import { makeRepositoryScopeId } from './scope';
+import { makeDeviceId, makeRepositoryScopeId } from './scope';
 import type { BookId, OperationId } from '../contracts/identity';
-import type { RepositoryScopeId } from './scope';
+import type { DeviceId, RepositoryScopeId } from './scope';
 
 declare const syncCursorBrand: unique symbol;
 declare const replicationStreamIdBrand: unique symbol;
@@ -83,9 +85,11 @@ export interface CheckpointRecord {
 /**
  * One content-bound replicated operation inside a pulled batch. The envelope
  * carries the complete immutable identity: scope, book, base and resulting
- * revision, the exact canonical command payload, and its digest. A short
- * digest alone is never identity: duplicate equality covers every immutable
- * field, and the receiver re-verifies that the digest matches the payload.
+ * revision, the exact canonical command payload, its digest, the source
+ * device, and the source's durable local enqueue identity. A short digest
+ * alone is never identity: duplicate equality covers every immutable field
+ * except the provider transport sequence, and the receiver re-verifies that
+ * the digest matches the payload.
  */
 export interface PulledOperation {
   readonly operationId: OperationId;
@@ -100,6 +104,16 @@ export interface PulledOperation {
   readonly canonicalCommand: string;
   /** Stable digest of `canonicalCommand`, bound at the source and re-verified by the receiver. */
   readonly canonicalDigest: string;
+  /**
+   * Device that originally authored the operation. Immutable provenance:
+   * never rewritten to the receiving device.
+   */
+  readonly sourceDeviceId: DeviceId;
+  /**
+   * Source repository's durable local enqueue identity. Separate from
+   * `sequence`, which is only the provider transport position.
+   */
+  readonly sourceEnqueueSequence: number;
   readonly schemaVersion: SyncCursorSchemaVersion;
 }
 
@@ -139,6 +153,8 @@ export function computePulledBatchDigest(operations: readonly PulledOperation[])
         schemaVersion: operation.schemaVersion,
         scopeId: operation.scopeId as string,
         sequence: operation.sequence,
+        sourceDeviceId: operation.sourceDeviceId as string,
+        sourceEnqueueSequence: operation.sourceEnqueueSequence,
       })),
     ),
   );
@@ -200,6 +216,12 @@ export function validatePulledBatchShape(batch: PulledBatch): PulledBatchShapeRe
     if (operation.canonicalDigest !== stableDigest(operation.canonicalCommand)) {
       return { ok: false, failure: { kind: 'invalidBatch', detail: 'pulled canonical digest does not match the canonical payload' } };
     }
+    if (!makeDeviceId(operation.sourceDeviceId).ok) {
+      return { ok: false, failure: { kind: 'invalidBatch', detail: 'every replicated operation needs a valid source device id' } };
+    }
+    if (!Number.isSafeInteger(operation.sourceEnqueueSequence) || operation.sourceEnqueueSequence < 1) {
+      return { ok: false, failure: { kind: 'invalidBatch', detail: 'every replicated operation needs a positive safe-integer source enqueue identity' } };
+    }
     if (operation.schemaVersion !== SYNC_CURSOR_SCHEMA_VERSION) {
       return { ok: false, failure: { kind: 'unsupportedSchema', schemaVersion: operation.schemaVersion } };
     }
@@ -221,7 +243,8 @@ export interface PulledContentConflict {
  * Exact duplicate equality over the complete immutable envelope. The
  * provider sequence is transport positioning, not identity: redelivery may
  * renumber it. Every other field — scope, book, base/result revisions,
- * exact canonical payload and digest, schema — must match.
+ * exact canonical payload and digest, source device, source enqueue
+ * identity, schema — must match.
  */
 export function pulledOperationsEqual(left: PulledOperation, right: PulledOperation): boolean {
   return (
@@ -232,6 +255,8 @@ export function pulledOperationsEqual(left: PulledOperation, right: PulledOperat
     left.resultingRevision === right.resultingRevision &&
     left.canonicalCommand === right.canonicalCommand &&
     left.canonicalDigest === right.canonicalDigest &&
+    (left.sourceDeviceId as string) === (right.sourceDeviceId as string) &&
+    left.sourceEnqueueSequence === right.sourceEnqueueSequence &&
     left.schemaVersion === right.schemaVersion
   );
 }
@@ -245,6 +270,8 @@ export function differingPulledFields(left: PulledOperation, right: PulledOperat
   if (left.resultingRevision !== right.resultingRevision) differing.push('resultingRevision');
   if (left.canonicalCommand !== right.canonicalCommand) differing.push('canonicalCommand');
   if (left.canonicalDigest !== right.canonicalDigest) differing.push('canonicalDigest');
+  if ((left.sourceDeviceId as string) !== (right.sourceDeviceId as string)) differing.push('sourceDeviceId');
+  if (left.sourceEnqueueSequence !== right.sourceEnqueueSequence) differing.push('sourceEnqueueSequence');
   if (left.schemaVersion !== right.schemaVersion) differing.push('schemaVersion');
   return differing;
 }

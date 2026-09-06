@@ -35,6 +35,8 @@ export const ownedProductionFiles = Object.freeze([
     'src/application/commands/execute.ts',
     'src/application/commands/scope-check.ts',
     'src/application/commands/index.ts',
+    'src/application/sync/apply-remote.ts',
+    'src/application/sync/index.ts',
     'src/domain/primitives/currency.ts',
     'src/domain/primitives/money.ts',
     'src/domain/primitives/civil-date.ts',

@@ -69,6 +69,8 @@ function envelopeFor(id: string, sequence: number): PulledOperation {
     resultingRevision: 2,
     canonicalCommand: payload,
     canonicalDigest: `digest-for-${id}`,
+    sourceDeviceId: branded(makeDeviceId('device-prop')),
+    sourceEnqueueSequence: 1,
     schemaVersion: 1,
   };
 }
@@ -106,7 +108,9 @@ describe('sync delivery properties (bounded, seeded)', () => {
             ? { ...envelopeFor(id, 1), canonicalDigest: `digest-for-${id}-${extra}`, canonicalCommand: `{"n":"${id}-${extra}"}` }
             : field === 1
               ? { ...envelopeFor(id, 1), baseRevision: 7, resultingRevision: 8 }
-              : { ...envelopeFor(id, 1), bookId: branded(makeBookId('book-prop-other')) };
+              : field === 2
+                ? { ...envelopeFor(id, 1), bookId: branded(makeBookId('book-prop-other')) }
+                : { ...envelopeFor(id, 1), sourceDeviceId: branded(makeDeviceId('device-other')), sourceEnqueueSequence: 9 };
         if (changed.canonicalDigest === first.canonicalDigest && field === 0 && extra === '') return;
         const reconciled = reconcilePulledOperations([first, changed]);
         expect(reconciled.ok).toBe(false);

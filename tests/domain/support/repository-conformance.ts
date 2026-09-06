@@ -75,8 +75,6 @@ export interface ConformanceAdapter extends ScopedRepository, FinanceReadModel {
   reopen(): ConformanceAdapter;
   /** Canonical bytes of everything committed, for byte-identical rollback proofs. */
   snapshotBytes(): string;
-  /** Test-adapter-specific restore of a snapshot; the checkpoint runner uses it for atomic finance rollback. */
-  restoreSnapshot(bytes: string): void;
 }
 
 export interface ConformanceCheckpointStore {
@@ -85,6 +83,12 @@ export interface ConformanceCheckpointStore {
   batchDigestFor(streamId: ReplicationStreamId): string | null;
   applyBatch(batch: PulledBatch, finance: { readonly adapter: ConformanceAdapter; readonly context: CommandContext }): Promise<ConformanceApplyResult>;
   injectApplyFailure(occurrences?: number): void;
+  /**
+   * Parks the next applyBatch after staging its first fresh remote write
+   * and before later writes/commit. The returned promise resolves once
+   * the apply is waiting on `gate`.
+   */
+  armApplyBarrier(gate: Promise<void>): Promise<void>;
   appliedOperations(streamId: ReplicationStreamId): readonly PulledOperation[];
   appliedOperationIds(streamId: ReplicationStreamId): readonly string[];
   snapshotBytes(): string;
@@ -100,7 +104,7 @@ export interface ConformanceScopeSpec {
 export interface ConformanceFixture {
   readonly name: string;
   createAdapter(scope?: ConformanceScopeSpec): ConformanceAdapter;
-  createCheckpointStore(scope?: ConformanceScopeSpec): ConformanceCheckpointStore;
+  createCheckpointStore(scope: ConformanceScopeSpec | undefined, adapter: ConformanceAdapter): ConformanceCheckpointStore;
 }
 
 function brandedBookId(raw: string): BookId {
@@ -159,6 +163,7 @@ interface Harness {
 }
 
 const DEFAULT_SPEC: ConformanceScopeSpec = { deviceId: 'test-device-0001' };
+const REMOTE_SOURCE_DEVICE = 'source-device-remote';
 
 const CREATE_BOOK = {
   kind: 'createBook',
@@ -203,7 +208,7 @@ async function previewAndExecute(harness: Harness, operationId: string, rawComma
 
 function seededHarness(fixture: ConformanceFixture, spec: ConformanceScopeSpec = DEFAULT_SPEC, stepMs?: number): Harness {
   const adapter = fixture.createAdapter(spec);
-  const checkpoints = fixture.createCheckpointStore(spec);
+  const checkpoints = fixture.createCheckpointStore(spec, adapter);
   const { context } = createDeterministicContext({
     deviceId: spec.deviceId,
     ...(spec.accountId !== undefined ? { accountId: spec.accountId } : {}),
@@ -234,6 +239,8 @@ function freshEnvelope(harness: Harness, operationId: string, command: Record<st
     resultingRevision: baseRevision + 1,
     canonicalCommand: payload,
     canonicalDigest: stableDigest(payload),
+    sourceDeviceId: brandedDeviceId(REMOTE_SOURCE_DEVICE),
+    sourceEnqueueSequence: 100 + sequence,
     schemaVersion: 1,
   };
 }
@@ -250,6 +257,8 @@ function pulledEnvelope(harness: Harness, operationId: string, sequence: number)
     resultingRevision: journal.receipt.revisionAfter,
     canonicalCommand: journal.canonicalCommand,
     canonicalDigest: journal.receipt.canonicalDigest,
+    sourceDeviceId: journal.sourceDeviceId,
+    sourceEnqueueSequence: journal.enqueueSequence,
     schemaVersion: 1,
   };
 }
@@ -340,6 +349,61 @@ export function runRepositoryConformanceSuite(fixture: ConformanceFixture): void
       expect(second.ok).toBe(false);
       if (!second.ok) expect(second.failure.kind).toBe('revisionConflict');
       expect(harness.adapter.getBookState(bookId)?.revision).toBe(revisionBefore + 1);
+    });
+
+    it('lets exactly one of two concurrent staged book writers commit', async () => {
+      const harness = seededHarness(fixture);
+      await seedBook(harness);
+      const revisionBefore = harness.adapter.getBookState(bookId)?.revision ?? 0;
+      const nameBefore = harness.adapter.getBookState(bookId)?.book.displayName;
+
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let parkedError: unknown = null;
+      const parked = harness.adapter
+        .runTransaction(async (transaction) => {
+          const state = transaction.getBookState(bookId);
+          if (state === null) throw new Error('book disappeared during test');
+          transaction.putBookState({
+            ...state,
+            revision: state.revision + 1,
+            book: { ...state.book, displayName: 'parked-writer' },
+          });
+          await gate;
+        })
+        .catch((error: unknown) => {
+          parkedError = error;
+        });
+
+      await harness.adapter.runTransaction((transaction) => {
+        const state = transaction.getBookState(bookId);
+        if (state === null) throw new Error('book disappeared during test');
+        transaction.putBookState({
+          ...state,
+          revision: state.revision + 1,
+          book: { ...state.book, displayName: 'first-committer' },
+        });
+      });
+      release();
+      await parked;
+      expect(parkedError).not.toBeNull();
+      expect(harness.adapter.getBookState(bookId)?.revision).toBe(revisionBefore + 1);
+      expect(harness.adapter.getBookState(bookId)?.book.displayName).toBe('first-committer');
+      expect(harness.adapter.getBookState(bookId)?.book.displayName).not.toBe(nameBefore);
+
+      await harness.adapter.runTransaction((transaction) => {
+        const state = transaction.getBookState(bookId);
+        if (state === null) throw new Error('book disappeared during test');
+        transaction.putBookState({
+          ...state,
+          revision: state.revision + 1,
+          book: { ...state.book, displayName: 'retry-writer' },
+        });
+      });
+      expect(harness.adapter.getBookState(bookId)?.book.displayName).toBe('retry-writer');
+      expect(harness.adapter.getBookState(bookId)?.revision).toBe(revisionBefore + 2);
     });
 
     it('commits state, operation, outbox intent, and durable sequence atomically', async () => {
@@ -629,6 +693,25 @@ export function runRepositoryConformanceSuite(fixture: ConformanceFixture): void
       expect(harness.adapter.snapshotBytes()).toBe(financeBytesBefore);
       expect(harness.checkpoints.cursorFor(stream)).toBe(brandedCursor('cursor-content-1'));
 
+      // Changed source provenance is an explicit conflict and must not move the cursor.
+      const changedProvenance: PulledOperation = {
+        ...envelope,
+        sequence: 9,
+        sourceDeviceId: brandedDeviceId('other-source-device'),
+        sourceEnqueueSequence: envelope.sourceEnqueueSequence + 7,
+      };
+      const provenanceBatch = pulledBatch(harness, stream, 'batch-content-provenance', brandedCursor('cursor-content-1'), [changedProvenance], brandedCursor('cursor-content-provenance'));
+      const provenanceResult = await harness.checkpoints.applyBatch(provenanceBatch, finance);
+      expect(provenanceResult.ok).toBe(false);
+      if (!provenanceResult.ok && provenanceResult.reason === 'contentConflict') {
+        expect(provenanceResult.conflict.differingFields).toEqual(expect.arrayContaining(['sourceDeviceId', 'sourceEnqueueSequence']));
+      } else {
+        throw new Error(`expected contentConflict for changed provenance, got ${JSON.stringify(provenanceResult)}`);
+      }
+      expect(harness.checkpoints.snapshotBytes()).toBe(bytesBefore);
+      expect(harness.adapter.snapshotBytes()).toBe(financeBytesBefore);
+      expect(harness.checkpoints.cursorFor(stream)).toBe(brandedCursor('cursor-content-1'));
+
       // A tampered digest (payload/digest mismatch) is invalid, never applied.
       const tampered: PulledOperation = { ...envelope, canonicalDigest: 'tampered-digest-value' };
       const tamperedDirect: PulledBatch = {
@@ -779,6 +862,16 @@ export function runRepositoryConformanceSuite(fixture: ConformanceFixture): void
       );
       expect(harness.adapter.getBookState(bookId)?.revision).toBe(revisionBefore + 2);
       expect(harness.adapter.getBookState(bookId)?.entries.filter((entry) => entry.note.startsWith('pull-'))).toHaveLength(2);
+      const remoteJournal = harness.adapter.getOperation(brandedOperationId('op-pull-1'));
+      expect(remoteJournal?.sourceDeviceId as string).toBe(REMOTE_SOURCE_DEVICE);
+      expect(remoteJournal?.enqueueSequence).toBe(101);
+      expect(remoteJournal?.sourceDeviceId as string).not.toBe(harness.adapter.boundDevice as string);
+      expect(harness.adapter.listOutbox().filter((envelope) => (envelope.operationId as string).startsWith('op-pull-'))).toHaveLength(0);
+
+      const replayedExact = await harness.checkpoints.applyBatch(batch, finance);
+      expect(replayedExact).toEqual({ ok: true, replayed: true });
+      expect(harness.adapter.getBookState(bookId)?.entries.filter((entry) => entry.note.startsWith('pull-'))).toHaveLength(2);
+      expect(harness.adapter.listOutbox().filter((envelope) => (envelope.operationId as string).startsWith('op-pull-'))).toHaveLength(0);
 
       // A batch on a stale base is rejected with finance and checkpoint unchanged.
       const stale = pulledBatch(harness, stream, 'batch-atomic-2', null, [
@@ -897,6 +990,87 @@ export function runRepositoryConformanceSuite(fixture: ConformanceFixture): void
       const retried = await harness.adapter.updateDeliveryState(operationId, { ok: true });
       expect(retried.attempts).toBe(4);
       expect(retried.lastError).toBeNull();
+    });
+
+    it('rejects a mixed late-write conflict without committing earlier book changes', async () => {
+      const harness = seededHarness(fixture);
+      await seedBook(harness);
+      await previewAndExecute(harness, 'op-mixed', inflowCommand(1_200, '2026-09-28', 'mixed'));
+      const operationId = brandedOperationId('op-mixed');
+      await harness.adapter.updateDeliveryState(operationId, { ok: false, error: 'seed', nextRetryAtMs: 1 });
+      const nameBefore = harness.adapter.getBookState(bookId)?.book.displayName;
+      const revisionBefore = harness.adapter.getBookState(bookId)?.revision ?? 0;
+      const deliveryBefore = harness.adapter.getDeliveryState(operationId)?.attempts;
+
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let parkedError: unknown = null;
+      const parked = harness.adapter
+        .runTransaction(async (transaction) => {
+          const state = transaction.getBookState(bookId);
+          if (state === null) throw new Error('book disappeared during test');
+          transaction.putBookState({
+            ...state,
+            revision: state.revision + 1,
+            book: { ...state.book, displayName: 'partial-commit' },
+          });
+          const current = transaction.getDeliveryState(operationId);
+          if (current === null) throw new Error('delivery disappeared during test');
+          transaction.putDeliveryState(recordDeliveryAttempt(current, { ok: true }));
+          await gate;
+        })
+        .catch((error: unknown) => {
+          parkedError = error;
+        });
+
+      const winner = await harness.adapter.updateDeliveryState(operationId, { ok: false, error: 'concurrent', nextRetryAtMs: 2 });
+      expect(winner.attempts).toBe((deliveryBefore ?? 0) + 1);
+      release();
+      await parked;
+      expect(parkedError).not.toBeNull();
+      expect(harness.adapter.getBookState(bookId)?.book.displayName).toBe(nameBefore);
+      expect(harness.adapter.getBookState(bookId)?.revision).toBe(revisionBefore);
+      expect(harness.adapter.getDeliveryState(operationId)?.attempts).toBe(winner.attempts);
+    });
+
+    it('preserves concurrent delivery when a pulled batch rolls back', async () => {
+      const harness = seededHarness(fixture);
+      await seedBook(harness);
+      await previewAndExecute(harness, 'op-local-delivery', inflowCommand(400, '2026-09-25', 'local'));
+      const localId = brandedOperationId('op-local-delivery');
+      const revision = harness.adapter.getBookState(bookId)?.revision ?? 0;
+      const finance = { adapter: harness.adapter, context: harness.context };
+      const stream = brandedStream('stream-pull-race');
+      const failing = pulledBatch(
+        harness,
+        stream,
+        'batch-pull-race',
+        null,
+        [
+          freshEnvelope(harness, 'op-pull-race-1', inflowCommand(700, '2026-09-28', 'pull-race-1'), 1, revision),
+          freshEnvelope(harness, 'op-pull-race-2', inflowCommand(800, '2026-09-29', 'pull-race-2'), 2, 99),
+        ],
+        brandedCursor('cursor-pull-race'),
+      );
+
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const parked = harness.checkpoints.armApplyBarrier(gate);
+      const pull = harness.checkpoints.applyBatch(failing, finance);
+      await parked;
+      const recorded = await harness.adapter.updateDeliveryState(localId, { ok: false, error: 'timeout', nextRetryAtMs: 1_000 });
+      expect(recorded.attempts).toBe(1);
+      release();
+      const result = await pull;
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.reason).toBe('applyFailed');
+      expect(harness.adapter.getDeliveryState(localId)?.attempts).toBe(1);
+      expect(harness.adapter.getOperation(brandedOperationId('op-pull-race-1'))).toBeNull();
+      expect(harness.checkpoints.cursorFor(stream)).toBeNull();
     });
 
     it('orders fixed-clock commits by durable sequence only', async () => {

@@ -11,9 +11,15 @@
  *   through a snapshot into repository internals.
  * - A `putBookState` fails when the committed book changed since this
  *   transaction first read it (first-committer-wins), and when the written
- *   revision is not exactly the read revision + 1.
- * - Any exception abandons the overlay: state, journal, and outbox are
- *   exactly as before.
+ *   revision is not exactly the read revision + 1. Every other
+ *   read-dependent write (operation uniqueness, outbox uniqueness,
+ *   delivery versions, enqueue counter, checkpoints) is rechecked at
+ *   commit before any committed store is mutated; the full delta then
+ *   applies by clone-and-swap.
+ * - Any exception abandons the overlay: state, journal, outbox, delivery,
+ *   and checkpoints are exactly as before. Commit failures never leave a
+ *   partial delta behind and never restore a whole-adapter snapshot over
+ *   concurrent successful work.
  * - `injectWriteFailure` simulates a crash between tentative writes.
  *
  * This proves protocol behavior in one process. It is NOT evidence of
@@ -31,6 +37,11 @@ import { initialOutboxDelivery, recordDeliveryAttempt } from '../../../src/domai
 import { canonicalJson } from '../../../src/domain/contracts/canonical';
 import type { BookState } from '../../../src/domain/contracts/ledger';
 import { makeDeviceId, makeGuestKey, repositoryScopeIdFor, type DeviceId, type RepositoryScopeId } from '../../../src/domain/sync/scope';
+import {
+  type PulledOperation,
+  type ReplicationStreamId,
+  type SyncCursor,
+} from '../../../src/domain/sync/cursors';
 import { DEFAULT_DEVICE_ID, DEFAULT_GUEST_KEY } from './deterministic-context';
 import type { BookId, EntryId, GoalId, ObligationId, ObservationId, OccurrenceId, OperationId, PlanId, SettlementId } from '../../../src/domain/contracts/identity';
 import type {
@@ -50,6 +61,12 @@ export class ConcurrencyConflictError extends Error {}
 
 export type WriteMethodName = 'putBookState' | 'putOperation' | 'putOutboxEntry' | 'putDeliveryState';
 
+export interface CheckpointStreamState {
+  cursor: SyncCursor | null;
+  batchDigest: string | null;
+  applied: Map<string, PulledOperation>;
+}
+
 interface CommittedStore {
   books: Map<string, BookState>;
   operations: Map<string, OperationRecord>;
@@ -58,6 +75,8 @@ interface CommittedStore {
   delivery: Map<string, OutboxDeliveryState>;
   /** Durable local enqueue counter, finalized atomically at commit; aborted transactions leave it untouched. */
   enqueueSequence: number;
+  /** Pull checkpoints committed atomically with finance effects in the same store. */
+  checkpoints: Map<string, CheckpointStreamState>;
   entryIndex: Map<string, EntryLocation>;
   obligationIndex: Map<string, ObligationLocation>;
   goalIndex: Map<string, GoalLocation>;
@@ -74,6 +93,7 @@ function createCommittedStore(): CommittedStore {
     outbox: [],
     delivery: new Map(),
     enqueueSequence: 0,
+    checkpoints: new Map(),
     entryIndex: new Map(),
     obligationIndex: new Map(),
     goalIndex: new Map(),
@@ -103,6 +123,61 @@ function deepFreeze<T>(value: T): T {
 /** A defensively cloned, deeply frozen copy: safe to hand to any caller. */
 function frozenCopy<T>(value: T): T {
   return deepFreeze(cloneValue(value));
+}
+
+function cloneCheckpoints(source: Map<string, CheckpointStreamState>): Map<string, CheckpointStreamState> {
+  const next = new Map<string, CheckpointStreamState>();
+  for (const [streamId, state] of source) {
+    next.set(streamId, {
+      cursor: state.cursor,
+      batchDigest: state.batchDigest,
+      applied: new Map(state.applied),
+    });
+  }
+  return next;
+}
+
+function buildIndexes(books: Map<string, BookState>): Pick<
+  CommittedStore,
+  | 'entryIndex'
+  | 'obligationIndex'
+  | 'goalIndex'
+  | 'observationIndex'
+  | 'planIndex'
+  | 'occurrenceIndex'
+  | 'settlementIndex'
+> {
+  const entryIndex = new Map<string, EntryLocation>();
+  const obligationIndex = new Map<string, ObligationLocation>();
+  const goalIndex = new Map<string, GoalLocation>();
+  const observationIndex = new Map<string, ObservationLocation>();
+  const planIndex = new Map<string, PlanLocation>();
+  const occurrenceIndex = new Map<string, OccurrenceLocation>();
+  const settlementIndex = new Map<string, SettlementLocation>();
+  for (const state of books.values()) {
+    for (const entry of state.entries) {
+      entryIndex.set(entry.entryId, { bookId: entry.bookId, entryId: entry.entryId, kind: entry.kind });
+    }
+    for (const obligation of state.obligations) {
+      obligationIndex.set(obligation.obligationId, { bookId: obligation.bookId, obligationId: obligation.obligationId });
+    }
+    for (const goal of state.goals) {
+      goalIndex.set(goal.goalId, { bookId: goal.bookId, goalId: goal.goalId });
+    }
+    for (const observation of state.observations) {
+      observationIndex.set(observation.observationId, { bookId: observation.bookId, observationId: observation.observationId });
+    }
+    for (const plan of state.plans) {
+      planIndex.set(plan.planId, { bookId: plan.bookId, planId: plan.planId });
+    }
+    for (const occurrence of state.planOccurrences) {
+      occurrenceIndex.set(occurrence.occurrenceId, { bookId: occurrence.bookId, occurrenceId: occurrence.occurrenceId });
+    }
+    for (const settlement of state.settlements) {
+      settlementIndex.set(settlement.settlementId, { bookId: settlement.bookId, settlementId: settlement.settlementId });
+    }
+  }
+  return { entryIndex, obligationIndex, goalIndex, observationIndex, planIndex, occurrenceIndex, settlementIndex };
 }
 
 /** Construction options for the reference adapter. The scope/device binding is immutable per handle. */
@@ -226,71 +301,29 @@ export class InMemoryFinanceRepository implements TransactionalRepository, Finan
   }
 
   /**
-   * Test-adapter-specific restore of a `snapshotBytes()` snapshot. The
-   * checkpoint store uses it to roll back finance effects when a pulled
-   * batch fails midway, proving atomic finance-plus-checkpoint
-   * application. P04 implements the same boundary as a real database
-   * transaction instead of snapshot/restore.
+   * Committed checkpoint stream, if any. The checkpoint store reads this
+   * outside a transaction; writes go through the same commit delta as finance.
    */
-  restoreSnapshot(bytes: string): void {
-    const snapshot = JSON.parse(bytes) as {
-      books: BookState[];
-      operations: OperationRecord[];
-      outbox: OutboxEnvelope[];
-      delivery: OutboxDeliveryState[];
-      enqueueSequence: number;
+  committedCheckpoint(streamId: ReplicationStreamId): CheckpointStreamState | null {
+    const state = this.store.checkpoints.get(streamId as string);
+    if (state === undefined) return null;
+    return {
+      cursor: state.cursor,
+      batchDigest: state.batchDigest,
+      applied: new Map(state.applied),
     };
-    if (!Array.isArray(snapshot.books) || !Array.isArray(snapshot.operations) || !Array.isArray(snapshot.outbox)) {
-      throw new Error('refusing to restore a malformed finance snapshot');
-    }
-    if (!Number.isSafeInteger(snapshot.enqueueSequence) || snapshot.enqueueSequence < 0) {
-      throw new Error('refusing to restore a finance snapshot with an invalid sequence counter');
-    }
-    this.store.books.clear();
-    for (const state of snapshot.books) {
-      this.store.books.set(state.book.id, cloneValue(state));
-    }
-    this.store.operations.clear();
-    for (const record of snapshot.operations) {
-      this.store.operations.set(record.operationId, cloneValue(record));
-    }
-    this.store.outbox.length = 0;
-    this.store.outbox.push(...snapshot.outbox.map((envelope) => cloneValue(envelope)));
-    this.store.delivery.clear();
-    for (const delivery of snapshot.delivery ?? []) {
-      this.store.delivery.set(delivery.operationId as string, cloneValue(delivery));
-    }
-    this.store.enqueueSequence = snapshot.enqueueSequence;
-    this.store.entryIndex.clear();
-    this.store.obligationIndex.clear();
-    this.store.goalIndex.clear();
-    this.store.observationIndex.clear();
-    this.store.planIndex.clear();
-    this.store.occurrenceIndex.clear();
-    this.store.settlementIndex.clear();
-    for (const state of this.store.books.values()) {
-      for (const entry of state.entries) {
-        this.store.entryIndex.set(entry.entryId, { bookId: entry.bookId, entryId: entry.entryId, kind: entry.kind });
-      }
-      for (const obligation of state.obligations) {
-        this.store.obligationIndex.set(obligation.obligationId, { bookId: obligation.bookId, obligationId: obligation.obligationId });
-      }
-      for (const goal of state.goals) {
-        this.store.goalIndex.set(goal.goalId, { bookId: goal.bookId, goalId: goal.goalId });
-      }
-      for (const observation of state.observations) {
-        this.store.observationIndex.set(observation.observationId, { bookId: observation.bookId, observationId: observation.observationId });
-      }
-      for (const plan of state.plans) {
-        this.store.planIndex.set(plan.planId, { bookId: plan.bookId, planId: plan.planId });
-      }
-      for (const occurrence of state.planOccurrences) {
-        this.store.occurrenceIndex.set(occurrence.occurrenceId, { bookId: occurrence.bookId, occurrenceId: occurrence.occurrenceId });
-      }
-      for (const settlement of state.settlements) {
-        this.store.settlementIndex.set(settlement.settlementId, { bookId: settlement.bookId, settlementId: settlement.settlementId });
-      }
-    }
+  }
+
+  checkpointSnapshotBytes(): string {
+    const streams = [...this.store.checkpoints.entries()]
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+      .map(([streamId, state]) => ({
+        streamId,
+        cursor: state.cursor,
+        batchDigest: state.batchDigest,
+        applied: [...state.applied.values()],
+      }));
+    return canonicalJson({ scopeId: this.boundScope as string, streams });
   }
 
   /** Test-adapter-specific accessor to persisted delivery metadata. */
@@ -337,7 +370,12 @@ export class InMemoryFinanceRepository implements TransactionalRepository, Finan
       transaction.abandon();
       throw error;
     }
-    transaction.commit();
+    try {
+      transaction.commit();
+    } catch (error) {
+      transaction.abandon();
+      throw error;
+    }
     return result;
   }
 
@@ -362,13 +400,15 @@ export class InMemoryFinanceRepository implements TransactionalRepository, Finan
   }
 }
 
-class InMemoryTransaction implements RepositoryTransaction {
+export class InMemoryTransaction implements RepositoryTransaction {
   private readonly bookWrites = new Map<string, BookState>();
   private readonly operationWrites = new Map<string, OperationRecord>();
   private readonly outboxWrites: OutboxEnvelope[] = [];
   private readonly deliveryWrites = new Map<string, OutboxDeliveryState>();
   private readonly deliveryVersionAtRead = new Map<string, number | null>();
   private readonly bookRevisionAtRead = new Map<string, number>();
+  private readonly checkpointWrites = new Map<string, CheckpointStreamState>();
+  private readonly checkpointCursorAtRead = new Map<string, SyncCursor | null>();
   private sequenceBase: number | null = null;
   private sequencesAllocated = 0;
   private active = true;
@@ -492,15 +532,15 @@ class InMemoryTransaction implements RepositoryTransaction {
     if (readRevision === undefined) {
       throw new ConcurrencyConflictError(`book ${next.book.id} must be read before it is written in a transaction`);
     }
-    const committedRevision = this.store.books.get(next.book.id)?.revision ?? 0;
-    if (committedRevision !== readRevision) {
+    const visibleRevision = this.bookWrites.get(next.book.id)?.revision ?? this.store.books.get(next.book.id)?.revision ?? 0;
+    if (visibleRevision !== readRevision && this.bookWrites.get(next.book.id) === undefined) {
       throw new ConcurrencyConflictError(
-        `book ${next.book.id} changed during the transaction: read revision ${readRevision}, committed ${committedRevision}`,
+        `book ${next.book.id} changed during the transaction: read revision ${readRevision}, committed ${visibleRevision}`,
       );
     }
-    if (next.revision !== readRevision + 1) {
+    if (next.revision !== visibleRevision + 1) {
       throw new ConcurrencyConflictError(
-        `book ${next.book.id} revision must advance by exactly one: read ${readRevision}, wrote ${next.revision}`,
+        `book ${next.book.id} revision must advance by exactly one: read ${visibleRevision}, wrote ${next.revision}`,
       );
     }
     this.bookWrites.set(next.book.id, cloneValue(next));
@@ -521,6 +561,16 @@ class InMemoryTransaction implements RepositoryTransaction {
     this.assertActive();
     if (this.takeInjectedFailure('putOutboxEntry')) {
       throw new Error(`injected adapter failure at putOutboxEntry (envelope ${envelope.outboxId})`);
+    }
+    const operationId = envelope.operationId as string;
+    if (this.outboxWrites.some((existing) => existing.outboxId === envelope.outboxId) || this.store.outbox.some((existing) => existing.outboxId === envelope.outboxId)) {
+      throw new ConcurrencyConflictError(`outbox ${envelope.outboxId} already exists`);
+    }
+    if (
+      this.outboxWrites.some((existing) => (existing.operationId as string) === operationId) ||
+      this.store.outbox.some((existing) => (existing.operationId as string) === operationId)
+    ) {
+      throw new ConcurrencyConflictError(`outbox for operation ${operationId} already exists`);
     }
     this.outboxWrites.push(cloneValue(envelope));
   }
@@ -578,24 +628,75 @@ class InMemoryTransaction implements RepositoryTransaction {
     return this.sequenceBase + this.sequencesAllocated;
   }
 
+  getStreamCheckpoint(streamId: ReplicationStreamId): CheckpointStreamState {
+    this.assertActive();
+    const key = streamId as string;
+    const staged = this.checkpointWrites.get(key);
+    if (staged !== undefined) {
+      return { cursor: staged.cursor, batchDigest: staged.batchDigest, applied: new Map(staged.applied) };
+    }
+    const committed = this.store.checkpoints.get(key);
+    if (!this.checkpointCursorAtRead.has(key)) {
+      this.checkpointCursorAtRead.set(key, committed?.cursor ?? null);
+    }
+    if (committed === undefined) {
+      return { cursor: null, batchDigest: null, applied: new Map() };
+    }
+    return { cursor: committed.cursor, batchDigest: committed.batchDigest, applied: new Map(committed.applied) };
+  }
+
+  putStreamCheckpoint(streamId: ReplicationStreamId, next: CheckpointStreamState): void {
+    this.assertActive();
+    const key = streamId as string;
+    if (!this.checkpointCursorAtRead.has(key)) {
+      throw new ConcurrencyConflictError(`checkpoint for ${key} must be read before it is written in a transaction`);
+    }
+    this.checkpointWrites.set(key, {
+      cursor: next.cursor,
+      batchDigest: next.batchDigest,
+      applied: new Map(next.applied),
+    });
+  }
+
   commit(): void {
     this.assertActive();
-    if (this.sequenceBase !== null) {
-      if (this.store.enqueueSequence !== this.sequenceBase) {
+    this.preflightCommitGuards();
+    this.swapCommittedDelta();
+    this.active = false;
+  }
+
+  private preflightCommitGuards(): void {
+    if (this.sequenceBase !== null && this.store.enqueueSequence !== this.sequenceBase) {
+      throw new ConcurrencyConflictError(
+        `enqueue sequence changed during the transaction: read ${this.sequenceBase}, committed ${this.store.enqueueSequence}`,
+      );
+    }
+    for (const bookId of this.bookWrites.keys()) {
+      const readRevision = this.bookRevisionAtRead.get(bookId);
+      if (readRevision === undefined) {
+        throw new ConcurrencyConflictError(`book ${bookId} must be read before it is written in a transaction`);
+      }
+      const committedRevision = this.store.books.get(bookId)?.revision ?? 0;
+      if (committedRevision !== readRevision) {
         throw new ConcurrencyConflictError(
-          `enqueue sequence changed during the transaction: read ${this.sequenceBase}, committed ${this.store.enqueueSequence}`,
+          `book ${bookId} changed during the transaction: read revision ${readRevision}, committed ${committedRevision}`,
         );
       }
-      this.store.enqueueSequence = this.sequenceBase + this.sequencesAllocated;
     }
-    for (const [bookId, state] of this.bookWrites) {
-      this.store.books.set(bookId, state);
+    for (const operationId of this.operationWrites.keys()) {
+      if (this.store.operations.has(operationId)) {
+        throw new ConcurrencyConflictError(`operation ${operationId} already exists`);
+      }
     }
-    for (const [operationId, record] of this.operationWrites) {
-      this.store.operations.set(operationId, record);
+    for (const envelope of this.outboxWrites) {
+      if (this.store.outbox.some((existing) => existing.outboxId === envelope.outboxId)) {
+        throw new ConcurrencyConflictError(`outbox ${envelope.outboxId} already exists`);
+      }
+      if (this.store.outbox.some((existing) => (existing.operationId as string) === (envelope.operationId as string))) {
+        throw new ConcurrencyConflictError(`outbox for operation ${envelope.operationId as string} already exists`);
+      }
     }
-    this.store.outbox.push(...this.outboxWrites);
-    for (const [operationId, delivery] of this.deliveryWrites) {
+    for (const [operationId] of this.deliveryWrites) {
       const readVersion = this.deliveryVersionAtRead.get(operationId);
       const committedVersion = this.store.delivery.get(operationId)?.version ?? null;
       if (committedVersion !== readVersion) {
@@ -603,32 +704,48 @@ class InMemoryTransaction implements RepositoryTransaction {
           `delivery for ${operationId} changed during the transaction: read ${String(readVersion)}, committed ${String(committedVersion)}`,
         );
       }
-      this.store.delivery.set(operationId, delivery);
     }
-    for (const state of this.bookWrites.values()) {
-      for (const entry of state.entries) {
-        this.store.entryIndex.set(entry.entryId, { bookId: entry.bookId, entryId: entry.entryId, kind: entry.kind });
-      }
-      for (const obligation of state.obligations) {
-        this.store.obligationIndex.set(obligation.obligationId, { bookId: obligation.bookId, obligationId: obligation.obligationId });
-      }
-      for (const goal of state.goals) {
-        this.store.goalIndex.set(goal.goalId, { bookId: goal.bookId, goalId: goal.goalId });
-      }
-      for (const observation of state.observations) {
-        this.store.observationIndex.set(observation.observationId, { bookId: observation.bookId, observationId: observation.observationId });
-      }
-      for (const plan of state.plans) {
-        this.store.planIndex.set(plan.planId, { bookId: plan.bookId, planId: plan.planId });
-      }
-      for (const occurrence of state.planOccurrences) {
-        this.store.occurrenceIndex.set(occurrence.occurrenceId, { bookId: occurrence.bookId, occurrenceId: occurrence.occurrenceId });
-      }
-      for (const settlement of state.settlements) {
-        this.store.settlementIndex.set(settlement.settlementId, { bookId: settlement.bookId, settlementId: settlement.settlementId });
+    for (const streamId of this.checkpointWrites.keys()) {
+      const readCursor = this.checkpointCursorAtRead.get(streamId) ?? null;
+      const committedCursor = this.store.checkpoints.get(streamId)?.cursor ?? null;
+      if (committedCursor !== readCursor) {
+        throw new ConcurrencyConflictError(`checkpoint for ${streamId} changed during the transaction`);
       }
     }
-    this.active = false;
+  }
+
+  private swapCommittedDelta(): void {
+    const nextBooks = new Map(this.store.books);
+    for (const [bookId, state] of this.bookWrites) nextBooks.set(bookId, state);
+    const nextOperations = new Map(this.store.operations);
+    for (const [operationId, record] of this.operationWrites) nextOperations.set(operationId, record);
+    const nextOutbox = [...this.store.outbox, ...this.outboxWrites];
+    const nextDelivery = new Map(this.store.delivery);
+    for (const [operationId, delivery] of this.deliveryWrites) nextDelivery.set(operationId, delivery);
+    const nextCheckpoints = cloneCheckpoints(this.store.checkpoints);
+    for (const [streamId, state] of this.checkpointWrites) {
+      nextCheckpoints.set(streamId, {
+        cursor: state.cursor,
+        batchDigest: state.batchDigest,
+        applied: new Map(state.applied),
+      });
+    }
+    const nextEnqueue = this.sequenceBase !== null ? this.sequenceBase + this.sequencesAllocated : this.store.enqueueSequence;
+    const indexes = buildIndexes(nextBooks);
+
+    this.store.books = nextBooks;
+    this.store.operations = nextOperations;
+    this.store.outbox = nextOutbox;
+    this.store.delivery = nextDelivery;
+    this.store.checkpoints = nextCheckpoints;
+    this.store.enqueueSequence = nextEnqueue;
+    this.store.entryIndex = indexes.entryIndex;
+    this.store.obligationIndex = indexes.obligationIndex;
+    this.store.goalIndex = indexes.goalIndex;
+    this.store.observationIndex = indexes.observationIndex;
+    this.store.planIndex = indexes.planIndex;
+    this.store.occurrenceIndex = indexes.occurrenceIndex;
+    this.store.settlementIndex = indexes.settlementIndex;
   }
 
   abandon(): void {
@@ -638,6 +755,8 @@ class InMemoryTransaction implements RepositoryTransaction {
     this.deliveryWrites.clear();
     this.deliveryVersionAtRead.clear();
     this.bookRevisionAtRead.clear();
+    this.checkpointWrites.clear();
+    this.checkpointCursorAtRead.clear();
     this.active = false;
   }
 
@@ -646,4 +765,11 @@ class InMemoryTransaction implements RepositoryTransaction {
       throw new Error('repository transaction is no longer active');
     }
   }
+}
+
+export function asInMemoryTransaction(transaction: RepositoryTransaction): InMemoryTransaction {
+  if (!(transaction instanceof InMemoryTransaction)) {
+    throw new Error('checkpoint apply requires the in-memory reference adapter transaction');
+  }
+  return transaction;
 }

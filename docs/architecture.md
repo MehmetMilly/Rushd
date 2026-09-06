@@ -68,10 +68,12 @@ authorization, and the confirmation is an application policy, not a
 credential.
 
 `tests/domain/support/in-memory-repository.ts` is the transactional
-in-memory reference adapter (overlay isolation, first-committer-wins write
-conflicts, rollback on injected failure) used to prove the protocol and to
-give P04's persistent adapter a conformance target. This proves one-process
-protocol behavior; it is not evidence of crash-safe browser durability.
+in-memory reference adapter (overlay isolation, commit-time preflight of
+every read-dependent write, clone-and-swap first-committer-wins, rollback
+on injected failure without whole-adapter snapshot restore) used to prove
+the protocol and to give P04's persistent adapter a conformance target.
+This proves one-process protocol behavior; it is not evidence of crash-safe
+browser durability.
 
 ## Everyday financial behavior (P03 Task B)
 
@@ -325,26 +327,31 @@ operation naming another scope than its batch is malformed. Pulled
 operations travel as full content envelopes (operation ID, provider
 sequence, scope, book, base and resulting revision with exactly-one
 advancement, the exact canonical command payload, its digest re-verified
-by the receiver, schema version), and each batch carries an identity
-plus a content digest the receiver recomputes. Duplicate equality covers
-every immutable envelope field — the provider sequence is transport
-positioning, not identity — so the same operation ID with any changed
-scope, book, revision, payload, digest, or schema field is an explicit
-`contentConflict` naming the differing fields, never keep-first.
-Applying a pulled batch executes each fresh operation's exact canonical
-command through the production preview/execute path against the
-scope-bound adapter, so the applied effect is real `BookState`:
-duplicate delivery replays idempotently through the operation journal,
-same-ID/changed-payload fails closed as `operationIdConflict`, and a
-stale pulled base fails as `revisionConflict` instead of silently
-reordering history. Finance effects commit before the applied records
-and cursor advance together; any failure restores the finance snapshot,
-so a failed apply leaves finance, cursor, and applied set unchanged. An
-exact replay (same next cursor and same content digest) is a no-op
-success; a stale base is an explicit `baseCursorMismatch`. Reordered,
-duplicated, or delayed delivery therefore yields one canonical applied
-record and effect, or an explicit conflict — never a drop, a duplicate,
-an invisible stall, or a cursor advance past unverified content.
+by the receiver, immutable `sourceDeviceId` and `sourceEnqueueSequence`
+separate from the provider transport sequence, schema version), and each
+batch carries an identity plus a content digest the receiver recomputes.
+Duplicate equality covers every immutable envelope field — the provider
+sequence is transport positioning, not identity — so the same operation
+ID with any changed scope, book, revision, payload, digest, provenance,
+or schema field is an explicit `contentConflict` naming the differing
+fields, never keep-first. Applying a pulled batch executes each fresh
+operation's exact canonical command through the remote-apply boundary
+(`src/application/sync/apply-remote.ts`) against the scope-bound adapter
+inside one repository transaction with the checkpoint write: source
+device and source enqueue identity are preserved, no pending outbox
+intent is created for an already-provider-accepted operation, duplicate
+delivery replays idempotently through the operation journal,
+same-ID/changed-payload-or-provenance fails closed, and a stale pulled
+base fails as `revisionConflict` instead of silently reordering history.
+The full finance-plus-checkpoint delta commits atomically after every
+read-dependent guard is rechecked; a failed apply abandons the overlay
+and never restores a whole-adapter snapshot, so concurrent successful
+work cannot be erased. An exact replay (same next cursor and same
+content digest) is a no-op success; a stale base is an explicit
+`baseCursorMismatch`. Reordered, duplicated, or delayed delivery
+therefore yields one canonical applied record and effect, or an explicit
+conflict — never a drop, a duplicate, an invisible stall, a sync echo,
+or a cursor advance past unverified content.
 
 ### 6. Tombstone/conflict
 
@@ -414,7 +421,7 @@ provider-specific rewrite.
 
 P03 freezes this contract and proves it against the in-memory reference
 adapter plus the reusable conformance runner
-(`tests/domain/support/repository-conformance.ts`, 12 checks) that P04
+(`tests/domain/support/repository-conformance.ts`) that P04
 adopts unchanged for the persistent adapter. P04 owns durable local
 persistence, reload/multi-tab/quota/device proof, legacy migration,
 import/export, and the PWA. P08 owns authentication, server-stamped
@@ -433,7 +440,7 @@ formulas are not evidence.
 | P03-A1 | Checked integer ISO minor-unit money; explicit civil dates and payday/calendar cycles | `tests/domain/money.test.ts` (full file), `tests/domain/civil-date.test.ts`, `tests/domain/monthly-cycle.test.ts`, `tests/domain/instant-resolution.test.ts`, `tests/property/money-properties.test.ts` |
 | P03-A2 | Availability, mid-cycle boundary, completeness, shortfall, pacing, partial/residual obligations, multiple payments, returns, signed adjustments, allocations | `tests/domain/everyday-flow.test.ts`, `tests/domain/completeness-pacing.test.ts`, `tests/domain/reality-check-recovery.test.ts`, `tests/property/everyday-properties.test.ts` |
 | P03-A3 | Plans cannot rewrite paid facts; close/carry/reopen, backdated propagation, allocation funding/assignment/release are explicit, atomic, idempotent | `tests/domain/cycle-lifecycle.test.ts`, `tests/domain/backdated-propagation.test.ts`, `tests/domain/cycle-settings-rebase.test.ts`, `tests/domain/recurring-plans.test.ts`, `tests/domain/correction-chains.test.ts`, `tests/property/task-c-lifecycle-properties.test.ts`, `tests/property/task-c-recovery-properties.test.ts` |
-| P03-A4 | Typed commands, invariant validation, receipts, revision/idempotency identity, undo/reversal policy | `tests/domain/command-flow.test.ts`, `tests/domain/idempotency.test.ts` ("replays the original receipt", "lost acknowledgement", "same operation ID with changed content", "stale previews"), `tests/domain/atomicity.test.ts` ("all-or-nothing", "first-committer-wins"), `tests/domain/everyday-command-safety.test.ts`, `tests/domain/task-c-command-safety.test.ts`, `tests/domain/reversal-binding.test.ts`, `tests/property/command-sequence-properties.test.ts`; conformance runner `tests/domain/repository-conformance.test.ts` (17 checks: replay, conflict, stale preview, uncertain commit, delivery persistence and race, scope binding and mismatched-context rejection, real-effect pull application with rollback/replay) |
+| P03-A4 | Typed commands, invariant validation, receipts, revision/idempotency identity, undo/reversal policy | `tests/domain/command-flow.test.ts`, `tests/domain/idempotency.test.ts` ("replays the original receipt", "lost acknowledgement", "same operation ID with changed content", "stale previews"), `tests/domain/atomicity.test.ts` ("all-or-nothing", "first-committer-wins"), `tests/domain/everyday-command-safety.test.ts`, `tests/domain/task-c-command-safety.test.ts`, `tests/domain/reversal-binding.test.ts`, `tests/property/command-sequence-properties.test.ts`; conformance runner `tests/domain/repository-conformance.test.ts` (concurrent staged book writers, mixed late-write rollback, pull-versus-delivery, delivery race, scope binding, remote-apply provenance without outbox echo, real-effect pull application with overlay rollback/replay) |
 | P03-A5 | Provider-neutral pre-P04 ADR (identity, ownership, operation/outbox, cursors, tombstones, conflicts, guest merge, sign-out/cache, amendment path) plus boundary/property/regression tests over production code | ADR headings 1-11 above; `tests/domain/sync-scope.test.ts` ("isolated across scopes", "adversarial separator tuples", "scope binding enforcement"), `tests/domain/sync-records.test.ts`, `tests/domain/sync-uncertain-commit.test.ts` ("lost acknowledgement and reacquisition", "delivery boundary retry"), `tests/domain/sync-tombstone-conflict.test.ts`, `tests/domain/guest-merge-signout.test.ts` ("verified-export override", "unknown states stay blocked"), `tests/domain/sync-provider.test.ts`, `tests/property/sync-delivery-properties.test.ts` ("changed-envelope conflicts", "exact-replay classification") |
 | P03-A6 | Completeness reducer, recovered classified activity, disputed reservations, refunds, effective dates, rebase, closed-cycle immutability, UTC/DST/short-month boundaries, retry/reopen, Reality Check currency invariants (no FX, clarification-only non-writes) | `tests/domain/reality-check-recovery.test.ts`, `tests/domain/cycle-lifecycle.test.ts`, `tests/domain/cycle-settings-rebase.test.ts`, `tests/domain/recurring-plans.test.ts`, `tests/property/cycle-properties.test.ts` |
 

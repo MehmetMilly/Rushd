@@ -86,6 +86,7 @@
 
 export { previewCommand } from './preview';
 export { executeCommand } from './execute';
+export { applyRemoteOperation } from '../sync/apply-remote';
 export { validateFinanceCommand, type CommandValidation, type ValidationIssue } from './validation';
 export { requireCommandContext, type CommandContext, type DomainClock, type DomainIdFactory } from './context';
 export type { CommandOrigin } from '../../domain/sync/scope';

@@ -9,8 +9,15 @@
  * - First-committer-wins: a write whose underlying committed state changed
  *   since the transaction first read it must fail, so two concurrent commands
  *   against one base revision cannot both commit conflicting results.
- * - Rollback: any exception inside `runTransaction` leaves committed state,
- *   the operation journal, and the outbox exactly as before.
+ *   Every read-dependent write — book revisions, operation uniqueness,
+ *   outbox uniqueness, delivery versions, enqueue counters, and checkpoints
+ *   — is rechecked at commit before any committed store is mutated. The
+ *   full delta then applies atomically (clone-and-swap). Staging-time
+ *   checks alone are not sufficient.
+ * - Rollback: any exception inside `runTransaction` or at commit leaves
+ *   committed state, the operation journal, the outbox, delivery metadata,
+ *   and checkpoints exactly as before. Adapters must not restore a
+ *   whole-store snapshot that can erase concurrent successful work.
  *
  * The in-memory adapter under `tests/domain/support/` is the reference
  * implementation for P04's persistent adapter conformance suite. It proves

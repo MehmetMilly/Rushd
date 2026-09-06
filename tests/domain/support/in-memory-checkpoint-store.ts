@@ -8,28 +8,21 @@
  * base-mismatch/changed-content/cross-scope conflicts — that P04/P08
  * adapters must implement against real persistence.
  *
- * The store is bound to one identity scope for its lifetime. Every batch,
- * every pulled operation, and (for effect application) the finance adapter
- * must name that same scope; anything else is an explicit rejection that
- * advances nothing. Applying a batch executes each fresh pulled operation's
- * exact canonical command through the production `previewCommand` /
- * `executeCommand` path, so the applied finance effect is real BookState,
- * not metadata: duplicate delivery replays idempotently through the
- * operation journal, and same-ID/changed-payload surfaces as the journal's
- * `operationIdConflict`. Finance writes happen before the checkpoint
- * mutation, and any failure restores the finance snapshot, so a failed
- * apply leaves both the finance state and the checkpoint unchanged.
+ * The store is bound to one identity scope for its lifetime and shares the
+ * finance adapter's committed store. Applying a batch stages each fresh
+ * pulled operation through `applyRemoteOperation` (source provenance
+ * preserved, no pending outbox) and the checkpoint write inside one
+ * repository transaction. Any failure abandons the overlay: concurrent
+ * successful work is never erased. Exact replay is a no-op success.
  *
  * It is not a sync daemon and performs no networking.
  */
 
 import {
   describeCommandFailure,
-  executeCommand,
-  previewCommand,
 } from '../../../src/application/commands';
+import { applyRemoteOperation } from '../../../src/application/sync/apply-remote';
 import type { CommandContext } from '../../../src/application/commands/context';
-import { canonicalJson } from '../../../src/domain/contracts/canonical';
 import {
   differingPulledFields,
   isBatchAlreadyApplied,
@@ -45,7 +38,7 @@ import {
   type SyncCursor,
 } from '../../../src/domain/sync/cursors';
 import type { RepositoryScopeId } from '../../../src/domain/sync/scope';
-import { InMemoryFinanceRepository } from './in-memory-repository';
+import { asInMemoryTransaction, ConcurrencyConflictError, InMemoryFinanceRepository } from './in-memory-repository';
 
 export type CheckpointApplyResult =
   | { readonly ok: true; readonly replayed: boolean }
@@ -59,19 +52,23 @@ export interface PullFinance {
   readonly context: CommandContext;
 }
 
-interface StreamState {
-  cursor: SyncCursor | null;
-  batchDigest: string | null;
-  applied: Map<string, PulledOperation>;
+class PullApplyAborted extends Error {
+  constructor(readonly result: CheckpointApplyResult) {
+    super('pulled-batch apply aborted');
+    this.name = 'PullApplyAborted';
+  }
 }
 
 export class InMemoryCheckpointStore {
   readonly boundScope: RepositoryScopeId;
-  private readonly streams = new Map<string, StreamState>();
+  private readonly adapter: InMemoryFinanceRepository;
   private injectedFailures = 0;
+  private applyGate: Promise<void> | null = null;
+  private notifyParked: (() => void) | null = null;
 
-  constructor(options: { readonly boundScope: RepositoryScopeId }) {
-    this.boundScope = options.boundScope;
+  constructor(options: { readonly adapter: InMemoryFinanceRepository }) {
+    this.adapter = options.adapter;
+    this.boundScope = options.adapter.boundScope;
   }
 
   /** Test-adapter-specific hook: the next N batch applications fail before mutating anything. */
@@ -79,16 +76,28 @@ export class InMemoryCheckpointStore {
     this.injectedFailures = occurrences;
   }
 
+  /**
+   * Parks the next `applyBatch` after its first fresh remote write is staged
+   * and before later writes/commit. Resolves the returned promise once the
+   * apply is waiting on `gate`, so a concurrent delivery can commit first.
+   */
+  armApplyBarrier(gate: Promise<void>): Promise<void> {
+    this.applyGate = gate;
+    return new Promise<void>((resolve) => {
+      this.notifyParked = resolve;
+    });
+  }
+
   cursorFor(streamId: ReplicationStreamId): SyncCursor | null {
-    return this.streams.get(streamId as string)?.cursor ?? null;
+    return this.adapter.committedCheckpoint(streamId)?.cursor ?? null;
   }
 
   batchDigestFor(streamId: ReplicationStreamId): string | null {
-    return this.streams.get(streamId as string)?.batchDigest ?? null;
+    return this.adapter.committedCheckpoint(streamId)?.batchDigest ?? null;
   }
 
   checkpointFor(streamId: ReplicationStreamId): CheckpointRecord {
-    const state = this.streams.get(streamId as string);
+    const state = this.adapter.committedCheckpoint(streamId);
     return {
       schemaVersion: 1,
       streamId,
@@ -99,8 +108,8 @@ export class InMemoryCheckpointStore {
   }
 
   appliedOperations(streamId: ReplicationStreamId): readonly PulledOperation[] {
-    const state = this.streams.get(streamId as string);
-    if (state === undefined) return [];
+    const state = this.adapter.committedCheckpoint(streamId);
+    if (state === null) return [];
     return [...state.applied.values()].map((operation) => JSON.parse(JSON.stringify(operation)) as PulledOperation);
   }
 
@@ -110,27 +119,18 @@ export class InMemoryCheckpointStore {
 
   /** Canonical snapshot for byte-identical rollback proofs. */
   snapshotBytes(): string {
-    const streams = [...this.streams.entries()]
-      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
-      .map(([streamId, state]) => ({
-        streamId,
-        cursor: state.cursor,
-        batchDigest: state.batchDigest,
-        applied: [...state.applied.values()],
-      }));
-    return canonicalJson({ scopeId: this.boundScope as string, streams });
+    return this.adapter.checkpointSnapshotBytes();
   }
 
   /**
    * Applies one pulled batch atomically with real finance effects.
    *
    * Pre-checks (shape, scope binding, exact replay, base-cursor match,
-   * content reconciliation against the batch and the applied set) are all
-   * decided before anything mutates. Then each fresh operation's exact
-   * canonical command executes through the production command path against
-   * the scope-bound finance adapter; any failure restores the finance
-   * snapshot and leaves the checkpoint unchanged. Only after every effect
-   * commits do the applied records and the cursor advance together.
+   * content reconciliation) are decided before the transaction opens.
+   * Fresh operations then apply through `applyRemoteOperation` inside one
+   * repository transaction together with the checkpoint write. Failure
+   * abandons the overlay: finance, cursor, and applied set stay unchanged,
+   * and concurrent successful work is not erased.
    */
   async applyBatch(batch: PulledBatch, finance: PullFinance): Promise<CheckpointApplyResult> {
     const shape = validatePulledBatchShape(batch);
@@ -151,9 +151,9 @@ export class InMemoryCheckpointStore {
     if (!reconciled.ok) {
       return { ok: false, reason: 'contentConflict', conflict: reconciled.conflict };
     }
-    const state = this.streams.get(batch.streamId as string);
+    const knownApplied = this.adapter.committedCheckpoint(batch.streamId)?.applied;
     for (const operation of reconciled.operations) {
-      const known = state?.applied.get(operation.operationId as string);
+      const known = knownApplied?.get(operation.operationId as string);
       if (known !== undefined && !pulledOperationsEqual(known, operation)) {
         return {
           ok: false,
@@ -173,73 +173,95 @@ export class InMemoryCheckpointStore {
     if ((finance.adapter.boundScope as string) !== (this.boundScope as string)) {
       return { ok: false, reason: 'scopeMismatch', detail: 'finance adapter is bound to another scope than this checkpoint stream' };
     }
-
-    const fresh = reconciled.operations.filter(
-      (operation) => state?.applied.get(operation.operationId as string) === undefined,
-    );
-    const financeBytes = finance.adapter.snapshotBytes();
-    const failures: string[] = [];
-    for (const operation of fresh) {
-      const failure = await this.applyOne(operation, finance);
-      if (failure !== null) {
-        failures.push(failure);
-        finance.adapter.restoreSnapshot(financeBytes);
-        return { ok: false, reason: 'applyFailed', detail: 'pulled finance application failed; finance state and checkpoint unchanged', failures };
-      }
+    if (finance.adapter !== this.adapter) {
+      return { ok: false, reason: 'scopeMismatch', detail: 'checkpoint store is bound to a different finance adapter instance' };
     }
 
-    const next: StreamState = state ?? { cursor: null, batchDigest: null, applied: new Map() };
-    for (const operation of reconciled.operations) {
-      if (!next.applied.has(operation.operationId as string)) {
-        next.applied.set(operation.operationId as string, JSON.parse(JSON.stringify(operation)) as PulledOperation);
+    const fresh = reconciled.operations.filter((operation) => knownApplied?.get(operation.operationId as string) === undefined);
+
+    let outcome: CheckpointApplyResult = { ok: true, replayed: false };
+    try {
+      await finance.adapter.runTransaction(async (transaction) => {
+        const tx = asInMemoryTransaction(transaction);
+        const current = tx.getStreamCheckpoint(batch.streamId);
+        const currentRecord: CheckpointRecord = {
+          schemaVersion: 1,
+          streamId: batch.streamId,
+          scopeId: this.boundScope,
+          cursor: current.cursor,
+          batchDigest: current.batchDigest,
+        };
+        if (isBatchAlreadyApplied(currentRecord, batch)) {
+          outcome = { ok: true, replayed: true };
+          return;
+        }
+        if (!isNextBatchFor(currentRecord, batch)) {
+          throw new PullApplyAborted({ ok: false, reason: 'baseCursorMismatch' });
+        }
+        for (const operation of reconciled.operations) {
+          const known = current.applied.get(operation.operationId as string);
+          if (known !== undefined && !pulledOperationsEqual(known, operation)) {
+            throw new PullApplyAborted({
+              ok: false,
+              reason: 'contentConflict',
+              conflict: {
+                operationId: operation.operationId as string,
+                digests: [known.canonicalDigest, operation.canonicalDigest],
+                differingFields: differingPulledFields(known, operation),
+              },
+            });
+          }
+        }
+
+        for (let index = 0; index < fresh.length; index += 1) {
+          if (index === 1) await this.takeApplyBarrier();
+          const operation = fresh[index];
+          const result = applyRemoteOperation(finance.adapter, tx, operation, finance.context);
+          if (!result.ok) {
+            throw new PullApplyAborted({
+              ok: false,
+              reason: 'applyFailed',
+              detail: 'pulled finance application failed; finance state and checkpoint unchanged',
+              failures: [`operation ${operation.operationId as string}: execute failed with ${describeCommandFailure(result.failure)}`],
+            });
+          }
+        }
+        if (fresh.length <= 1) await this.takeApplyBarrier();
+
+        const nextApplied = new Map(current.applied);
+        for (const operation of reconciled.operations) {
+          if (!nextApplied.has(operation.operationId as string)) {
+            nextApplied.set(operation.operationId as string, JSON.parse(JSON.stringify(operation)) as PulledOperation);
+          }
+        }
+        tx.putStreamCheckpoint(batch.streamId, {
+          cursor: batch.nextCursor,
+          batchDigest: batch.batchDigest,
+          applied: nextApplied,
+        });
+      });
+    } catch (error) {
+      if (error instanceof PullApplyAborted) return error.result;
+      if (error instanceof ConcurrencyConflictError) {
+        return {
+          ok: false,
+          reason: 'applyFailed',
+          detail: 'pulled finance application failed; finance state and checkpoint unchanged',
+          failures: [error.message],
+        };
       }
+      throw error;
     }
-    next.cursor = batch.nextCursor;
-    next.batchDigest = batch.batchDigest;
-    this.streams.set(batch.streamId as string, next);
-    return { ok: true, replayed: false };
+    return outcome;
   }
 
-  /**
-   * Executes one pulled operation's exact canonical command through the
-   * production path. Returns null on success, or a failure description.
-   * Same-ID/same-payload replays succeed idempotently through the journal;
-   * same-ID/changed-payload fails closed as `operationIdConflict`; a stale
-   * pulled base revision fails as `revisionConflict` instead of silently
-   * reordering history.
-   */
-  private async applyOne(operation: PulledOperation, finance: PullFinance): Promise<string | null> {
-    let command: unknown;
-    try {
-      command = JSON.parse(operation.canonicalCommand) as unknown;
-    } catch {
-      return `operation ${operation.operationId as string}: canonical payload is not JSON`;
-    }
-    const preview = previewCommand(finance.adapter, command, finance.context);
-    if (!preview.ok) {
-      return `operation ${operation.operationId as string}: preview failed with ${describeCommandFailure(preview.failure)}`;
-    }
-    const result = await executeCommand(
-      finance.adapter,
-      command,
-      {
-        operationId: operation.operationId,
-        expectedRevision: preview.preview.expectedRevision,
-        previewDigest: preview.preview.previewDigest,
-      },
-      finance.context,
-    );
-    if (!result.ok) {
-      return `operation ${operation.operationId as string}: execute failed with ${describeCommandFailure(result.failure)}`;
-    }
-    const receipt = result.receipt;
-    if (
-      receipt.revisionBefore !== operation.baseRevision ||
-      receipt.revisionAfter !== operation.resultingRevision ||
-      receipt.canonicalDigest !== operation.canonicalDigest
-    ) {
-      return `operation ${operation.operationId as string}: committed receipt does not match the pulled envelope`;
-    }
-    return null;
+  private async takeApplyBarrier(): Promise<void> {
+    if (this.applyGate === null) return;
+    const gate = this.applyGate;
+    this.applyGate = null;
+    const notify = this.notifyParked;
+    this.notifyParked = null;
+    notify?.();
+    await gate;
   }
 }

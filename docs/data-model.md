@@ -248,14 +248,18 @@ these shapes.
   batch, and stream is bound to one immutable scope; cross-scope batches
   are rejected without mutation. Pulled operations are full content
   envelopes (scope, book, base/resulting revision with exactly-one
-  advancement, exact canonical payload, re-verified digest, schema);
-  duplicate equality covers every immutable field and names differing
-  fields on conflict. Batches carry an identity plus a recomputed content
-  digest. Application executes each fresh operation's exact canonical
-  command through the production path against the scope-bound adapter, so
-  applied records and real finance effects commit atomically with the
-  checkpoint: stale bases reject, exact replays are no-op successes, and
-  changed content is an explicit `contentConflict` that advances nothing.
+  advancement, exact canonical payload, re-verified digest, immutable
+  `sourceDeviceId` and `sourceEnqueueSequence` separate from the provider
+  transport sequence, schema); duplicate equality covers every immutable
+  field except provider sequence and names differing fields on conflict.
+  Batches carry an identity plus a recomputed content digest. Application
+  uses the remote-apply boundary (`src/application/sync/apply-remote.ts`)
+  so source provenance is preserved, no pending outbox echo is created,
+  and real finance effects commit atomically with the checkpoint inside
+  one repository transaction: stale bases reject, exact replays are no-op
+  successes, changed content or provenance is an explicit
+  `contentConflict` that advances nothing, and a failed apply cannot erase
+  concurrent successful work.
 - **TombstoneRecord** (`src/domain/sync/tombstones.ts`): scope, entity
   kind/ID, book, source operation, base revision, durable sequence, schema
   version. Retained until peer acknowledgement plus the retention window;
