@@ -1,6 +1,6 @@
 # Rushd active delivery plan
 
-**Updated:** 6 September 2026
+**Updated:** 7 September 2026
 
 This file records the current delivery position and resource strategy. It does not replace the product contract in `docs/RUSHD_MASTER_PLAN_FINAL.md`, the phase outcomes in `docs/implementation/phase-plan.json`, or the working method in `WORKFLOW_LITE.md`.
 
@@ -24,6 +24,8 @@ The working target is a feature-complete build ready for private founder use wit
 - P03 Task A is implemented at `557c556`, corrected at `51659e6`. Luna Max independently ran the original 50 domain tests, then 9 focused correction tests. Reversal-date binding and unrepresentable-instant rejection are fixed. B subsequently addressed the BCE/year-zero-to-CE alias in `instant.ts`; the integrated instant-resolution suite passes. This was focused verification, not a full P03 review or phase PASS.
 - P03 Task B is closed at `28d4608`, following initial implementation `e68926f` and corrections `f255bac`. Muse independently reviewed B; Terra High verified the corrections and found a final live-return validation gap, now fixed and independently reproduced as passing. The Master reran lint, typecheck, `npm test` (99 domain tests plus repository/legacy checks), 16 property tests, and build successfully on 6 September. This closes B's domain/application scope, not P03 or legacy UI integration. The founder reports over 100 minutes for the initial implementation; include correction work when evaluating throughput.
 - P03 Task C is closed at `a047a60`, following implementation `e33ca18` and corrections `e71601b` and `a047a60`. Muse Spark 1.3 contributor-free was the only product writer, invoked through OpenCode with `--variant high`. Terra High independently reproduced nine initial finance/data blockers, verified their corrections, then found one fixed-clock ordering defect; the second correction replaced wall-clock comparison with immutable append cursors. Terra's final review returned `ready_for_integration`. The Master reran lint, typecheck, `npm test` (138 domain tests plus repository/legacy checks), 18 property tests, build, and range diff-check successfully on 6 September. C remains backend-only and does not claim persistent storage or legacy UI integration.
+- P03 Task D is closed at `291228c`, following implementation `7d4f3b5`, corrections `289ff96` and `a129082`, and the final Grok correction `291228c`. The final independent review returned `ready_for_integration` after 9/9 adversarial transaction, rollback, provenance, replay, and conflict probes. Persistent storage, networking, and UI integration were not added.
+- P03 is closed at reviewed product commit `291228c`. The Master reran lint, typecheck, `npm test` (25 domain files / 186 tests plus repository and legacy checks), `npm run test:property` (7 files / 23 tests), build, and the full `f80cfc9..291228c` diff check successfully on 7 September. A separate Luna Max acceptance audit mapped P03-A1 through P03-A6 to production paths and current executable evidence and returned `ready_to_close`.
 
 ## Working method
 
@@ -84,23 +86,17 @@ If an external app does not expose the suggested setting, use its highest suitab
 
 1. P01 is closed at reviewed commit `075317e`.
 2. P02 is closed at `f80cfc9`.
-3. P03 Tasks A through C are implemented and C's high-risk finance review is closed. Prepare Task D's storage/sync contract and repository-conformance integration next; do not repeat C's full audit unless D changes its financial semantics.
-4. Keep the remaining foundation spine sequential: P03 finance domain, then P04 local data and PWA.
+3. P03 is closed at reviewed product commit `291228c`; all six acceptance outcomes and the integrated phase gate pass.
+4. Keep the remaining foundation spine sequential. No P04 work has started as part of P03 closure.
 5. After P02 creates stable module boundaries, allow at most two isolated product writers. Start design foundations, provider preparation, AI schemas, eval assets, and release preparation early when they do not depend on unfinished production interfaces.
 6. Integrate through the Development Master. Use short-lived branches or isolated worktrees for parallel writers and keep one integration owner.
 7. Treat P01 through P11 as the full feature build. P12 is integrated hardening and release-candidate work. P13 is real-world beta and public-release validation.
 
 ## Next action and continuity
 
-B review is complete: actual reviewer Muse Spark 1.3 contributor-free, default reasoning, not requested Grok. `artifacts/agent-reports/P03-B-REVIEW.md` reports independently passing existing gates and five material findings: allocation reversals omitted from availability, corrected payments double-counted by obligations, refunds exceeding corrected expenses, automatic dispute resolution on refunds, and missing return corrections. Astra corroborated the key source paths and accepts the findings. Complete cross-generation refund caps now and require explicit dispute resolution even after a full refund; the review's narrower recommendations are not sufficient.
+P03 closed on 7 September at reviewed product commit `291228c778d0714b343c396d2a37067f5361d8a1`. Task D's final worker report is `artifacts/agent-reports/P03-D-GROK-CORRECTION.md`; its independent review is `P03-D-GROK-REVIEW.md` and returns `ready_for_integration`. The phase closure audit is `P03-PHASE-CLOSURE-AUDIT.md` and returns `ready_to_close`. The Master's final gate logs are under `artifacts/agent-reports/P03-PHASE-CLOSURE-evidence/`.
 
-The B corrections are committed at `f255bac`, parent `e68926f`, by Muse Spark 1.3 contributor-free, not GLM. Report: `artifacts/agent-reports/P03-B-FIX-01.md`. Terra High's scoped review found one remaining interaction: a voided return can still validate `returnReceived` dispute resolution. The correction suite and property suite passed, but its independent production-API probe reproduced the defect. Review: `artifacts/agent-reports/P03-B-FIX-01-REVIEW.md`.
-
-The Master resumed the original Muse OpenCode session for this narrow correction, limited to the obligation handler and correction-chain tests. Commit `28d4608` rejects dead originals and accepts live replacement returns. Report: `artifacts/agent-reports/P03-B-FIX-02.md`. Terra reran its independent probe successfully and confirmed permanent no-write regressions; its existing review contains the closure addendum. Master integration gates all passed. B is closed.
-
-C closed on 6 September at `a047a60`. The worker report is `artifacts/agent-reports/P03-C.md`; the three independent review reports are `P03-C-REVIEW.md`, `P03-C-REVIEW-2.md`, and `P03-C-REVIEW-3.md` in the same ignored directory. The final review independently passed fixed-clock carry, split, tracked-funding, obligation, Reality Check, buffer, rebase, and no-transfer probes and returned `ready_for_integration`. The next product task is P03 D. Its copy-paste worker card is ready at `docs/implementation/P03_TASK_D_PROMPT.md`, based on `ca140bb`, and routes the preferred cheap implementation path to Muse Spark 1.3 contributor-free with `--variant high`. It freezes the provider-neutral storage/sync contract and reusable repository-conformance suite while keeping persistent implementation in P04. The earlier GLM window expired at 18:00 and must not be assumed active. Do not reopen C unless D changes its finance semantics or a new reproducible defect appears.
-
-The founder requested a Luna monitoring task. Created `01a072db-a6c3-7da0-b0fc-b731a666e37b` with Luna Low, solely to confirm completion and notify this Master (`01a02647-0425-7833-aee2-8e4c7bdeff29`). Pinned OpenCode session `ses_f8d78c148ffeZEzGcLLGjzl1XV` was already finished: final assistant message `msg_072d8d93f001gqCejivHxlgySp`, finish `stop`, completion `1788633214165`, names the correction report. No recurring polling/automation is needed after that completion. Monitor does not review or edit code.
+The generated-child-ID convergence case remains documented for later sync command-schema work. It is not a P03 blocker under the frozen contract. Do not reopen P03 without a new reproducible defect or an explicit contract change. No P04 implementation or preparation started during this closure.
 
 Keep current status and resource changes in this file, and task interfaces in the phase execution plan. `DEVELOPMENT_MASTER_HANDOFF.md` explains how to resume after compaction. No additional personal AGENTS file is needed.
 

@@ -199,6 +199,6 @@ prevents unnecessary Development Master usage but does not make delegated work f
 
 ## Current phase plan
 
-P00 and P01 are closed. P01's reviewed product baseline is commit `075317ebebd1aa4f366a2ac6fd3f715f748d54fe`; its risk dispositions remain in `docs/baseline/P01-risk-matrix.json`.
+P00 through P03 are closed. P01's reviewed product baseline is commit `075317ebebd1aa4f366a2ac6fd3f715f748d54fe`; P02 closes at `f80cfc9`, and P03 closes at reviewed product commit `291228c778d0714b343c396d2a37067f5361d8a1`. P01's risk dispositions remain in `docs/baseline/P01-risk-matrix.json`.
 
 Read the current execution position from `docs/implementation/ACTIVE_DELIVERY_PLAN.md` and the relevant contract from `docs/implementation/phase-plan.json`. Ordinary development follows this workflow and does not use the retired P00 state machine.

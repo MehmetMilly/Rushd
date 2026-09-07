@@ -42,7 +42,7 @@ Use `ACTIVE_DELIVERY_PLAN.md` for the current commit, phase, available models, e
 
 ## Immediate continuation
 
-The founder approved compacting this task and switching from Astra Medium to Sol High on 6 September. Preserve the existing role and product decisions; this is a model handoff, not a planning restart. P03 Tasks A through C are implemented. C closed at `a047a60` after two correction rounds and a final Terra High `ready_for_integration` review; the Master reran every required gate successfully. The copy-paste P03 D worker card is ready at `docs/implementation/P03_TASK_D_PROMPT.md`, based on `ca140bb`, for Muse Spark 1.3 contributor-free with `--variant high`. Check that cheap route is still available before the founder sends it; do not silently substitute a paid endpoint or assume the expired GLM window is active. Persistent browser storage remains P04 scope.
+P03 is closed at reviewed product commit `291228c778d0714b343c396d2a37067f5361d8a1`. Tasks A through D satisfy P03-A1 through P03-A6. Task D's final independent review returned `ready_for_integration` after 9/9 adversarial probes, the Master reran every required P03 command and the full phase diff check successfully, and a Luna Max closure audit returned `ready_to_close`. The ignored reports are `artifacts/agent-reports/P03-D-GROK-REVIEW.md` and `P03-PHASE-CLOSURE-AUDIT.md`. No P04 work started during closure. Read `ACTIVE_DELIVERY_PLAN.md` before assigning any next phase work.
 
 The founder subsequently reserved Astra for ambitious animations and selected design work too, including hands-on creation rather than consultation alone. Preserve the active plan's motion/design quality requirements; cheaper routine management is not permission to compromise the intended experience.
 
