@@ -21,7 +21,9 @@
  *
  * P03 proves the in-process reference adapter. This suite is not evidence of
  * browser crash durability: P04 must rerun it after real persistence,
- * reload, multi-tab, quota, and physical-device scenarios exist.
+ * reload, multi-tab, quota, and physical-device scenarios exist. Persistent
+ * adapters may supply async `createAdapter` / `reopen`; the runner awaits
+ * those lifecycle hooks and leaves every behavioral assertion unchanged.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -72,7 +74,7 @@ export interface ConformanceAdapter extends ScopedRepository, FinanceReadModel {
   updateDeliveryState(operationId: OperationId, outcome: DeliveryAttemptOutcome): Promise<OutboxDeliveryState>;
   injectWriteFailure(method: ConformanceWriteMethod, occurrences?: number): void;
   /** A fresh handle over the same durable state (adapter reacquisition after a lost acknowledgement). */
-  reopen(): ConformanceAdapter;
+  reopen(): ConformanceAdapter | Promise<ConformanceAdapter>;
   /** Canonical bytes of everything committed, for byte-identical rollback proofs. */
   snapshotBytes(): string;
 }
@@ -103,7 +105,7 @@ export interface ConformanceScopeSpec {
 
 export interface ConformanceFixture {
   readonly name: string;
-  createAdapter(scope?: ConformanceScopeSpec): ConformanceAdapter;
+  createAdapter(scope?: ConformanceScopeSpec): ConformanceAdapter | Promise<ConformanceAdapter>;
   createCheckpointStore(scope: ConformanceScopeSpec | undefined, adapter: ConformanceAdapter): ConformanceCheckpointStore;
 }
 
@@ -206,8 +208,8 @@ async function previewAndExecute(harness: Harness, operationId: string, rawComma
   return result.receipt;
 }
 
-function seededHarness(fixture: ConformanceFixture, spec: ConformanceScopeSpec = DEFAULT_SPEC, stepMs?: number): Harness {
-  const adapter = fixture.createAdapter(spec);
+async function seededHarness(fixture: ConformanceFixture, spec: ConformanceScopeSpec = DEFAULT_SPEC, stepMs?: number): Promise<Harness> {
+  const adapter = await fixture.createAdapter(spec);
   const checkpoints = fixture.createCheckpointStore(spec, adapter);
   const { context } = createDeterministicContext({
     deviceId: spec.deviceId,
@@ -281,7 +283,7 @@ export function runRepositoryConformanceSuite(fixture: ConformanceFixture): void
 
   describe(`repository conformance (${fixture.name})`, () => {
     it('returns defensive, non-aliasing reads', async () => {
-      const harness = seededHarness(fixture);
+      const harness = await seededHarness(fixture);
       await seedBook(harness);
       const first = harness.adapter.getBookState(bookId);
       const second = harness.adapter.getBookState(bookId);
@@ -300,7 +302,7 @@ export function runRepositoryConformanceSuite(fixture: ConformanceFixture): void
     });
 
     it('isolates transactions and supports read-your-own-write', async () => {
-      const harness = seededHarness(fixture);
+      const harness = await seededHarness(fixture);
       await seedBook(harness);
       const revisionBefore = harness.adapter.getBookState(bookId)?.revision ?? 0;
 
@@ -324,7 +326,7 @@ export function runRepositoryConformanceSuite(fixture: ConformanceFixture): void
     });
 
     it('advances exactly one revision and lets the first committer win', async () => {
-      const harness = seededHarness(fixture);
+      const harness = await seededHarness(fixture);
       await seedBook(harness);
       const revisionBefore = harness.adapter.getBookState(bookId)?.revision ?? 0;
       const commandA = inflowCommand(1_000, '2026-09-10', 'A');
@@ -352,7 +354,7 @@ export function runRepositoryConformanceSuite(fixture: ConformanceFixture): void
     });
 
     it('lets exactly one of two concurrent staged book writers commit', async () => {
-      const harness = seededHarness(fixture);
+      const harness = await seededHarness(fixture);
       await seedBook(harness);
       const revisionBefore = harness.adapter.getBookState(bookId)?.revision ?? 0;
       const nameBefore = harness.adapter.getBookState(bookId)?.book.displayName;
@@ -407,7 +409,7 @@ export function runRepositoryConformanceSuite(fixture: ConformanceFixture): void
     });
 
     it('commits state, operation, outbox intent, and durable sequence atomically', async () => {
-      const harness = seededHarness(fixture);
+      const harness = await seededHarness(fixture);
       await seedBook(harness);
       const command = inflowCommand(5_000, '2026-09-12', 'atomic');
       const receipt = await previewAndExecute(harness, 'op-atomic', command);
@@ -432,7 +434,7 @@ export function runRepositoryConformanceSuite(fixture: ConformanceFixture): void
     it('rolls back every tentative write and checkpoint step byte-identically', async () => {
       const command = inflowCommand(7_000, '2026-09-13', 'rollback');
       for (const method of ['putBookState', 'putOperation', 'putOutboxEntry'] as const) {
-        const harness = seededHarness(fixture);
+        const harness = await seededHarness(fixture);
         await seedBook(harness);
         const before = harness.adapter.snapshotBytes();
         const failedId = brandedOperationId(`op-fail-${method}`);
@@ -457,7 +459,7 @@ export function runRepositoryConformanceSuite(fixture: ConformanceFixture): void
         expect(harness.adapter.getOperation(failedId)).not.toBeNull();
       }
 
-      const harness = seededHarness(fixture);
+      const harness = await seededHarness(fixture);
       await seedBook(harness);
       const stream = brandedStream('stream-conformance');
       const finance = { adapter: harness.adapter, context: harness.context };
@@ -475,7 +477,7 @@ export function runRepositoryConformanceSuite(fixture: ConformanceFixture): void
     });
 
     it('replays same-ID/same-payload receipts and rejects same-ID/different-payload', async () => {
-      const harness = seededHarness(fixture);
+      const harness = await seededHarness(fixture);
       await seedBook(harness);
       const command = inflowCommand(9_000, '2026-09-14', 'replay');
       const operationId = brandedOperationId('op-replay');
@@ -511,7 +513,7 @@ export function runRepositoryConformanceSuite(fixture: ConformanceFixture): void
     });
 
     it('rejects stale previews and accepts a refreshed retry', async () => {
-      const harness = seededHarness(fixture);
+      const harness = await seededHarness(fixture);
       await seedBook(harness);
       const revisionBefore = harness.adapter.getBookState(bookId)?.revision ?? 0;
       const command = inflowCommand(3_000, '2026-09-15', 'stale');
@@ -539,7 +541,7 @@ export function runRepositoryConformanceSuite(fixture: ConformanceFixture): void
     });
 
     it('returns the original receipt after a lost acknowledgement and adapter reacquisition', async () => {
-      const harness = seededHarness(fixture);
+      const harness = await seededHarness(fixture);
       await seedBook(harness);
       const command = inflowCommand(12_345, '2026-09-17', 'uncertain');
       const operationId = brandedOperationId('op-uncertain');
@@ -549,7 +551,7 @@ export function runRepositoryConformanceSuite(fixture: ConformanceFixture): void
       await previewAndExecute(harness, 'op-later', inflowCommand(500, '2026-09-18', 'later'));
       const bytesSettled = harness.adapter.snapshotBytes();
 
-      const reacquired = harness.adapter.reopen();
+      const reacquired = await harness.adapter.reopen();
       expect(reacquired.boundScope as string).toBe(harness.adapter.boundScope as string);
       const retry = await executeCommand(
         reacquired,
@@ -568,7 +570,7 @@ export function runRepositoryConformanceSuite(fixture: ConformanceFixture): void
     });
 
     it('persists delivery attempts atomically, rolls back failures, and retries exactly once', async () => {
-      const harness = seededHarness(fixture);
+      const harness = await seededHarness(fixture);
       await seedBook(harness);
       const command = inflowCommand(11_000, '2026-09-23', 'delivery');
       await previewAndExecute(harness, 'op-delivery', command);
@@ -595,7 +597,7 @@ export function runRepositoryConformanceSuite(fixture: ConformanceFixture): void
       expect(harness.adapter.getOperation(operationId)?.canonicalCommand).toBe(journalBefore);
 
       // Reacquisition preserves the persisted delivery state with exactly one attempt.
-      const reacquired = harness.adapter.reopen();
+      const reacquired = await harness.adapter.reopen();
       expect(reacquired.getDeliveryState(operationId)?.attempts).toBe(1);
 
       // Delivery metadata never exists without its intent.
@@ -603,7 +605,7 @@ export function runRepositoryConformanceSuite(fixture: ConformanceFixture): void
     });
 
     it('applies duplicate and reordered pulled delivery exactly once with content intact', async () => {
-      const harness = seededHarness(fixture);
+      const harness = await seededHarness(fixture);
       await seedBook(harness);
       await previewAndExecute(harness, 'op-dup-1', inflowCommand(100, '2026-09-19', 'dup-1'));
       await previewAndExecute(harness, 'op-dup-2', inflowCommand(200, '2026-09-20', 'dup-2'));
@@ -642,7 +644,7 @@ export function runRepositoryConformanceSuite(fixture: ConformanceFixture): void
     });
 
     it('rejects changed pulled content without advancing the checkpoint', async () => {
-      const harness = seededHarness(fixture);
+      const harness = await seededHarness(fixture);
       await seedBook(harness);
       await previewAndExecute(harness, 'op-content-1', inflowCommand(300, '2026-09-24', 'content-1'));
       const finance = { adapter: harness.adapter, context: harness.context };
@@ -730,7 +732,7 @@ export function runRepositoryConformanceSuite(fixture: ConformanceFixture): void
     });
 
     it('rejects cross-book references and isolates bound scopes', async () => {
-      const harness = seededHarness(fixture);
+      const harness = await seededHarness(fixture);
       await seedBook(harness);
       await previewAndExecute(harness, 'op-create-second', {
         kind: 'createBook',
@@ -779,7 +781,7 @@ export function runRepositoryConformanceSuite(fixture: ConformanceFixture): void
       // A second bound scope seeds the same raw book independently: same
       // IDs, unrelated records, per-scope operation uniqueness.
       const specB: ConformanceScopeSpec = { deviceId: 'test-device-0002' };
-      const harnessB = seededHarness(fixture, specB);
+      const harnessB = await seededHarness(fixture, specB);
       await seedBook(harnessB);
       expect(harnessB.adapter.boundScope as string).not.toBe(harness.adapter.boundScope as string);
       const commandB = inflowCommand(77, '2026-09-21', 'scope-b');
@@ -792,9 +794,9 @@ export function runRepositoryConformanceSuite(fixture: ConformanceFixture): void
     it('rejects mismatched-context attempts on bound scopes before any read, replay, or mutation', async () => {
       const specA: ConformanceScopeSpec = { deviceId: 'test-device-000a' };
       const specB: ConformanceScopeSpec = { deviceId: 'test-device-000b' };
-      const harnessA = seededHarness(fixture, specA);
+      const harnessA = await seededHarness(fixture, specA);
       await seedBook(harnessA);
-      const harnessB = seededHarness(fixture, specB);
+      const harnessB = await seededHarness(fixture, specB);
       await seedBook(harnessB);
       const contextB = contextForSpec(specB);
 
@@ -839,7 +841,7 @@ export function runRepositoryConformanceSuite(fixture: ConformanceFixture): void
     });
 
     it('applies pulled batches and checkpoints atomically with content', async () => {
-      const harness = seededHarness(fixture);
+      const harness = await seededHarness(fixture);
       await seedBook(harness);
       const finance = { adapter: harness.adapter, context: harness.context };
       const stream = brandedStream('stream-atomic');
@@ -910,7 +912,7 @@ export function runRepositoryConformanceSuite(fixture: ConformanceFixture): void
     });
 
     it('rejects cross-scope pulled batches without applying or advancing', async () => {
-      const harness = seededHarness(fixture);
+      const harness = await seededHarness(fixture);
       await seedBook(harness);
       const finance = { adapter: harness.adapter, context: harness.context };
       const stream = brandedStream('stream-cross-scope');
@@ -955,7 +957,7 @@ export function runRepositoryConformanceSuite(fixture: ConformanceFixture): void
     });
 
     it('serializes concurrent delivery updates without losing successful writes', async () => {
-      const harness = seededHarness(fixture);
+      const harness = await seededHarness(fixture);
       await seedBook(harness);
       await previewAndExecute(harness, 'op-race', inflowCommand(1_200, '2026-09-28', 'race'));
       const operationId = brandedOperationId('op-race');
@@ -993,7 +995,7 @@ export function runRepositoryConformanceSuite(fixture: ConformanceFixture): void
     });
 
     it('rejects a mixed late-write conflict without committing earlier book changes', async () => {
-      const harness = seededHarness(fixture);
+      const harness = await seededHarness(fixture);
       await seedBook(harness);
       await previewAndExecute(harness, 'op-mixed', inflowCommand(1_200, '2026-09-28', 'mixed'));
       const operationId = brandedOperationId('op-mixed');
@@ -1036,7 +1038,7 @@ export function runRepositoryConformanceSuite(fixture: ConformanceFixture): void
     });
 
     it('preserves concurrent delivery when a pulled batch rolls back', async () => {
-      const harness = seededHarness(fixture);
+      const harness = await seededHarness(fixture);
       await seedBook(harness);
       await previewAndExecute(harness, 'op-local-delivery', inflowCommand(400, '2026-09-25', 'local'));
       const localId = brandedOperationId('op-local-delivery');
@@ -1074,7 +1076,7 @@ export function runRepositoryConformanceSuite(fixture: ConformanceFixture): void
     });
 
     it('orders fixed-clock commits by durable sequence only', async () => {
-      const harness = seededHarness(fixture, DEFAULT_SPEC, 0);
+      const harness = await seededHarness(fixture, DEFAULT_SPEC, 0);
       await seedBook(harness);
       const first = await previewAndExecute(harness, 'op-fixed-1', inflowCommand(10, '2026-09-22', 'fixed-1'));
       const second = await previewAndExecute(harness, 'op-fixed-2', inflowCommand(20, '2026-09-23', 'fixed-2'));

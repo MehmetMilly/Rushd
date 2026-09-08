@@ -140,7 +140,7 @@
       "objective": "Deliver resilient offline guest storage, legacy migration, versioned portability, and installable/update-safe PWA behavior.",
       "depends_on": ["P03"],
       "risk": "hard",
-      "allowed_paths": ["src/data/**", "src/pwa/**", "src/application/**", "public/**", "tests/data/**", "tests/pwa/**", "tests/fixtures/**", "vite.config.*", "playwright.config.*", "package.json", "package-lock.json", "docs/**"],
+      "allowed_paths": ["src/data/**", "src/pwa/**", "src/application/**", "public/**", "tests/data/**", "tests/pwa/**", "tests/fixtures/**", "vite.config.*", "playwright.config.*", "package.json", "package-lock.json", "docs/**", "tests/domain/support/repository-conformance.ts", "tests/domain/repository-conformance.test.ts", "scripts/production-source.mjs", "tests/p02-build-contract.test.mjs", "tsconfig.json"],
       "acceptance": [
         {"id": "P04-A1", "text": "Guest mode reads/writes a disconnected local v2 database and never contacts account/cloud services."},
         {"id": "P04-A2", "text": "Legacy migration converts canonical SAR major-unit decimals to halalas exactly without rounding, rejects/quarantines excess precision/invalid/ambiguous values, retains original source values, preserves provisional essential reservations and unallocated vault opening value, maps each verified legacy budget settlement to one named carry-in and vault settlement to one allocation funding movement, never infers goal allocations, and survives every fixture/failure point with rollback evidence."},

@@ -17,6 +17,11 @@
     "src/application/debug-test-bridge.js",
     "tests/domain/**/*.ts",
     "tests/property/**/*.ts",
+    "tests/data/p04b-schema.test.ts",
+    "tests/data/durable-conformance-fixture.ts",
+    "tests/data/browser-conformance-entry.ts",
+    "tests/data/browser-vitest-shim.ts",
+    "tests/data/p04b-page-api.ts",
     "vitest.config.ts"
   ]
 }

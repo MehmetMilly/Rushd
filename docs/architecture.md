@@ -234,6 +234,23 @@ per-platform matrix, and the physical-device test card live in
 boots through `src/main.ts` → `createLegacyApplication`; no experiment
 module is imported by the production startup path.
 
+## Durable v2 guest repository (P04 Task B)
+
+Task B owns `src/data/v2/`. The production guest adapter hydrates one coherent
+SQLite snapshot inside a read transaction (books, journal, outbox, delivery,
+meta/counters, and checkpoints together), stages P03 transaction methods on a
+synchronous overlay, and commits the complete book/journal/outbox/delivery/checkpoint
+delta inside one `BEGIN IMMEDIATE` transaction on a dedicated Worker running
+`OPFSCoopSyncVFS` (`@journeyapps/wa-sqlite@2.0.4`, SQLite `3.53.0`). Hydrate takes a
+finite shared Web Lock; commits take a finite exclusive Web Lock plus worker-side
+serialization. Guard
+conflicts, BUSY, unavailable OPFS, and unknown schema versions fail visibly;
+the adapter never reports a durable success from a memory fallback or opens an
+account/cloud client. Local schema version is `1`. Per-identity files are
+derived from the bound scope and device. Final VFS selection, migration,
+portability, PWA, visible app cutover, and physical-device evidence remain
+later P04 work. The visible app still boots through the legacy v1 runtime.
+
 ## Storage/sync contract ADR (P03 Task D, binding)
 
 This ADR freezes the provider-neutral contract P04 local persistence and
