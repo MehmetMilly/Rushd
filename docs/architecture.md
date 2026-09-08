@@ -217,6 +217,23 @@ still backend-only: the legacy UI does not call it.
 Not implemented yet (later phases): persistent storage, obligation due
 dates beyond plan occurrences, and sync.
 
+## Storage feasibility experiment (P04 Task A, provisional)
+
+Task A owns `src/data/experiments/` (pinned candidate matrix,
+durable-overlay pattern, SQLite-candidate repository) and `tests/data/`
+(real-candidate Chromium experiment with dedicated Workers, pinned-engine
+proof, command bundle entry). It proves P03's synchronous transaction port
+over real durable storage (hydrate + synchronous overlay + freshness
+recheck inside one SQLite transaction) with real commands, and executes the
+pinned IndexedDB-backed (`IDBBatchAtomicVFS`) and cooperative OPFS
+(`OPFSCoopSyncVFS`) candidates without freezing the VFS. Two-tab evidence
+is a competing revision-guarded write from the same starting revision,
+not a read-only holder plus a later solo commit. Provisional ADR,
+per-platform matrix, and the physical-device test card live in
+`docs/implementation/P04_STORAGE_FEASIBILITY.md`. The visible app still
+boots through `src/main.ts` → `createLegacyApplication`; no experiment
+module is imported by the production startup path.
+
 ## Storage/sync contract ADR (P03 Task D, binding)
 
 This ADR freezes the provider-neutral contract P04 local persistence and

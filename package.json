@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node scripts/smoke-check.mjs && node tests/font-license-guard.test.mjs && node tests/i18n-parity.test.mjs && node tests/p02-build-contract.test.mjs && node scripts/finance-rules.test.mjs && node scripts/p00-fixtures.test.mjs && node scripts/p00-characterization.test.mjs && node tests/p01-dangerous-mutations.test.mjs && node tests/p01-stability.test.mjs && node scripts/p00-artifact-guards.test.mjs && node scripts/verify-p00-baseline.mjs && vitest run tests/domain",
     "test:property": "vitest run tests/property",
+    "test:data": "vitest run --config tests/data/vitest.p04a.config.ts && node tests/data/candidate-experiment.mjs",
     "test:p01": "node tests/p01-dangerous-mutations.test.mjs && node tests/p01-stability.test.mjs",
     "test:browser": "npm run build && PLAYWRIGHT_BROWSERS_PATH=0 RUSHD_SMOKE_ROOT=dist node scripts/browser-smoke.cjs",
     "test:legacy-idb": "npm run build && PLAYWRIGHT_BROWSERS_PATH=0 RUSHD_LEGACY_IDB_ROOT=dist node scripts/legacy-idb-proof.cjs",
@@ -43,6 +44,8 @@
   },
   "license": "MIT",
   "dependencies": {
+    "@journeyapps/wa-sqlite": "2.0.4",
+    "@sqlite.org/sqlite-wasm": "3.53.0-build1",
     "vue": "3.5.42"
   }
 }
