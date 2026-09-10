@@ -1,0 +1,59 @@
+{
+  "schema": "rushd.v1-fixture.v1",
+  "case_id": "p04c-overlap",
+  "description": "SYNTHETIC_P04C_ONLY vault opening plus surplus that cannot also equal stored balance.",
+  "sanitization": {
+    "marker": "SYNTHETIC_P04C_ONLY",
+    "contains_real_financial_data": false
+  },
+  "indexed_db": {
+    "name": "MicroSaveOS_DB",
+    "version": 1,
+    "stores": {
+      "settings": [
+        { "key": "baseAllowance", "value": 800 },
+        {
+          "key": "vault",
+          "value": {
+            "openingBalance": 200,
+            "balance": 200,
+            "transactions": [
+              {
+                "id": "fake-overlap-tx",
+                "type": "surplus_transfer",
+                "amount": 200,
+                "date": "2026-08-01",
+                "monthKey": "2026-08",
+                "sourceMonthKey": "2026-07"
+              }
+            ],
+            "goals": []
+          }
+        },
+        {
+          "key": "monthEndSettlements",
+          "value": [
+            {
+              "previousMonthKey": "2026-07",
+              "decision": "vault",
+              "surplus": 200,
+              "vaultTransactionId": "fake-overlap-tx"
+            }
+          ]
+        }
+      ],
+      "templates": [],
+      "expenses": [
+        {
+          "id": "fake-overlap-exp",
+          "name": "FAKE Overlap",
+          "expectedCost": 5,
+          "actualPaid": 5,
+          "isPaid": true,
+          "classification": "essential",
+          "date": "2026-07-20"
+        }
+      ]
+    }
+  }
+}

@@ -9,7 +9,13 @@
  * and applies content-bound pulled batches with its checkpoint.
  */
 
+import { describe, expect, it } from 'vitest';
+import { applyRemoteOperation } from '../../src/application/sync/apply-remote';
+import { canonicalJson, stableDigest } from '../../src/domain/contracts/canonical';
+import { makeBookId, makeOperationId } from '../../src/domain/contracts/identity';
+import type { PulledOperation } from '../../src/domain/sync/cursors';
 import { makeAccountId, makeDeviceId, makeGuestKey, makeRepositoryScopeId, repositoryScopeIdFor } from '../../src/domain/sync/scope';
+import { createDeterministicContext } from './support/deterministic-context';
 import { DEFAULT_GUEST_KEY } from './support/deterministic-context';
 import { InMemoryCheckpointStore } from './support/in-memory-checkpoint-store';
 import { InMemoryFinanceRepository } from './support/in-memory-repository';
@@ -45,3 +51,47 @@ const fixture: ConformanceFixture = {
 };
 
 runRepositoryConformanceSuite(fixture);
+
+describe('handler-clock provenance through remote apply', () => {
+  it('stores the receiver handler trace in both journal and receipt', async () => {
+    const repository = boundAdapter();
+    const { context } = createDeterministicContext({ baseInstantMs: 500, stepMs: -100 });
+    const command = {
+      kind: 'createBook',
+      bookId: 'book-remote-trace',
+      displayName: 'remote trace',
+      currency: 'SAR',
+      timeZone: 'Asia/Riyadh',
+      cycleAnchor: { kind: 'firstOfMonth' },
+    };
+    const canonicalCommand = canonicalJson(command);
+    const operationId = makeOperationId('op-remote-trace');
+    const bookId = makeBookId('book-remote-trace');
+    const sourceDeviceId = makeDeviceId('remote-trace-device');
+    if (!operationId.ok || !bookId.ok || !sourceDeviceId.ok) throw new Error('invalid test identity');
+    const pulled: PulledOperation = {
+      operationId: operationId.value,
+      sequence: 1,
+      scopeId: repository.boundScope,
+      bookId: bookId.value,
+      baseRevision: 0,
+      resultingRevision: 1,
+      canonicalCommand,
+      canonicalDigest: stableDigest(canonicalCommand),
+      sourceDeviceId: sourceDeviceId.value,
+      sourceEnqueueSequence: 9,
+      schemaVersion: 1,
+    };
+    const result = await repository.runTransaction((transaction) =>
+      applyRemoteOperation(repository, transaction, pulled, context),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('unreachable');
+    expect(result.receipt.handlerClockInstants).toEqual([500]);
+    expect(result.receipt.committedAtInstantMs).toBe(400);
+    const stored = repository.getOperation(operationId.value);
+    expect(stored?.handlerClockVersion).toBe(1);
+    expect(stored?.handlerClockInstants).toEqual([500]);
+    expect(stored?.receipt.handlerClockInstants).toEqual([500]);
+  });
+});

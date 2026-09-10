@@ -1,0 +1,80 @@
+{
+  "schema": "rushd.v1-fixture.v1",
+  "case_id": "p04c-adversarial-money",
+  "description": "SYNTHETIC_P04C_ONLY excess precision, invalid sign/range, ambiguous currency, duplicate ids.",
+  "sanitization": {
+    "marker": "SYNTHETIC_P04C_ONLY",
+    "contains_real_financial_data": false
+  },
+  "indexed_db": {
+    "name": "MicroSaveOS_DB",
+    "version": 1,
+    "stores": {
+      "settings": [
+        { "key": "baseAllowance", "value": 500 },
+        {
+          "key": "vault",
+          "value": { "balance": -12, "transactions": [], "goals": [] }
+        },
+        { "key": "monthEndSettlements", "value": [] }
+      ],
+      "templates": [],
+      "expenses": [
+        {
+          "id": "fake-excess",
+          "name": "FAKE Excess",
+          "expectedCost": 1.234,
+          "actualPaid": 1.234,
+          "isPaid": true,
+          "classification": "essential",
+          "date": "2026-08-01"
+        },
+        {
+          "id": "fake-sign",
+          "name": "FAKE Sign",
+          "expectedCost": -9,
+          "actualPaid": -9,
+          "isPaid": true,
+          "classification": "luxury",
+          "date": "2026-08-02"
+        },
+        {
+          "id": "fake-currency",
+          "name": "FAKE Currency",
+          "expectedCost": "12 SAR",
+          "actualPaid": "12 SAR",
+          "isPaid": true,
+          "classification": "essential",
+          "date": "2026-08-03"
+        },
+        {
+          "id": "fake-dup",
+          "name": "FAKE Dup A",
+          "expectedCost": 3,
+          "actualPaid": 3,
+          "isPaid": true,
+          "classification": "essential",
+          "date": "2026-08-04"
+        },
+        {
+          "id": "fake-dup",
+          "name": "FAKE Dup B",
+          "expectedCost": 4,
+          "actualPaid": 4,
+          "isPaid": true,
+          "classification": "luxury",
+          "date": "2026-08-05"
+        },
+        {
+          "id": "fake unpaid luxury",
+          "name": "FAKE Bad Id",
+          "expectedCost": 6,
+          "actualPaid": 0,
+          "isPaid": false,
+          "classification": "luxury",
+          "date": "2026-08-06"
+        }
+      ]
+    }
+  }
+}

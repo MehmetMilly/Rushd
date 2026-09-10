@@ -154,6 +154,16 @@ export {
   type TransactionalRepository,
 } from './repository';
 export {
+  CANONICAL_DIGEST_PATTERN,
+  MONEY_FIELD_POLICY,
+  validateRepositorySnapshotGraph,
+  type CheckpointStreamInput,
+  type RepositorySnapshotGraphInput,
+  type RepositorySnapshotGraphIssue,
+  type RepositorySnapshotGraphReason,
+  type RepositorySnapshotGraphResult,
+} from './repository-snapshot-validation';
+export {
   SYNC_RECORD_SCHEMA_VERSION,
   acknowledgeOutboxDelivery,
   initialOutboxDelivery,

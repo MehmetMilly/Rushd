@@ -38,6 +38,25 @@ export type InstantResolutionFailure =
 export const MIN_REPRESENTABLE_INSTANT_MS = -8_640_000_000_000_000;
 export const MAX_REPRESENTABLE_INSTANT_MS = 8_640_000_000_000_000;
 
+/** True when `value` is a safe integer inside the platform Date range. */
+export function isRepresentableInstantMs(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value >= MIN_REPRESENTABLE_INSTANT_MS &&
+    value <= MAX_REPRESENTABLE_INSTANT_MS
+  );
+}
+
+/** Wall-clock `HH:MM:SS` in `00:00:00` through `23:59:59`. */
+export function isValidWallTime(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{2}:\d{2}:\d{2}$/.test(value)) return false;
+  const hour = Number(value.slice(0, 2));
+  const minute = Number(value.slice(3, 5));
+  const second = Number(value.slice(6, 8));
+  return hour <= 23 && minute <= 59 && second <= 59;
+}
+
 export type CivilDateTimeResolution =
   | {
       readonly ok: true;

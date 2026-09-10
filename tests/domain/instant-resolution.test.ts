@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   isValidTimeZoneName,
+  isRepresentableInstantMs,
+  isValidWallTime,
   MAX_REPRESENTABLE_INSTANT_MS,
   MIN_REPRESENTABLE_INSTANT_MS,
   resolveCivilDate,
@@ -201,6 +203,26 @@ describe('application occurrence validation against unsupported instants', () =>
     expect(JSON.stringify(repo.getBookState(bookId))).toBe(before);
     expect(repo.listOutbox()).toHaveLength(2);
     expect(repo.getOperation(op('op-era-inflow'))).toBeNull();
+  });
+});
+
+describe('representable instant and wall-time predicates', () => {
+  it('accepts the platform Date bounds and rejects one millisecond outside each', () => {
+    expect(isRepresentableInstantMs(MIN_REPRESENTABLE_INSTANT_MS)).toBe(true);
+    expect(isRepresentableInstantMs(MAX_REPRESENTABLE_INSTANT_MS)).toBe(true);
+    expect(isRepresentableInstantMs(MIN_REPRESENTABLE_INSTANT_MS - 1)).toBe(false);
+    expect(isRepresentableInstantMs(MAX_REPRESENTABLE_INSTANT_MS + 1)).toBe(false);
+    expect(isRepresentableInstantMs(1.5)).toBe(false);
+    expect(isRepresentableInstantMs(Number.NaN)).toBe(false);
+  });
+
+  it('accepts 00:00:00 through 23:59:59 and rejects overflow components', () => {
+    expect(isValidWallTime('00:00:00')).toBe(true);
+    expect(isValidWallTime('23:59:59')).toBe(true);
+    expect(isValidWallTime('24:00:00')).toBe(false);
+    expect(isValidWallTime('00:60:00')).toBe(false);
+    expect(isValidWallTime('00:00:60')).toBe(false);
+    expect(isValidWallTime('99:99:99')).toBe(false);
   });
 });
 

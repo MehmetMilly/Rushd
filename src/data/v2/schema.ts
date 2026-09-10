@@ -1,10 +1,13 @@
 /**
  * Versioned local schema for the durable v2 guest repository.
  *
- * Schema 1 persists canonical book state, the operation journal, complete
+ * Local schema 1 persists canonical book state, the operation journal, complete
  * immutable outbox envelopes, delivery metadata, the enqueue counter, and
  * content-bound replication checkpoints with applied pulled operations.
- * Unknown versions fail visibly; this module never migrates them.
+ * The container version and frozen P03 sync envelope stay unchanged by the
+ * versioned handler-clock-provenance amendment. Embedded legacy journal
+ * records are rejected by the repository; missing clock evidence is never
+ * synthesized.
  */
 
 export const LOCAL_SCHEMA_VERSION = 1;

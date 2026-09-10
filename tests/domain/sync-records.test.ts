@@ -28,6 +28,7 @@ import {
 } from '../../src/application/commands';
 import type { CommandContext } from '../../src/application/commands/context';
 import { makeBookId, makeOperationId, type BookId, type OperationId } from '../../src/domain/contracts/identity';
+import { MAX_REPRESENTABLE_INSTANT_MS } from '../../src/domain/primitives/instant';
 import { makeAccountId, makeDeviceId, repositoryScopeIdFor } from '../../src/domain/sync/scope';
 import { equalSyncCursors, makeSyncCursor } from '../../src/domain/sync/cursors';
 import { createDeterministicContext } from './support/deterministic-context';
@@ -94,6 +95,8 @@ describe('sync-facing record schema', () => {
 
     expect(SYNC_RECORD_SCHEMA_VERSION).toBe(1);
     expect(receipt.schemaVersion).toBe(1);
+    expect(receipt.handlerClockVersion).toBe(1);
+    expect(receipt.handlerClockInstants).toHaveLength(1);
     expect(receipt.scopeId).toBe(
       repositoryScopeIdFor({
         kind: 'account',
@@ -106,6 +109,8 @@ describe('sync-facing record schema', () => {
 
     const journal = repo.getOperation(op('op-cycle'));
     expect(journal?.schemaVersion).toBe(1);
+    expect(journal?.handlerClockVersion).toBe(1);
+    expect(journal?.handlerClockInstants).toEqual(receipt.handlerClockInstants);
     expect(journal?.scopeId).toBe(receipt.scopeId);
     expect(journal?.sourceDeviceId).toBe(receipt.sourceDeviceId);
     expect(journal?.enqueueSequence).toBe(receipt.enqueueSequence);
@@ -213,6 +218,9 @@ describe('sync-facing record schema', () => {
     await run(repo, context, 'op-cycle', OPEN_CYCLE);
     const first = await run(repo, context, 'op-back-1', inflow(10, '2026-09-12', 'back-1'));
     const second = await run(repo, context, 'op-back-2', inflow(20, '2026-09-13', 'back-2'));
+    expect(first.handlerClockInstants).toHaveLength(1);
+    expect(first.handlerClockInstants?.[0]).toBeGreaterThan(first.committedAtInstantMs);
+    expect(repo.getOperation(op('op-back-1'))?.handlerClockInstants).toEqual(first.handlerClockInstants);
     expect(second.committedAtInstantMs).toBeLessThan(first.committedAtInstantMs);
     expect(second.enqueueSequence).toBeGreaterThan(first.enqueueSequence);
 
@@ -223,6 +231,26 @@ describe('sync-facing record schema', () => {
     expect((later as string) < (earlier as string)).toBe(true);
     expect(equalSyncCursors(earlier, later)).toBe(false);
     expect(equalSyncCursors(earlier, brandedCursor('cursor-zzz-9'))).toBe(true);
+  });
+
+  it('rejects an unrepresentable handler sample without any committed write', async () => {
+    const repo = new InMemoryFinanceRepository();
+    const { context: base } = createDeterministicContext();
+    const context: CommandContext = {
+      ...base,
+      clock: { nowMs: () => MAX_REPRESENTABLE_INSTANT_MS + 1 },
+    };
+    const preview = previewCommand(repo, CREATE_BOOK, base);
+    expect(preview.ok).toBe(true);
+    if (!preview.ok) throw new Error('unreachable');
+    const before = repo.snapshotBytes();
+    await expect(executeCommand(
+      repo,
+      CREATE_BOOK,
+      { operationId: op('op-invalid-clock'), expectedRevision: 0, previewDigest: preview.preview.previewDigest },
+      context,
+    )).rejects.toThrow('handler clock returned an instant outside the representable range');
+    expect(repo.snapshotBytes()).toBe(before);
   });
 });
 

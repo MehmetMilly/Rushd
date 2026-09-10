@@ -25,6 +25,7 @@
 
 import { canonicalJson, stableDigest } from '../../domain/contracts/canonical';
 import {
+  HANDLER_CLOCK_PROVENANCE_VERSION,
   SYNC_RECORD_SCHEMA_VERSION,
   type CommandConfirmation,
   type CommandExecutionResult,
@@ -35,7 +36,7 @@ import {
 } from '../../domain/contracts/commands';
 import type { ScopedRepository } from '../../domain/contracts/repository';
 import { checkScopeBinding } from './scope-check';
-import { requireCommandContext, type CommandContext } from './context';
+import { requireCommandContext, traceHandlerClock, type CommandContext } from './context';
 import { dispatchApply } from './handlers';
 import { validateFinanceCommand, validateOperationId } from './validation';
 
@@ -127,7 +128,8 @@ export async function executeCommand(
       }
     }
 
-    const applied = dispatchApply(command, state, context, confirmed.operationId, {
+    const handlerClock = traceHandlerClock(context);
+    const applied = dispatchApply(command, state, handlerClock.context, confirmed.operationId, {
       locateEntry: (entryId) => transaction.locateEntry(entryId),
       locateObligation: (obligationId) => transaction.locateObligation(obligationId),
       locateGoal: (goalId) => transaction.locateGoal(goalId),
@@ -142,6 +144,7 @@ export async function executeCommand(
 
     const revisionBefore = state === null ? 0 : state.revision;
     const committedAtInstantMs = context.clock.nowMs();
+    const handlerClockInstants = [...handlerClock.instants];
     const canonicalDigest = stableDigest(canonicalCommand);
     // Durable local order is assigned here, inside the committing
     // transaction: fixed-clock commits still receive a strict sequence, and
@@ -158,6 +161,8 @@ export async function executeCommand(
       canonicalDigest,
       calculationVersion: context.calculationVersion,
       effects: applied.effects,
+      handlerClockInstants,
+      handlerClockVersion: HANDLER_CLOCK_PROVENANCE_VERSION,
       schemaVersion: SYNC_RECORD_SCHEMA_VERSION,
       scopeId: context.origin.scopeId,
       sourceDeviceId: context.origin.deviceId,
@@ -169,6 +174,8 @@ export async function executeCommand(
       canonicalCommand,
       receipt,
       committedAtInstantMs,
+      handlerClockInstants: [...handlerClockInstants],
+      handlerClockVersion: HANDLER_CLOCK_PROVENANCE_VERSION,
       schemaVersion: SYNC_RECORD_SCHEMA_VERSION,
       scopeId: context.origin.scopeId,
       sourceDeviceId: context.origin.deviceId,

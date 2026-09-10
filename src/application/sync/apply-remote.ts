@@ -12,6 +12,7 @@
 
 import { canonicalJson, stableDigest } from '../../domain/contracts/canonical';
 import {
+  HANDLER_CLOCK_PROVENANCE_VERSION,
   SYNC_RECORD_SCHEMA_VERSION,
   type CommandExecutionResult,
   type CommandFailure,
@@ -21,7 +22,7 @@ import {
 import type { ScopedRepository, RepositoryTransaction } from '../../domain/contracts/repository';
 import type { PulledOperation } from '../../domain/sync/cursors';
 import { checkScopeBinding } from '../commands/scope-check';
-import { requireCommandContext, type CommandContext } from '../commands/context';
+import { requireCommandContext, traceHandlerClock, type CommandContext } from '../commands/context';
 import { dispatchApply } from '../commands/handlers';
 import { validateFinanceCommand } from '../commands/validation';
 
@@ -134,7 +135,8 @@ export function applyRemoteOperation(
     }
   }
 
-  const applied = dispatchApply(command, state, context, pulled.operationId, {
+  const handlerClock = traceHandlerClock(context);
+  const applied = dispatchApply(command, state, handlerClock.context, pulled.operationId, {
     locateEntry: (entryId) => transaction.locateEntry(entryId),
     locateObligation: (obligationId) => transaction.locateObligation(obligationId),
     locateGoal: (goalId) => transaction.locateGoal(goalId),
@@ -159,6 +161,7 @@ export function applyRemoteOperation(
 
   const revisionBefore = state === null ? 0 : state.revision;
   const committedAtInstantMs = context.clock.nowMs();
+  const handlerClockInstants = [...handlerClock.instants];
   const receipt: CommandReceipt = {
     operationId: pulled.operationId,
     commandKind: command.kind,
@@ -169,6 +172,8 @@ export function applyRemoteOperation(
     canonicalDigest: pulled.canonicalDigest,
     calculationVersion: context.calculationVersion,
     effects: applied.effects,
+    handlerClockInstants,
+    handlerClockVersion: HANDLER_CLOCK_PROVENANCE_VERSION,
     schemaVersion: SYNC_RECORD_SCHEMA_VERSION,
     scopeId: pulled.scopeId,
     sourceDeviceId: pulled.sourceDeviceId,
@@ -180,6 +185,8 @@ export function applyRemoteOperation(
     canonicalCommand,
     receipt,
     committedAtInstantMs,
+    handlerClockInstants: [...handlerClockInstants],
+    handlerClockVersion: HANDLER_CLOCK_PROVENANCE_VERSION,
     schemaVersion: SYNC_RECORD_SCHEMA_VERSION,
     scopeId: pulled.scopeId,
     sourceDeviceId: pulled.sourceDeviceId,

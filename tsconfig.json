@@ -22,6 +22,8 @@
     "tests/data/browser-conformance-entry.ts",
     "tests/data/browser-vitest-shim.ts",
     "tests/data/p04b-page-api.ts",
+    "tests/data/p04c-portability.test.ts",
+    "tests/data/p04c-page-api.ts",
     "vitest.config.ts"
   ]
 }

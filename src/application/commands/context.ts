@@ -13,6 +13,7 @@
  * implemented cloud authorization.
  */
 
+import { isRepresentableInstantMs } from '../../domain/primitives/instant';
 import { makeDeviceId, makeRepositoryScopeId, type CommandOrigin } from '../../domain/sync/scope';
 
 export interface DomainClock {
@@ -36,6 +37,32 @@ export interface CommandContext {
    * authorization (P08 derives ownership from the session server-side).
    */
   readonly origin: CommandOrigin;
+}
+
+export interface HandlerClockTrace {
+  readonly context: CommandContext;
+  readonly instants: readonly number[];
+}
+
+/** Records only handler clock reads while delegating IDs and provenance unchanged. */
+export function traceHandlerClock(context: CommandContext): HandlerClockTrace {
+  const instants: number[] = [];
+  return {
+    context: {
+      ...context,
+      clock: {
+        nowMs: () => {
+          const instantMs = context.clock.nowMs();
+          if (!isRepresentableInstantMs(instantMs)) {
+            throw new TypeError('handler clock returned an instant outside the representable range');
+          }
+          instants.push(instantMs);
+          return instantMs;
+        },
+      },
+    },
+    instants,
+  };
 }
 
 export function requireCommandContext(value: unknown): CommandContext {

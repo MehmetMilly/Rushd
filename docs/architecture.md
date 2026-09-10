@@ -247,9 +247,38 @@ serialization. Guard
 conflicts, BUSY, unavailable OPFS, and unknown schema versions fail visibly;
 the adapter never reports a durable success from a memory fallback or opens an
 account/cloud client. Local schema version is `1`. Per-identity files are
-derived from the bound scope and device. Final VFS selection, migration,
-portability, PWA, visible app cutover, and physical-device evidence remain
-later P04 work. The visible app still boots through the legacy v1 runtime.
+derived from the bound scope and device. Final VFS selection, PWA, visible
+app cutover, and physical-device evidence remain later P04 work. The visible
+app still boots through the legacy v1 runtime.
+
+The P04-C timestamp-provenance amendment keeps that SQLite container version
+and the frozen P03 sync envelope version unchanged. New operation and receipt
+records carry `handlerClockVersion: 1` plus identical ordered
+`handlerClockInstants` arrays. Hydration and writes reject a legacy journal
+record without this evidence; no state-derived timestamp is fabricated.
+
+## Legacy migration and offline portability (P04 Task C)
+
+Task C owns `src/data/migration/` and `src/data/portability/`. It treats
+`MicroSaveOS_DB` as an immutable read-only v1 source, converts untagged
+major-unit amounts to SAR halalas exactly (quarantining excess precision,
+invalid sign/range, corrupt, and ambiguous currency values with original
+source evidence), and writes canonical finance only through the accepted
+P03 command/action boundary onto a staged durable repository namespace.
+Activation is a compare-and-swap control-store pointer flip in
+`Rushd_P04C_Control`; that write is the commit point after which
+cancellation cannot undo the migration. Source identity and import
+documents are stored as digests, never raw financial records.
+Versioned `rushd.portable.v1` export/import/reset are offline, decoded
+against typed nested book-state rows and typed P03 commands, then checked
+by one shared repository-graph validator before staging. That pass requires
+exact receipt-effect cardinality and field equality, source-operation
+provenance, nested relationship identity, and the documented money-field
+policy. It also requires the versioned handler-clock trace on both operation
+and receipt, checks exact count/order and representable values, and replays
+handlers using only that trace. Restore is scoped to the
+bound guest identity.
+C does not claim PWA lifecycle, visible cutover, account sync, or P04 PASS.
 
 ## Storage/sync contract ADR (P03 Task D, binding)
 
@@ -316,6 +345,13 @@ the same raw operation ID commits independently in each scope.
   one immutable `OperationRecord`/receipt, and one immutable outbox intent —
   now additionally bound to `scopeId`, `sourceDeviceId`, and one shared
   durable `enqueueSequence` assigned inside the committing transaction.
+- Local execution and remote apply independently wrap the injected handler
+  clock and persist every returned instant in order as
+  `handlerClockVersion: 1` / `handlerClockInstants` on both operation and
+  receipt. The later commit-clock sample is not part of that trace; clocks may
+  move backwards because ordering still comes only from revisions/sequences.
+  Replay must consume the trace exactly and rejects missing, extra, reordered,
+  mismatched, or unrepresentable evidence. Pre-amendment records are rejected.
 - The operation journal is the single normalized source of truth for the
   canonical command payload. The outbox intent references it by
   `operationId` (same sequence, same digest, same scope/device) and never

@@ -1,0 +1,73 @@
+{
+  "schema": "rushd.v1-fixture.v1",
+  "case_id": "p04c-mixed-unpaid",
+  "description": "SYNTHETIC_P04C_ONLY mixed paid/unpaid essential and luxury with an explicit reserved luxury.",
+  "sanitization": {
+    "marker": "SYNTHETIC_P04C_ONLY",
+    "contains_real_financial_data": false
+  },
+  "indexed_db": {
+    "name": "MicroSaveOS_DB",
+    "version": 1,
+    "stores": {
+      "settings": [
+        { "key": "baseAllowance", "value": 1200 },
+        {
+          "key": "vault",
+          "value": { "balance": 0, "transactions": [], "goals": [] }
+        },
+        {
+          "key": "monthEndSettlements",
+          "value": [
+            {
+              "previousMonthKey": "2026-07",
+              "decision": "budget",
+              "targetMonthKey": "2026-08",
+              "surplus": 100
+            }
+          ]
+        }
+      ],
+      "templates": [],
+      "expenses": [
+        {
+          "id": "fake-paid-ess",
+          "name": "FAKE Paid Essential",
+          "expectedCost": 40,
+          "actualPaid": 40,
+          "isPaid": true,
+          "classification": "essential",
+          "date": "2026-07-10"
+        },
+        {
+          "id": "fake-unpaid-ess",
+          "name": "FAKE Unpaid Essential",
+          "expectedCost": 25.5,
+          "actualPaid": 0,
+          "isPaid": false,
+          "classification": "essential",
+          "date": "2026-08-04"
+        },
+        {
+          "id": "fake-unpaid-lux",
+          "name": "FAKE Unpaid Luxury",
+          "expectedCost": 15,
+          "actualPaid": 0,
+          "isPaid": false,
+          "classification": "luxury",
+          "date": "2026-08-05"
+        },
+        {
+          "id": "fake-reserved-lux",
+          "name": "FAKE Reserved Luxury",
+          "expectedCost": 12,
+          "actualPaid": 0,
+          "isPaid": false,
+          "classification": "luxury",
+          "reserved": true,
+          "date": "2026-08-06"
+        }
+      ]
+    }
+  }
+}

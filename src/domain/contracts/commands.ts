@@ -981,6 +981,15 @@ export interface CommandReceipt {
   readonly calculationVersion: string;
   readonly effects: readonly CommandEffect[];
   /**
+   * Ordered values returned by the injected clock while the command handler
+   * ran. Required when `handlerClockVersion` is current; absent from legacy
+   * records, which P04 rejects because their handler timestamps cannot be
+   * reconstructed independently from the resulting state.
+   */
+  readonly handlerClockInstants?: readonly number[];
+  /** Version of the independent handler-clock provenance subrecord. */
+  readonly handlerClockVersion?: HandlerClockProvenanceVersion;
+  /**
    * Sync-contract binding (P03 Task D). The receipt names the schema version
    * it was written under, the identity-scoped repository it committed in,
    * the source device, and the durable local enqueue sequence assigned
@@ -1002,6 +1011,10 @@ export interface CommandReceipt {
 export const SYNC_RECORD_SCHEMA_VERSION = 1 as const;
 export type SyncRecordSchemaVersion = typeof SYNC_RECORD_SCHEMA_VERSION;
 
+/** First version with an independently persisted ordered handler-clock trace. */
+export const HANDLER_CLOCK_PROVENANCE_VERSION = 1 as const;
+export type HandlerClockProvenanceVersion = typeof HANDLER_CLOCK_PROVENANCE_VERSION;
+
 export interface OperationRecord {
   readonly operationId: OperationId;
   readonly bookId: BookId;
@@ -1009,6 +1022,10 @@ export interface OperationRecord {
   readonly canonicalCommand: string;
   readonly receipt: CommandReceipt;
   readonly committedAtInstantMs: number;
+  /** Exact duplicate of the receipt trace; required for fail-closed verification. */
+  readonly handlerClockInstants?: readonly number[];
+  /** Must equal the receipt's current handler-clock provenance version. */
+  readonly handlerClockVersion?: HandlerClockProvenanceVersion;
   /**
    * The operation journal is the single normalized source of truth for the
    * canonical command payload: the outbox intent references it by

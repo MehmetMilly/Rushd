@@ -91,7 +91,10 @@ legacy data has been migrated.
   append linked facts; original history is never rewritten.
 - **OperationRecord**: the durable journal of committed commands — operation
   ID, book, canonical command payload, and receipt (revision before/after,
-  commit instant, canonical digest, calculation version, effects). The
+  commit instant, canonical digest, calculation version, effects), plus an
+  independently versioned ordered trace of every injected clock value the
+  handler consumed. The same trace is duplicated on the receipt and must
+  match exactly. The
   idempotency scope is the operation ID across the whole repository.
 - **OutboxEnvelope**: one pending replication entry per committed operation,
   written in the same transaction as the state and receipt. Nothing drains it
@@ -233,6 +236,13 @@ these shapes.
   source of truth for the canonical payload; the outbox intent references
   it by operation ID and never duplicates it. Both commit atomically with
   the next `BookState`.
+- **Handler clock provenance**: new operation/receipt records carry
+  `handlerClockVersion: 1` and identical `handlerClockInstants` arrays. Local
+  execute and remote apply capture their own handler samples; commit time is
+  separate and may move backwards. Snapshot validation consumes only the
+  persisted trace and requires exact call count, order, equality, and
+  representable instants. Legacy records without the versioned trace are
+  rejected rather than inferred from stored state.
 - **OutboxDeliveryState**: mutable transport metadata (version, attempts,
   last error, lease, acknowledgement, retry time) owned by the
   adapter/transport and persisted transactionally per operation with
@@ -286,6 +296,29 @@ these shapes.
   transactional validated writes, idempotency, ordered checkpoints,
   recoverable conflicts, export/deletion, backup/restore, residency
   evidence) plus the founder amendment gates. No provider is approved.
+
+## P04-C migration and portability
+
+P04-C adds a staged, crash-safe guest migration from immutable
+`MicroSaveOS_DB` onto the accepted durable v2 repository (local schema `1`).
+Untagged legacy amounts are SAR major units converted to integer halalas
+only when they have at most two decimals. Unpaid `essential` items become
+provisional reserved obligations marked Needs Attention; other unpaid items
+stay planned-not-reserved unless an explicit reserved flag is present.
+Vault opening is one unallocated funding movement; verified budget
+settlements map once to named carry-in and verified vault settlements map
+once to allocation funding. Duplicate, missing, or overlapping settlements
+are review evidence, not silent writes. Vault funding requires a unique
+verified transaction link; budget carry-in uses the validated
+`targetMonthKey`. A versioned `rushd.portable.v1` document carries schema,
+scope, canonical snapshot, journal/outbox, delivery, and checkpoints for
+offline restore after fail-closed decoding of nested book state, typed
+commands, canonical provenance, exact journal/outbox identity, and a shared
+repository-graph validator that enforces exact receipt effects, source
+provenance, relationship identity, per-field money policy, and exact
+handler-clock trace replay. Source/import identity is a
+digest. Activation is a compare-and-swap control-store pointer commit; C
+does not rename `MicroSaveOS_DB` or claim P04 PASS.
 
 ## P02 compatibility boundary
 

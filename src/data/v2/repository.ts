@@ -9,6 +9,8 @@
 
 import { canonicalJson } from '../../domain/contracts/canonical';
 import {
+  HANDLER_CLOCK_PROVENANCE_VERSION,
+  SYNC_RECORD_SCHEMA_VERSION,
   initialOutboxDelivery,
   recordDeliveryAttempt,
   type DeliveryAttemptOutcome,
@@ -16,6 +18,7 @@ import {
   type OutboxDeliveryState,
   type OutboxEnvelope,
 } from '../../domain/contracts/commands';
+import { isRepresentableInstantMs } from '../../domain/primitives/instant';
 import type { BookState } from '../../domain/contracts/ledger';
 import type { DeviceId, RepositoryScopeId } from '../../domain/sync/scope';
 import type { PulledOperation, ReplicationStreamId, SyncCursor } from '../../domain/sync/cursors';
@@ -459,6 +462,7 @@ export function asDurableTransaction(transaction: RepositoryTransaction): Durabl
 }
 
 function storeFromPayload(payload: HydratedPayload): HydratedStore {
+  assertCurrentSyncRecords(payload.operations, payload.outbox, payload.delivery);
   const store = emptyHydratedStore();
   for (const book of payload.books) {
     const state = book as BookState;
@@ -492,6 +496,11 @@ function storeFromPayload(payload: HydratedPayload): HydratedStore {
 }
 
 function deltaToPayload(delta: StagedDelta): CommitDeltaPayload {
+  assertCurrentSyncRecords(
+    [...delta.operationWrites.values()],
+    delta.outboxWrites,
+    [...delta.deliveryWrites.values()],
+  );
   return {
     bookRevisionsRead: [...delta.bookRevisionsRead.entries()],
     operationIds: delta.operationIds,
@@ -523,6 +532,69 @@ function deltaToPayload(delta: StagedDelta): CommitDeltaPayload {
     sequenceBase: delta.sequenceBase,
     sequencesAllocated: delta.sequencesAllocated,
   };
+}
+
+function assertCurrentSyncRecords(
+  operations: readonly unknown[],
+  outbox: readonly unknown[],
+  delivery: readonly unknown[],
+): void {
+  const reject = (message: string): never => {
+    throw new StorageFailureError({ reason: 'schema', message });
+  };
+  const asRecord = (value: unknown, label: string): Record<string, unknown> => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      return reject(`${label} is not an object`);
+    }
+    return value as Record<string, unknown>;
+  };
+  for (const raw of operations) {
+    const operation = asRecord(raw, 'journal record');
+    const operationId = typeof operation['operationId'] === 'string' ? operation['operationId'] : '<unknown>';
+    if (operation['schemaVersion'] !== SYNC_RECORD_SCHEMA_VERSION) {
+      reject(`journal record ${operationId} uses a legacy sync schema without handler-clock provenance`);
+    }
+    const receipt = asRecord(operation['receipt'], `journal record ${operationId} receipt`);
+    if (receipt['schemaVersion'] !== SYNC_RECORD_SCHEMA_VERSION) {
+      reject(`journal record ${operationId} receipt uses a legacy sync schema without handler-clock provenance`);
+    }
+    if (
+      operation['handlerClockVersion'] !== HANDLER_CLOCK_PROVENANCE_VERSION ||
+      receipt['handlerClockVersion'] !== HANDLER_CLOCK_PROVENANCE_VERSION
+    ) {
+      reject(`journal record ${operationId} lacks current versioned handler-clock provenance`);
+    }
+    const operationTrace = operation['handlerClockInstants'];
+    const receiptTrace = receipt['handlerClockInstants'];
+    if (!Array.isArray(operationTrace) || !Array.isArray(receiptTrace)) {
+      reject(`journal record ${operationId} is missing its versioned handler clock trace`);
+    }
+    const operationInstants = operationTrace as unknown[];
+    const receiptInstants = receiptTrace as unknown[];
+    if (operationInstants.length !== receiptInstants.length) {
+      reject(`journal record ${operationId} handler clock trace does not match its receipt`);
+    }
+    for (let index = 0; index < operationInstants.length; index += 1) {
+      if (!isRepresentableInstantMs(operationInstants[index])) {
+        reject(`journal record ${operationId} handler clock trace contains an unrepresentable instant`);
+      }
+      if (operationInstants[index] !== receiptInstants[index]) {
+        reject(`journal record ${operationId} handler clock trace does not match its receipt`);
+      }
+    }
+  }
+  for (const raw of outbox) {
+    const envelope = asRecord(raw, 'outbox record');
+    if (envelope['schemaVersion'] !== SYNC_RECORD_SCHEMA_VERSION) {
+      reject('outbox record uses a legacy sync schema without handler-clock provenance');
+    }
+  }
+  for (const raw of delivery) {
+    const state = asRecord(raw, 'delivery record');
+    if (state['schemaVersion'] !== SYNC_RECORD_SCHEMA_VERSION) {
+      reject('delivery record uses a legacy sync schema without handler-clock provenance');
+    }
+  }
 }
 
 function isPoisonedConnection(error: unknown): boolean {
