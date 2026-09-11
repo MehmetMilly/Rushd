@@ -1,6 +1,6 @@
 # Rushd active delivery plan
 
-**Updated:** 7 September 2026
+**Updated:** 12 September 2026
 
 This file records the current delivery position and resource strategy. It does not replace the product contract in `docs/RUSHD_MASTER_PLAN_FINAL.md`, the phase outcomes in `docs/implementation/phase-plan.json`, or the working method in `WORKFLOW_LITE.md`.
 
@@ -12,7 +12,33 @@ The working target is a feature-complete build ready for private founder use wit
 
 ## Current position
 
-- Branch: `codex/rushd-rebuild-plan`
+**P04-D rollback complete.** The founder rejected the P04-D replacement shell
+after real production use. The active branch is now `codex/p04d-restart`, based
+on accepted P04-C commit `4f48b6f`. Commit `6799dbf` restores the established
+legacy composition root and adds a one-shot retirement worker; `545ce0b` pins
+the required Vercel retirement headers. The rejected P04-D commits and working
+tree remain preserved separately in `/Users/mehmet/Desktop/Rushd` as forensic
+evidence and must not be merged back wholesale.
+
+The rollback is live at `https://rushd-dogfood.vercel.app/` and independently
+verified. The production report is
+`agent-reports/P04D-ROLLBACK-PRODUCTION-VERIFY.md`. A fresh isolated browser
+showed the legacy app, no P04-D shell/controller/registration/cache, no remote
+requests, all established destinations, and a synthetic expense that persisted
+after reload. The separately reviewed same-origin transition harness proved the
+rejected controller and `rushd-shell-*` caches retire while v1 IndexedDB, v2
+storage/OPFS, localStorage, cookies, and unrelated caches remain intact. No real
+user profile or device storage was cleared.
+
+Do not start redesigned P04-D or P05 automatically. The next P04-D plan must
+keep `createLegacyApplication` mounted and migrate one visible feature at a time
+behind the established interface. Expense add/reload, populated permanent
+destinations, visual parity, import/export, and existing-data preservation are
+mandatory gates before any future composition-root replacement. First reconcile
+the newer workflow/master-plan planning edits preserved in the forensic checkout
+without reintroducing rejected product code.
+
+- Branch: `codex/p04d-restart`
 - P02 closure commit: `f80cfc9`, following reviewed product work through `4c88443` and documentation correction `5680c3f`. Working tree was clean at the start of Astra's assessment.
 - P00 is closed. Its fixtures, visual baseline, and characterization tests remain useful; its old receipt and authority process is retired for ordinary work.
 - P01 Task 1 stopped dangerous financial mutations.
@@ -93,6 +119,15 @@ If an external app does not expose the suggested setting, use its highest suitab
 7. Treat P01 through P11 as the full feature build. P12 is integrated hardening and release-candidate work. P13 is real-world beta and public-release validation.
 
 ## Next action and continuity
+
+Rollback is complete at `545ce0b`; redesigned P04-D has not started. Preserve
+the live legacy app and the retirement release. The next authorized planning
+step, after the founder asks to restart P04-D, is a new compatibility-first P04-D
+execution plan based on `4f48b6f`/`545ce0b`. Do not reuse the rejected guest-shell
+task card or accept placeholder permanent destinations. Port only still-valid
+workflow and product-plan decisions from `/Users/mehmet/Desktop/Rushd`, review the
+new plan against the master plan, then require the legacy browser smoke as a
+blocking gate throughout migration.
 
 P03 closed on 7 September at reviewed product commit `291228c778d0714b343c396d2a37067f5361d8a1`. Task D's final worker report is `artifacts/agent-reports/P03-D-GROK-CORRECTION.md`; its independent review is `P03-D-GROK-REVIEW.md` and returns `ready_for_integration`. The phase closure audit is `P03-PHASE-CLOSURE-AUDIT.md` and returns `ready_to_close`. The Master's final gate logs are under `artifacts/agent-reports/P03-PHASE-CLOSURE-evidence/`.
 

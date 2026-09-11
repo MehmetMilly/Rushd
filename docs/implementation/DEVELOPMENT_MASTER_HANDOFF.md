@@ -21,7 +21,21 @@ The final master plan defines product scope. The phase plan defines acceptance o
 
 ## Current position
 
-Use `ACTIVE_DELIVERY_PLAN.md` for the current commit, phase, available models, expiry times, and next action. It is the single status record. Verify Git status before work; preserve existing changes. Proposals awaiting discussion are not implementation dispatches.
+P04-D rollback is complete and independently verified live. The authoritative
+worktree is `/Users/mehmet/Desktop/Rushd-P04D-Restart`, branch
+`codex/p04d-restart`, at `545ce0b` on accepted P04-C base `4f48b6f`. Commit
+`6799dbf` restores the legacy application and safely retires only the rejected
+shell worker/cache; `545ce0b` adds the reviewed host headers. The live report is
+`agent-reports/P04D-ROLLBACK-PRODUCTION-VERIFY.md`. The rejected P04-D branch and
+uncommitted correction remain preserved in `/Users/mehmet/Desktop/Rushd` for
+forensics only. Do not merge them wholesale, start P04-D, or start P05.
+
+Use `ACTIVE_DELIVERY_PLAN.md` for the detailed next action. Before a redesigned
+P04-D begins, selectively reconcile newer workflow and master-plan edits from
+the forensic checkout, preserving the compatibility-first restart boundary.
+The new plan must keep `createLegacyApplication` mounted and make legacy expense
+add/reload, populated permanent destinations, visual parity, import/export, and
+existing-data preservation blocking gates.
 
 ## Delivery rules
 
@@ -41,6 +55,11 @@ Use `ACTIVE_DELIVERY_PLAN.md` for the current commit, phase, available models, e
 - Preserve the master plan's full feature scope. Speed comes from better task sizing, model routing, and parallel preparation—not from cutting approved features.
 
 ## Immediate continuation
+
+Stop at the completed rollback. When the founder explicitly asks to restart
+P04-D, write a new compatibility-first execution plan from the active restart
+branch. Do not reuse the rejected guest-shell implementation or its placeholder
+acceptance evidence.
 
 P03 is closed at reviewed product commit `291228c778d0714b343c396d2a37067f5361d8a1`. Tasks A through D satisfy P03-A1 through P03-A6. Task D's final independent review returned `ready_for_integration` after 9/9 adversarial probes, the Master reran every required P03 command and the full phase diff check successfully, and a Luna Max closure audit returned `ready_to_close`. The ignored reports are `artifacts/agent-reports/P03-D-GROK-REVIEW.md` and `P03-PHASE-CLOSURE-AUDIT.md`. No P04 work started during closure. Read `ACTIVE_DELIVERY_PLAN.md` before assigning any next phase work.
 
