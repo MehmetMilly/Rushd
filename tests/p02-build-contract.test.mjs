@@ -27,3 +27,22 @@ assert.match(bootstrap, /@returns \{\{ app: VueApplication, dataRuntime: LegacyD
 const main = await readFile('src/main.ts', 'utf8');
 assert.match(main, /createLegacyApplication/, 'P04-C composition root must keep createLegacyApplication.');
 assert.doesNotMatch(main, /createGuestApplication/, 'Rollback release must not mount createGuestApplication.');
+
+const vercel = JSON.parse(await readFile('vercel.json', 'utf8'));
+assert.deepEqual(Object.keys(vercel), ['headers'], 'Rollback host config must be headers-only.');
+assert.ok(!('rewrites' in vercel) && !('redirects' in vercel) && !('routes' in vercel), 'Rollback host config must not rewrite, redirect, or SPA-fallback.');
+
+function vercelHeaders(source) {
+    const rule = vercel.headers.find((entry) => entry.source === source);
+    assert.ok(rule, `missing Vercel header rule for ${source}`);
+    return Object.fromEntries(rule.headers.map((header) => [header.key, header.value]));
+}
+
+assert.deepEqual(vercelHeaders('/sw.js'), {
+    'Content-Type': 'text/javascript; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'Service-Worker-Allowed': '/',
+});
+assert.equal(vercelHeaders('/retire-rejected-shell.js')['Cache-Control'], 'no-store');
+assert.equal(vercelHeaders('/')['Cache-Control'], 'no-store');
+assert.equal(vercelHeaders('/index.html')['Cache-Control'], 'no-store');
