@@ -12,7 +12,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-const ROOT = '/Users/mehmet/Desktop/Rushd';
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const here = dirname(fileURLToPath(import.meta.url));
 
 function readArg(flag) {

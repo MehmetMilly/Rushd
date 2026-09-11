@@ -39,6 +39,7 @@ import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { dirname, extname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import {
   EXPECTED_IDB_LEAK,
@@ -50,7 +51,7 @@ import {
   opfsFaultClassificationMismatch,
 } from './idb-fault-probe-contract.mjs';
 
-const ROOT = '/Users/mehmet/Desktop/Rushd';
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const RAW_DIR = 'artifacts/agent-reports/p04a-raw';
 const RAW_PATH = `${RAW_DIR}/candidate-experiment.json`;
 const BUNDLE_PATH = `${RAW_DIR}/command-entry.bundle.mjs`;

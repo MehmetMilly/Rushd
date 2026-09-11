@@ -23,3 +23,7 @@ assert.ok(tsconfig.include.includes('src/application/debug-test-bridge.js'), 'Ac
 
 const bootstrap = await readFile('src/application/bootstrap.js', 'utf8');
 assert.match(bootstrap, /@returns \{\{ app: VueApplication, dataRuntime: LegacyDataRuntime \}\}/, 'bootstrap.js must retain its checked public return contract.');
+
+const main = await readFile('src/main.ts', 'utf8');
+assert.match(main, /createLegacyApplication/, 'P04-C composition root must keep createLegacyApplication.');
+assert.doesNotMatch(main, /createGuestApplication/, 'Rollback release must not mount createGuestApplication.');

@@ -42,7 +42,9 @@ const requiredFiles = [
   'src/data/legacy-v1/runtime.js',
   'src/application/bootstrap.js',
   'src/application/debug-test-bridge.js',
-  'src/shared/core.js'
+  'src/shared/core.js',
+  'public/sw.js',
+  'public/retire-rejected-shell.js'
 ];
 
 const missing = requiredFiles.filter((file) => !existsSync(file));
@@ -60,6 +62,25 @@ const requiredHtmlMarkers = [
 const missingMarkers = requiredHtmlMarkers.filter((marker) => !html.includes(marker));
 if (missingMarkers.length) {
   throw new Error(`index.html is missing expected markers: ${missingMarkers.join(', ')}`);
+}
+if (!html.includes('<script src="/retire-rejected-shell.js"></script>')) {
+  throw new Error('index.html is missing the P04-D retirement trigger.');
+}
+
+const mainTs = readFileSync('src/main.ts', 'utf8');
+if (!mainTs.includes('createLegacyApplication')) {
+  throw new Error('src/main.ts must keep createLegacyApplication as the composition root.');
+}
+if (mainTs.includes('createGuestApplication')) {
+  throw new Error('src/main.ts must not mount createGuestApplication in this rollback release.');
+}
+
+const retirementWorker = readFileSync('public/sw.js', 'utf8');
+if (/addEventListener\(\s*['"]fetch['"]/.test(retirementWorker)) {
+  throw new Error('public/sw.js must not install a fetch handler.');
+}
+if (!retirementWorker.includes("name.startsWith(SHELL_CACHE_PREFIX)") || !retirementWorker.includes('registration.unregister')) {
+  throw new Error('public/sw.js must delete only rushd-shell caches and unregister itself.');
 }
 
 const productionSource = readProductionSource();

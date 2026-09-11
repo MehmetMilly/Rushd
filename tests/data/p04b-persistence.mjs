@@ -10,10 +10,11 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
-import { extname, join } from 'node:path';
+import { dirname, extname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
-const ROOT = '/Users/mehmet/Desktop/Rushd';
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const RAW_DIR = 'artifacts/agent-reports/p04b-raw';
 const WORKER_BUNDLE = `${RAW_DIR}/sqlite-worker.bundle.mjs`;
 const CONFORMANCE_BUNDLE = `${RAW_DIR}/conformance.bundle.mjs`;

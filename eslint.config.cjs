@@ -55,5 +55,35 @@ module.exports = [
     rules: {
       'no-console': 'off'
     }
+  },
+  {
+    files: ['public/sw.js'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'script',
+      globals: globals.serviceworker
+    },
+    rules: {
+      'no-console': 'off'
+    }
+  },
+  {
+    files: ['public/retire-rejected-shell.js'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'script',
+      globals: globals.browser
+    }
+  },
+  {
+    files: ['scripts/p04d-rollback-harness.mjs', 'tests/rollback/retirement-contract.test.mjs'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: { ...globals.node, ...globals.browser }
+    },
+    rules: {
+      'no-console': 'off'
+    }
   }
 ];
