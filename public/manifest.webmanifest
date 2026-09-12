@@ -1,0 +1,12 @@
+{
+  "name": "رُشد | Rushd",
+  "short_name": "رُشد",
+  "description": "Rushd — offline-capable personal finance assistant (candidate PWA manifest; installation readiness is not claimed until its phase gate passes).",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "dir": "rtl",
+  "lang": "ar",
+  "theme_color": "#09090b",
+  "background_color": "#09090b"
+}

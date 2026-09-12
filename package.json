@@ -15,6 +15,8 @@
     "test:data": "vitest run --config tests/data/vitest.p04a.config.ts && node tests/data/candidate-experiment.mjs && node tests/data/p04b-persistence.mjs && node tests/data/p04c-persistence.mjs",
     "test:p01": "node tests/p01-dangerous-mutations.test.mjs && node tests/p01-stability.test.mjs",
     "test:browser": "npm run build && PLAYWRIGHT_BROWSERS_PATH=0 RUSHD_SMOKE_ROOT=dist node scripts/browser-smoke.cjs",
+    "test:pwa": "node tests/pwa/static-checks.mjs && vitest run --config tests/pwa/vitest.p04d2.config.ts && node tests/pwa/p04-d2-browser.mjs",
+    "test:pwa:browser": "node tests/pwa/p04-d2-browser.mjs",
     "test:legacy-idb": "npm run build && PLAYWRIGHT_BROWSERS_PATH=0 RUSHD_LEGACY_IDB_ROOT=dist node scripts/legacy-idb-proof.cjs",
     "test:rollback": "node tests/rollback/retirement-contract.test.mjs && npm run build && PLAYWRIGHT_BROWSERS_PATH=0 RUSHD_ROLLBACK_REPEAT=2 node scripts/p04d-rollback-harness.mjs",
     "test:characterization": "node scripts/p00-characterization.test.mjs",

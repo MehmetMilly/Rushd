@@ -2,7 +2,7 @@ import { createLegacyDataRuntime } from '../data/legacy-v1/runtime.js';
 import { registerLegacyComponents } from '../components/register-legacy-components.js';
 import { installRootController } from '../app/root-controller.js';
 import { createLegacyFeaturePorts, bindAuthorityState } from './p04-d/legacy-ports.js';
-import { resolveP04DAuthority } from './p04-d/authority-latch.js';
+import { normalizeP04DBuildMode, resolveP04DAuthority } from './p04-d/authority-latch.js';
 
 /**
  * @typedef {import('vue').App} VueApplication
@@ -30,6 +30,17 @@ export function createLegacyApplication({ Vue, environment = globalThis, templat
     bindAuthorityState(legacyPorts, resolution.authority);
     /** @type {ShellFeaturePorts} */
     const activePorts = featurePorts ?? resolution.featurePorts;
+    if (featurePorts !== undefined && featurePorts !== null && activePorts !== legacyPorts) {
+        // D2 residual fix: an explicitly injected port set cannot escape the
+        // latch. Candidate-mode callers must pass canonical ports through
+        // `candidatePorts` (D2 host); combining `featurePorts` with a
+        // candidate request is rejected instead of silently serving an
+        // unbound writable set.
+        if (normalizeP04DBuildMode(authorityMode) !== 'legacy') {
+            throw new TypeError('createLegacyApplication: featurePorts cannot be combined with a candidate authority request; pass candidate ports via candidatePorts.');
+        }
+        bindAuthorityState(activePorts, resolution.authority);
+    }
     const app = Vue.createApp({
         ...(template ? { template } : {}),
         setup() {

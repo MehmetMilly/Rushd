@@ -10,7 +10,14 @@ export function installRootController(app, dataRuntime, environment = globalThis
     // are exposed read-only for inspection and do not change any behavior.
     const injectedPorts = options && typeof options === 'object' ? options.featurePorts : null;
     if (injectedPorts && app && app.config && app.config.globalProperties) {
-        app.config.globalProperties.$p04dPorts = injectedPorts;
+        // D2 residual fix: expose the port set as a read-only inspection
+        // handle so outside code cannot swap or relabel the authority cell.
+        Object.defineProperty(app.config.globalProperties, '$p04dPorts', {
+            value: Object.freeze({ ...injectedPorts }),
+            writable: false,
+            configurable: false,
+            enumerable: true,
+        });
     }
     const { EXPENSE_SOURCE_VALUES, DEFINITION_SOURCE_VALUES, MOTION_LEVEL_VALUES, toFiniteNumber, MAX_MONEY_INPUT, MONEY_DECIMAL_PATTERN, parseMoneyInput, roundMoney, normalizePersistedMoney, normalizeMotionLevel, toNonNegativeInteger, getMonthKey, toISODate, parseLocalCalendarDate, DEFAULT_PROFILE_OFFDAYS, TEMPLATE_APPLICABILITY_VALUES, getMonthBoundsFromDate, getPreviousMonthKey, isDateInRange, enumerateDateRange, normalizeWeekdayIndex, normalizeProfileOffdays, normalizeTemplateDays, getValidTemplateDays, hasValidMonthlySchedule, getDateWeekdayIndex, isProfileOffdayForDate, templateMatchesApplicabilityForDate, getMonthlyTemplateDays, templateOccursOnDate, compareExpensePriority, matchesTemplateFallbackShape, findTemplateExpenseMatch, buildTemplateExpenseFromDefinition, didTemplateExpenseRebuildChange, LEGACY_TEMPLATE_PROFILE, MONTH_START_PROMPT_DEFER_KEY, MONTH_END_PROMPT_DEFER_KEY, ONBOARDING_STATE_KEY, ONBOARDING_STATUS_VALUES, MONTH_END_SETTLEMENT_DECISIONS, normalizeTemplateProfileRecord, normalizeTemplateProfiles, getTemplateProfileRecordById, MONTH_KEY_PATTERN, normalizeMonthlyTemplateAssignmentRecord, normalizeMonthlyTemplateAssignments, normalizeMonthlyBaseAllowances, normalizeOnboardingStateRecord, normalizeVaultGoalRecord, normalizeVaultGoals, normalizeVaultTransactionRecord, normalizeVaultStateRecord, normalizeMonthEndSettlementRecord, normalizeMonthEndSettlements, getDefinitionProfileId, isDefinitionInProfile, normalizeDefinitionRecord, isFlexibleDefinitionRecord, toSerializableValue, getExpenseTemplateOriginId, getExpenseTemplateProtection, didExpenseStructureChange, normalizeExpenseRecord, BACKUP_EXPENSE_MONEY_FIELDS, isPlainObjectRecord, isValidBackupMoneyValue, isValidIsoDateString, isValidTimestampString, hasDuplicateRecordIds, validateBackupPayload, DB, Store } = dataRuntime;
     const { localStorage, document, navigator, alert, location, Blob, URL, FileReader, setTimeout, clearTimeout, window } = environment;

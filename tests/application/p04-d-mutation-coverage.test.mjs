@@ -12,7 +12,7 @@ import {
   findDuplicateOwners,
   findMissingOwners,
   findStaleEntries,
-} from '../../src/application/p04-d/mutation-coverage.ts';
+} from '../../src/application/p04-d/mutation-coverage.js';
 
 const CONTROLLER_PATH = 'src/app/root-controller.js';
 const source = await readFile(CONTROLLER_PATH, 'utf8');

@@ -552,6 +552,67 @@ or shell exists. The D1 test surface is `tests/application/p04-d-*.test.mjs`
 (latch isolation, legacy delegation, mutation coverage) plus the extended
 `tests/p02-build-contract.test.mjs` assertions.
 
+## Canonical host and preserved-shell PWA lifecycle (P04-D Task D2)
+
+D2 assembles the candidate-only canonical guest host and PWA lifecycle
+behind the D1 latch without changing default production:
+
+- `src/application/p04-d/candidate-token.js` (+ `.d.ts`): dependency-free
+  marker distinguishing host-assembled canonical port sets from arbitrary
+  injection objects. The latch imports only this module, so no storage,
+  worker, or network path enters the production bundle.
+- `src/application/p04-d/authority-latch.js`: routes an explicit
+  candidate request carrying a host-bound set to that set with the host's
+  live authority. Unmarked candidate-shaped requests keep the D1
+  fail-close (`canonicalPreparing` on the legacy set).
+- `src/application/p04-d/command-gateway.js` (+ `.d.ts`): P03
+  preview/confirm/execute with context-minted operation identities and a
+  durable success boundary. Success resolves only after the atomic commit;
+  crashes surface as explicit gateway failures, never success.
+- `src/application/p04-d/read-models.js` (+ `.d.ts`): Home/history
+  projections derived from committed `BookState` via the domain derive
+  helpers. No finance rules are duplicated; D3 owns expected-amount,
+  classification, and display refinements.
+- `src/application/p04-d/tab-coordination.js` (+ `.d.ts`):
+  dependency-free cross-tab protocol. Critical sections
+  (`write`/`import`/`reset`/`migration`) gate service-worker activation;
+  commits broadcast invalidation; a bumped epoch hard-blocks old binaries
+  until reload. Stale locks from crashed tabs expire.
+- `src/application/p04-d/canonical-host.js` (+ `.d.ts`):
+  `prepareCanonicalCandidateHost` selects the active storage id from the
+  P04-C control pointer, completes or recovers migration/open before any
+  write, binds frozen canonical ports only after ready, and fails closed
+  to a truthful `unavailable` write-blocked state. Capture `submitExpense`,
+  Home/history reads, and versioned import/reset commit paths are
+  canonical; pay/reopen/auto-fill stay D3-owned and plan/goal/settings
+  mutations stay D4-owned, all visibly blocked. Activation inputs are the
+  explicit options object only. The default storage adapter is the real
+  OPFS/P04-B/C stack; tests inject a memory adapter for the same host
+  logic. `mutation-coverage.js` (+ `.d.ts`) replaces the old `.ts`
+  inventory so the barrel resolves in bundler, `tsc`, and plain-Node
+  environments alike.
+- `src/application/bootstrap.js`: an explicitly injected `featurePorts`
+  set is bound to the resolved authority and can no longer escape the
+  latch; combining it with a candidate request is rejected. Canonical
+  ports travel through `candidatePorts`.
+- `src/app/root-controller.js`: `$p04dPorts` is exposed read-only.
+- `src/pwa/registration.js` (+ `.d.ts`): candidate-only worker
+  registration and update activation, gated on
+  `canActivateUpdate()`. Never called by default production.
+- `public/rushd-pwa-sw.js`: candidate-only offline worker. Same-origin
+  GET cache-first, no remote URLs, no storage access, preserves the
+  `rushd-shell-*` retirement, and never force-activates. Default
+  production still loads only `/retire-rejected-shell.js`.
+- `public/manifest.webmanifest`: candidate manifest with no install
+  claims beyond tested evidence.
+
+The D2 gate is `npm run test:pwa`: plain-Node static checks, vitest
+suites (`tests/pwa/`, memory-adapter host logic), and the Playwright
+Chromium harness (`tests/pwa/p04-d2-browser.mjs`) proving durable
+migrate/write/reload, two-tab invalidation, update coordination,
+old-tab blocking, failure recovery, and offline reload with zero remote
+requests against the real OPFS stack.
+
 ## Main Screens
 
 - Dashboard: selected-day expense list, safe-to-spend hero, date window, payment and add-expense flows.

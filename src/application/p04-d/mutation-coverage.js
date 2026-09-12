@@ -15,24 +15,27 @@
 // is documented as plan-delegated work that D3/D4 splits into distinct
 // canonical ports. The latch release gate (D4) requires the split before
 // the production cutover.
+//
+// D2 note: this module follows the established `.js` + `.d.ts` runtime
+// pattern (like `legacy-ports.js`) so the TypeScript barrel
+// (`./index.ts`) resolves the same specifier in the bundler, `tsc`, and
+// plain-Node test environments. Types live in `./mutation-coverage.d.ts`.
 
-import type { FeaturePortName } from './contracts.js';
-
-export interface MutationOwnerEntry {
-  /** Exact controller method name in `src/app/root-controller.js`. */
-  readonly action: string;
-  /** The single feature port that owns this mutation. */
-  readonly port: FeaturePortName;
-  /** Short note naming the delegated v1 primitive. */
-  readonly reason: string;
-}
+/**
+ * @typedef {import('./contracts.js').FeaturePortName} FeaturePortName
+ * @typedef {object} MutationOwnerEntry
+ * @property {string} action Exact controller method name in `src/app/root-controller.js`.
+ * @property {FeaturePortName} port The single feature port that owns this mutation.
+ * @property {string} reason Short note naming the delegated v1 primitive.
+ */
 
 /**
  * Complete D1 inventory. Keep sorted by port, then action, so diffs stay
  * reviewable. Adding a new mutating controller action without a row here is
  * a test failure by design.
+ * @type {readonly MutationOwnerEntry[]}
  */
-export const MUTATION_COVERAGE_INVENTORY: readonly MutationOwnerEntry[] = [
+export const MUTATION_COVERAGE_INVENTORY = Object.freeze([
   // Capture: manual/smart add and payment.
   { action: 'autoFillToday', port: 'capture', reason: 'Store.autoFillDay template generation' },
   { action: 'commitPayment', port: 'capture', reason: 'Store.updateExpense pay with amount' },
@@ -92,17 +95,17 @@ export const MUTATION_COVERAGE_INVENTORY: readonly MutationOwnerEntry[] = [
   { action: 'setTheme', port: 'lifecycle', reason: 'DB.setSetting theme plus localStorage mirror' },
   { action: 'shouldShowMonthStartPrompt', port: 'lifecycle', reason: 'conditionally clears the month-start deferral' },
   { action: 'skipOnboardingForNow', port: 'lifecycle', reason: 'transitive via persistOnboardingState' },
-];
+]);
 
-/** Actions in the inventory, in declared order. */
-export function inventoryActions(): string[] {
+/** Actions in the inventory, in declared order. @returns {string[]} */
+export function inventoryActions() {
   return MUTATION_COVERAGE_INVENTORY.map((entry) => entry.action);
 }
 
-/** Actions claimed by more than one port. Must always be empty. */
-export function findDuplicateOwners(): string[] {
-  const seen = new Map<string, string>();
-  const duplicates = new Set<string>();
+/** Actions claimed by more than one port. Must always be empty. @returns {string[]} */
+export function findDuplicateOwners() {
+  const seen = new Map();
+  const duplicates = new Set();
   for (const entry of MUTATION_COVERAGE_INVENTORY) {
     const owner = seen.get(entry.action);
     if (owner === undefined) {
@@ -116,14 +119,22 @@ export function findDuplicateOwners(): string[] {
   return [...duplicates].sort();
 }
 
-/** Inventory actions missing from `detected` controller writers. */
-export function findMissingOwners(detected: readonly string[]): string[] {
+/**
+ * Inventory actions missing from `detected` controller writers.
+ * @param {readonly string[]} detected
+ * @returns {string[]}
+ */
+export function findMissingOwners(detected) {
   const covered = new Set(inventoryActions());
   return detected.filter((action) => !covered.has(action)).sort();
 }
 
-/** Inventory rows that name no detected writer and no known method. */
-export function findStaleEntries(knownMethods: readonly string[]): string[] {
+/**
+ * Inventory rows that name no detected writer and no known method.
+ * @param {readonly string[]} knownMethods
+ * @returns {string[]}
+ */
+export function findStaleEntries(knownMethods) {
   const known = new Set(knownMethods);
   return inventoryActions().filter((action) => !known.has(action)).sort();
 }

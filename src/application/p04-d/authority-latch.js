@@ -1,11 +1,13 @@
-// P04-D1: build/test-controlled authority latch.
+// P04-D1/D2: build/test-controlled authority latch.
 //
 // The latch answers one question: which finance authority may serve writes?
-// In D1 the answer is always `legacy` on every ordinary production path.
-// A `canonicalCandidate` mode exists as a structural concept so D2-D4 have a
-// typed injection point, but D1 has no canonical port implementation and
-// never opens v2 storage, so candidate requests resolve to a blocked
-// `canonicalPreparing` state while behavior stays on the legacy port set.
+// Ordinary production always resolves to `legacy`. A `canonicalCandidate`
+// mode exists for test/build harnesses: D1 acknowledged it as a blocked
+// `canonicalPreparing` state on the legacy port set, and D2 additionally
+// routes requests that carry a host-bound canonical port set (marked by
+// `prepareCanonicalCandidateHost` via `./candidate-token.js`) to that set
+// with the host's live authority state. Unmarked candidate-shaped requests
+// keep the D1 fail-close.
 //
 // Injection rule (blocking): the candidate mode is reachable ONLY through an
 // explicit request object passed directly by the test/build caller
@@ -26,6 +28,8 @@
  * @typedef {import('./contracts.js').P04DBuildMode} P04DBuildMode
  * @typedef {import('./contracts.js').ShellFeaturePorts} ShellFeaturePorts
  */
+
+import { isMarkedCandidatePorts } from './candidate-token.js';
 
 export const P04D_LEGACY_MODE = 'legacy';
 export const P04D_CANDIDATE_MODE = 'canonicalCandidate';
@@ -50,6 +54,13 @@ export function normalizeP04DBuildMode(explicitMode) {
  *
  * Reads ONLY `request` (explicit caller arguments) and `legacyPorts`. It
  * performs no environment access of any kind.
+ *
+ * D2 routing: an explicit candidate request carrying a host-bound port set
+ * (marked by `prepareCanonicalCandidateHost`) resolves to that set with the
+ * host's live authority state. Any other candidate-shaped request keeps the
+ * D1 fail-close: a non-writable `canonicalPreparing` state on the legacy
+ * port set, so no v2 database, migration, or write path can open by
+ * accident.
  * @param {P04DAuthorityRequest | null | undefined} request
  * @param {ShellFeaturePorts} legacyPorts
  * @returns {P04DAuthorityResolution}
@@ -57,6 +68,16 @@ export function normalizeP04DBuildMode(explicitMode) {
 export function resolveP04DAuthority(request, legacyPorts) {
   const mode = normalizeP04DBuildMode(request?.mode);
   if (mode === P04D_CANDIDATE_MODE && request?.candidatePorts) {
+    if (isMarkedCandidatePorts(request.candidatePorts)) {
+      try {
+        const live = request.candidatePorts.authority.getState();
+        if (live && typeof live === 'object' && typeof live.kind === 'string') {
+          return { mode, authority: live, featurePorts: request.candidatePorts };
+        }
+      } catch {
+        /* malformed host set: fall through to the blocked state */
+      }
+    }
     // Structural candidate path for D2-D4 harnesses: acknowledge the request
     // with a non-writable preparing state, but keep serving the legacy port
     // set so no v2 database, migration, or write path can open in D1.

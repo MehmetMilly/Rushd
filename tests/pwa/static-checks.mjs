@@ -1,0 +1,120 @@
+// P04-D2 PWA static gate. Run: node tests/pwa/static-checks.mjs
+/* global console:readonly */
+//
+// Plain-Node checks that need no browser: the candidate service worker is
+// offline-scoped with zero remote requests and preserves the rollback
+// retirement; default production references no candidate worker or mode;
+// the latch still performs no environment access; and every new D2 source
+// file is owned by the production-source manifest.
+import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import { ownedProductionFiles } from '../../scripts/production-source.mjs';
+
+function stripComments(source) {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|\s)\/\/.*$/gm, '$1');
+}
+
+// 1. Candidate service worker: offline-first, same-origin only, no finance
+// storage access, retires rejected shell caches, gates skipWaiting.
+{
+  assert.ok(existsSync('public/rushd-pwa-sw.js'), 'candidate service worker must exist');
+  const raw = await readFile('public/rushd-pwa-sw.js', 'utf8');
+  const source = stripComments(raw);
+  assert.match(source, /rushd-shell-/, 'candidate SW must preserve rushd-shell-* retirement');
+  assert.match(source, /rushd-pwa-skip-waiting/, 'candidate SW must gate skipWaiting on an explicit message');
+  assert.doesNotMatch(source, /skipWaiting\(\)\s*\)?\s*;?\s*\n?\s*\}\)\(\);/, 'candidate SW must not force-activate');
+  assert.ok(!source.includes('skipWaiting()') || source.includes('rushd-pwa-skip-waiting'), 'skipWaiting only via the gated message');
+  for (const forbidden of ['indexedDB', 'openDatabase', 'localStorage', 'sessionStorage', 'WebSocket', 'importScripts']) {
+    assert.ok(!source.includes(forbidden), `candidate SW must not reference ${forbidden}`);
+  }
+  // No remote fetching: every fetch path is origin-gated to self.
+  assert.match(source, /url\.origin !== self\.location\.origin/, 'candidate SW must refuse cross-origin caching');
+  assert.ok(!source.includes('https://') && !source.includes('http://'), 'candidate SW must hardcode no remote URLs');
+}
+
+// 2. Rollback retirement worker is unchanged and still self-unregisters.
+{
+  const raw = await readFile('public/sw.js', 'utf8');
+  assert.match(raw, /rushd-shell-/, 'retirement worker must still target rushd-shell-* caches');
+  assert.match(raw, /unregister/, 'retirement worker must still self-unregister');
+  assert.doesNotMatch(stripComments(raw), /fetch/, 'retirement worker must have no fetch handler');
+}
+
+// 3. Default production references neither the candidate worker nor a
+// candidate mode: index.html, main.ts, and the legacy boot path stay clean.
+{
+  const html = await readFile('index.html', 'utf8');
+  assert.ok(!html.includes('rushd-pwa-sw'), 'default index.html must not reference the candidate worker');
+  assert.match(html, /retire-rejected-shell\.js/, 'default index.html must keep the rollback retirement trigger');
+  const main = await readFile('src/main.ts', 'utf8');
+  assert.ok(!main.includes('rushd-pwa'), 'default main.ts must not register candidate PWA');
+  assert.ok(!main.includes('canonicalCandidate'), 'default main.ts must not request candidate mode');
+  assert.ok(!main.includes('serviceWorker'), 'default main.ts must not touch service workers');
+  const bootstrap = await readFile('src/application/bootstrap.js', 'utf8');
+  assert.ok(!bootstrap.includes('serviceWorker'), 'bootstrap must not register service workers');
+  assert.ok(!bootstrap.includes('v2/session'), 'bootstrap must not open v2 storage');
+}
+
+// 4. The latch still performs no environment access (D1 isolation intact).
+{
+  const raw = await readFile('src/application/p04-d/authority-latch.js', 'utf8');
+  const source = stripComments(raw);
+  for (const forbidden of ['localStorage', 'sessionStorage', 'location', 'document', 'cookie', 'URLSearchParams', 'imported']) {
+    assert.ok(!source.includes(forbidden), `authority-latch must not reference ${forbidden}`);
+  }
+}
+
+// 5. The candidate token module is dependency-free (no storage/worker refs
+// can leak into the production bundle through the latch).
+{
+  const raw = await readFile('src/application/p04-d/candidate-token.js', 'utf8');
+  const source = stripComments(raw);
+  assert.doesNotMatch(source, /^import\s/m, 'candidate-token must have no imports');
+  for (const forbidden of ['indexedDB', 'serviceWorker', 'fetch(', 'localStorage']) {
+    assert.ok(!source.includes(forbidden), `candidate-token must not reference ${forbidden}`);
+  }
+}
+
+// 6. Tab coordination is dependency-free too (plain-Node testable).
+{
+  const raw = await readFile('src/application/p04-d/tab-coordination.js', 'utf8');
+  assert.doesNotMatch(stripComments(raw), /^import\s/m, 'tab-coordination must have no imports');
+}
+
+// 7. Every new D2 source file is owned by the production-source manifest.
+{
+  const required = [
+    'src/application/p04-d/candidate-token.js',
+    'src/application/p04-d/candidate-token.d.ts',
+    'src/application/p04-d/canonical-host.js',
+    'src/application/p04-d/canonical-host.d.ts',
+    'src/application/p04-d/command-gateway.js',
+    'src/application/p04-d/command-gateway.d.ts',
+    'src/application/p04-d/read-models.js',
+    'src/application/p04-d/read-models.d.ts',
+    'src/application/p04-d/tab-coordination.js',
+    'src/application/p04-d/tab-coordination.d.ts',
+    'src/application/p04-d/mutation-coverage.js',
+    'src/application/p04-d/mutation-coverage.d.ts',
+    'src/pwa/registration.js',
+    'src/pwa/registration.d.ts',
+  ];
+  for (const file of required) {
+    assert.ok(ownedProductionFiles.includes(file), `${file} must be in the production manifest`);
+    assert.ok(existsSync(file), `${file} must exist`);
+  }
+  assert.ok(!ownedProductionFiles.includes('src/application/p04-d/mutation-coverage.ts'), 'stale .ts inventory must leave the manifest');
+}
+
+// 8. The PWA manifest claims no installation readiness beyond evidence.
+{
+  assert.ok(existsSync('public/manifest.webmanifest'), 'candidate manifest must exist');
+  const manifest = JSON.parse(await readFile('public/manifest.webmanifest', 'utf8'));
+  assert.equal(manifest.scope, '/');
+  assert.ok(!('icons' in manifest) || (Array.isArray(manifest.icons) && manifest.icons.length > 0), 'manifest must not half-claim icons');
+}
+
+console.log('p04-d2 static checks passed');

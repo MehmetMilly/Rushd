@@ -80,6 +80,44 @@ function toStringValue(value, fallback = '') {
 }
 
 /**
+ * @param {unknown} value
+ * @returns {string}
+ */
+function monthKeyFallback(value) {
+  const text = toStringValue(value);
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(text.slice(0, 7)) ? text.slice(0, 7) : '';
+}
+
+/**
+ * @param {LegacyDataRuntime} runtime
+ * @param {unknown} referenceDate
+ * @returns {string}
+ */
+function monthKeyFor(runtime, referenceDate) {
+  const helper = getRuntimeHelper(runtime, 'getMonthKey');
+  if (typeof helper === 'function') {
+    try {
+      const derived = helper.call(runtime, referenceDate);
+      if (typeof derived === 'string' && derived) return derived;
+    } catch {
+      /* fall through to the slice fallback */
+    }
+  }
+  return monthKeyFallback(referenceDate);
+}
+
+/**
+ * @param {LegacyDataRuntime} runtime
+ * @param {unknown} monthKey
+ * @returns {boolean}
+ */
+function isMonthKey(runtime, monthKey) {
+  const pattern = getRuntimeHelper(runtime, 'MONTH_KEY_PATTERN');
+  if (pattern instanceof RegExp) return pattern.test(monthKey);
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(monthKey);
+}
+
+/**
  * @template T
  * @param {T} value
  * @returns {T}
@@ -230,9 +268,11 @@ function failResult(reason) {
  * @param {{ get(): PortStatus }} status
  * @returns {AuthorityPort}
  */
+const authorityBinders = new WeakMap();
+
 function createAuthorityPort(initial, status) {
   let state = initial;
-  return {
+  const port = {
     name: 'authority',
     getState() {
       return state;
@@ -248,10 +288,14 @@ function createAuthorityPort(initial, status) {
     getStatus() {
       return status.get();
     },
-    bind(next) {
-      state = next;
-    },
   };
+  // D2 residual fix: the rebinding capability stays internal (WeakMap) and
+  // never appears on the frozen public surface, so debug/test inspection
+  // cannot relabel authority from the outside.
+  authorityBinders.set(port, (next) => {
+    state = next;
+  });
+  return Object.freeze(port);
 }
 
 /**
@@ -855,6 +899,9 @@ export function createLegacyFeaturePorts(
       await callAsync(getDB(dataRuntime), 'factoryReset', [onBlocked]);
     },
     clearLocalPreferences() {
+      // D2 residual fix: local-preference removal is a write and stays
+      // blocked while the authority is not writable.
+      authority.assertWritable('portability.clearLocalPreferences');
       const storage = environment.localStorage;
       if (!storage || typeof storage.length !== 'number' || typeof storage.key !== 'function') return;
       const onboardingKey = toStringValue(
@@ -964,9 +1011,13 @@ export function createLegacyFeaturePorts(
       await callAsync(getDB(dataRuntime), 'setSetting', ['motionLevel', resolved]);
     },
     setLanguage(language) {
+      // D2 residual fix: preference mirrors are writes gated by authority.
+      authority.assertWritable('lifecycle.setLanguage');
       writeLocalStorage(environment, 'rushd_lang', language);
     },
     setCalendarType(calendarType) {
+      // D2 residual fix: see setLanguage.
+      authority.assertWritable('lifecycle.setCalendarType');
       writeLocalStorage(environment, 'rushd_calendar', calendarType);
     },
     getOnboardingState() {
@@ -991,19 +1042,35 @@ export function createLegacyFeaturePorts(
           getRuntimeHelper(dataRuntime, 'MONTH_START_PROMPT_DEFER_KEY'),
           'rushd_month_start_prompt_deferred',
         );
-        return JSON.parse(readLocalStorage(environment, key) || 'null');
+        const parsed = JSON.parse(readLocalStorage(environment, key) || 'null');
+        // D2 residual fix: validate the controller's { monthKey, dateStr }
+        // shape instead of passing raw JSON through.
+        if (!parsed || typeof parsed !== 'object') return null;
+        const monthKey = typeof parsed.monthKey === 'string' ? parsed.monthKey : '';
+        const dateStr = typeof parsed.dateStr === 'string' ? parsed.dateStr : '';
+        if (!isMonthKey(dataRuntime, monthKey) || !dateStr) return null;
+        return { monthKey, dateStr };
       } catch {
         return null;
       }
     },
     deferMonthStartPrompt(referenceDate) {
+      // D2 residual fix: gated like every other write, and persists the
+      // controller's { monthKey, dateStr } shape.
+      authority.assertWritable('lifecycle.deferMonthStartPrompt');
       const key = toStringValue(
         getRuntimeHelper(dataRuntime, 'MONTH_START_PROMPT_DEFER_KEY'),
         'rushd_month_start_prompt_deferred',
       );
-      writeLocalStorage(environment, key, JSON.stringify({ dateStr: referenceDate }));
+      writeLocalStorage(
+        environment,
+        key,
+        JSON.stringify({ monthKey: monthKeyFor(dataRuntime, referenceDate), dateStr: referenceDate }),
+      );
     },
     clearMonthStartDeferral() {
+      // D2 residual fix: deferral removal is a write gated by authority.
+      authority.assertWritable('lifecycle.clearMonthStartDeferral');
       removeLocalStorage(
         environment,
         toStringValue(
@@ -1018,12 +1085,23 @@ export function createLegacyFeaturePorts(
           getRuntimeHelper(dataRuntime, 'MONTH_END_PROMPT_DEFER_KEY'),
           'rushd_month_end_prompt_deferred',
         );
-        return JSON.parse(readLocalStorage(environment, key) || 'null');
+        const parsed = JSON.parse(readLocalStorage(environment, key) || 'null');
+        // D2 residual fix: validate the controller's
+        // { previousMonthKey, dateStr } shape.
+        if (!parsed || typeof parsed !== 'object') return null;
+        const previousMonthKey = typeof parsed.previousMonthKey === 'string'
+          ? parsed.previousMonthKey
+          : '';
+        const dateStr = typeof parsed.dateStr === 'string' ? parsed.dateStr : '';
+        if (!isMonthKey(dataRuntime, previousMonthKey) || !dateStr) return null;
+        return { previousMonthKey, dateStr };
       } catch {
         return null;
       }
     },
     deferMonthEndPrompt(previousMonthKey, referenceDate) {
+      // D2 residual fix: gated like every other write.
+      authority.assertWritable('lifecycle.deferMonthEndPrompt');
       const key = toStringValue(
         getRuntimeHelper(dataRuntime, 'MONTH_END_PROMPT_DEFER_KEY'),
         'rushd_month_end_prompt_deferred',
@@ -1035,6 +1113,8 @@ export function createLegacyFeaturePorts(
       );
     },
     clearMonthEndDeferral() {
+      // D2 residual fix: deferral removal is a write gated by authority.
+      authority.assertWritable('lifecycle.clearMonthEndDeferral');
       removeLocalStorage(
         environment,
         toStringValue(
@@ -1048,7 +1128,10 @@ export function createLegacyFeaturePorts(
     },
   };
 
-  return {
+  // D2 residual fix: the public port surface is immutable. Internal state
+  // (authority binding, status cells) lives in closures reached only through
+  // `bindAuthorityState`, never through a mutable property.
+  const ports = {
     authority,
     home,
     capture,
@@ -1060,6 +1143,10 @@ export function createLegacyFeaturePorts(
     navigation,
     lifecycle,
   };
+  for (const port of Object.values(ports)) {
+    if (port && typeof port === 'object') Object.freeze(port);
+  }
+  return Object.freeze(ports);
 }
 
 /**
@@ -1067,13 +1154,24 @@ export function createLegacyFeaturePorts(
  * scaffolding: the mounted controller keeps delegating to the legacy ports
  * while the latch state travels with them for tests and reports. D4 replaces
  * this with immutable canonical ports at the cutover.
+ *
+ * D2 residual fix: binding uses the internal WeakMap capability created by
+ * `createLegacyFeaturePorts`, so the public surface stays frozen. A foreign
+ * injected set that still exposes a legacy `bind` function is honored for
+ * backwards compatibility; anything else is left untouched.
  * @param {ShellFeaturePorts} ports
  * @param {AuthorityState} state
  * @returns {void}
  */
 export function bindAuthorityState(ports, state) {
-  const authority = ports.authority;
-  if (authority && typeof authority.bind === 'function') {
+  const authority = ports ? ports.authority : undefined;
+  if (!authority || typeof authority !== 'object') return;
+  const internal = authorityBinders.get(authority);
+  if (typeof internal === 'function') {
+    internal(state);
+    return;
+  }
+  if (typeof authority.bind === 'function') {
     authority.bind(state);
   }
 }
