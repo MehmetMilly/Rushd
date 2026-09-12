@@ -40,8 +40,9 @@
 // plan/goal mutations, and settings projections stay visibly blocked with
 // D3/D4-owned reasons; they return `{ ok: false, reason: 'blocked' }` and
 // never mutate state.
+/* global setInterval:readonly, clearInterval:readonly */
 
-import { createCommandGateway } from './command-gateway.js';
+import { createCommandGateway, mintOperationId } from './command-gateway.js';
 import {
   projectDailyExpectedTotal,
   projectDailyPaidTotal,
@@ -49,10 +50,11 @@ import {
   projectSelectedDayExpenses,
   minorUnitsToSarMajor,
 } from './read-models.js';
-import { createTabCoordinator } from './tab-coordination.js';
+import { COORDINATION_HEARTBEAT_MS, createTabCoordinator } from './tab-coordination.js';
 import { markCandidatePorts } from './candidate-token.js';
 import { requireCommandContext } from '../commands/index.ts';
-import { makeBookId } from '../../domain/contracts/identity.ts';
+import { makeBookId, makeOperationId } from '../../domain/contracts/identity.ts';
+import { canonicalJson } from '../../domain/contracts/canonical.ts';
 import { parseCivilDate } from '../../domain/primitives/civil-date.ts';
 import { deriveTrackedPool } from '../../domain/allocations/derive.ts';
 import { convertUntaggedSarMajor } from '../../data/migration/money-conversion.ts';
@@ -96,6 +98,10 @@ export const P04D_D2_D3_OWNED_REASON =
   'P04-D2: this canonical mutation is owned by task D3 and stays visibly blocked until its port lands.';
 export const P04D_D2_D4_OWNED_REASON =
   'P04-D2: this canonical mutation is owned by task D4 and stays visibly blocked until its port lands.';
+export const P04D_D3_PAY_BLOCKED_REASON =
+  'P04-D3: pay/reopen/auto-fill has no exact canonical equivalent for a paid actual (correction or reversal only); the action stays visibly blocked and never falls through to v1.';
+export const P04D_D3_BULK_UNPAID_BLOCKED_REASON =
+  'P04-D3: bulk mark-unpaid has no exact canonical equivalent and stays visibly blocked; correct or reverse individual expenses instead.';
 
 const MONTH_KEY_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -310,6 +316,95 @@ function blockedResult(reason) {
 }
 
 /**
+ * Resolve the operation identity for one user intent. A caller-supplied
+ * retry ID is validated and reused so a retry after a lost acknowledgement
+ * replays idempotently; otherwise a fresh ID is minted. A new intent (or
+ * a reload) must never reuse a persisted ID.
+ * @param {unknown} raw
+ * @param {CommandContext} context
+ * @returns {{ ok: true, value: import('../commands/index.ts').OperationId } | { ok: false }}
+ */
+function resolveCallerOperationId(raw, context) {
+  try {
+    if (raw === undefined || raw === null || raw === '') {
+      return { ok: true, value: mintOperationId(context) };
+    }
+    const made = makeOperationId(raw);
+    if (!made.ok) return { ok: false };
+    return { ok: true, value: made.value };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/**
+ * Map a gateway failure to the machine-readable port reason. Command
+ * rejections (including unknown entries) are caller validation failures;
+ * conflicts, storage crashes, and lost acknowledgements stay retryable
+ * errors. Both keep the UI truthful: no success is ever reported.
+ * @param {{ kind: string } | null | undefined} failure
+ * @returns {string}
+ */
+function gatewayFailureReason(failure) {
+  if (!failure) return 'error';
+  if (
+    failure.kind === 'invalidCommand'
+    || failure.kind === 'invalidConfirmation'
+    || failure.kind === 'previewMismatch'
+    || failure.kind === 'unknownEntry'
+  ) {
+    return 'validation';
+  }
+  return 'error';
+}
+
+/**
+ * Find an already-committed intent BEFORE preview/execute. The gateway
+ * previews against live state first, so a retry of an already-applied
+ * state-dependent command (a correction whose target is now reversed)
+ * would fail its preview even though the journal holds the committed
+ * receipt. This applies exactly the journal rule `execute` uses (same
+ * canonical command → replay; different content → conflict), so a retry
+ * after a lost acknowledgement replays instead of duplicating, and an ID
+ * is never honored for two payloads. Adapters without journal reads
+ * return `missing` and fall through to the gateway, which still guards.
+ * @param {unknown} repository
+ * @param {import('../commands/index.ts').OperationId} operationId
+ * @param {FinanceCommand} command
+ * @returns {{ status: 'missing' } | { status: 'replayed', receipt: import('../commands/index.ts').CommandReceipt } | { status: 'conflict' }}
+ */
+function findCommittedIntent(repository, operationId, command) {
+  try {
+    if (!repository || typeof repository.getOperation !== 'function') return { status: 'missing' };
+    const existing = repository.getOperation(operationId);
+    if (!existing) return { status: 'missing' };
+    let canonical = null;
+    try {
+      canonical = canonicalJson(command);
+    } catch {
+      return { status: 'missing' };
+    }
+    if (existing.canonicalCommand === canonical) {
+      return { status: 'replayed', receipt: existing.receipt };
+    }
+    return { status: 'conflict' };
+  } catch {
+    return { status: 'missing' };
+  }
+}
+
+/**
+ * Pull the replacement/live entry id out of a correction receipt.
+ * @param {import('../commands/index.ts').CommandReceipt | null | undefined} receipt
+ * @param {string} fallbackEntryId
+ * @returns {string}
+ */
+function correctionResultId(receipt, fallbackEntryId) {
+  const recorded = receipt?.effects?.find((effect) => effect.kind === 'expenseRecorded');
+  return recorded && 'entryId' in recorded ? String(recorded.entryId) : String(fallbackEntryId);
+}
+
+/**
  * Prepare the candidate-only canonical guest host.
  *
  * Every input is explicit test/build injection. Nothing is read from URL,
@@ -479,6 +574,140 @@ export async function prepareCanonicalCandidateHost(options = {}) {
     return null;
   };
 
+  /**
+   * Hold a coordination critical section across an async task while
+   * refreshing its lease, so a long migration/import/reset keeps gating
+   * update activation even past the crash-prune TTL. The repository's own
+   * commit guards still own conflict safety.
+   * @param {'write' | 'import' | 'reset' | 'migration'} kind
+   * @param {() => Promise<unknown>} task
+   * @returns {Promise<unknown>}
+   */
+  async function withHeldCritical(kind, task) {
+    const entered = coordination.beginCritical(kind);
+    let current = entered;
+    const heartbeat = setInterval(() => {
+      try {
+        current = coordination.refreshCritical(current);
+      } catch {
+        /* lock lost or pruned; the task's commit guards still apply */
+      }
+    }, COORDINATION_HEARTBEAT_MS);
+    if (heartbeat && typeof heartbeat.unref === 'function') heartbeat.unref();
+    try {
+      return await task();
+    } finally {
+      clearInterval(heartbeat);
+      coordination.endCritical(current);
+    }
+  }
+
+  /**
+   * Execute one append-only expense correction (`correctExpense`) through
+   * the P03 gateway under a write critical section. `replacement: null`
+   * appends a reversal only (delete); otherwise a linked reversal plus
+   * replacement (edit). The original record always stays in canonical
+   * history. Visible state mutates only after the durable commit, and the
+   * commit is announced so other tabs invalidate.
+   * @param {{ scope: string, entryId: string, replacement: unknown, occurredAtLocalDate: string, note: string, operationIdRaw?: unknown }} correction
+   * @returns {Promise<CaptureResult>}
+   */
+  async function runExpenseCorrection(correction) {
+    const operation = resolveCallerOperationId(correction.operationIdRaw, context);
+    if (!operation.ok) {
+      historyStatus.fail('canonical correction refused: invalid operation identity.');
+      return blockedResult('validation');
+    }
+    /** @type {FinanceCommand} */
+    const command = {
+      kind: 'correctExpense',
+      bookId: state.bookId,
+      expenseEntryId: correction.entryId,
+      occurredAt: { kind: 'civilDate', localDate: correction.occurredAtLocalDate },
+      note: correction.note,
+      replacement: correction.replacement,
+    };
+    // Already applied by an earlier attempt (lost acknowledgement)? Replay
+    // from the journal instead of previewing against reversed state.
+    const committed = findCommittedIntent(state.repository, operation.value, command);
+    if (committed.status === 'replayed') {
+      await refreshCommitted();
+      coordination.announceCommit({ storageId: state.storageId, operationId: String(operation.value) });
+      return { ok: true, id: correctionResultId(committed.receipt, correction.entryId) };
+    }
+    if (committed.status === 'conflict') {
+      historyStatus.fail(`operation ${String(operation.value)} is already committed with different content; a new intent needs a fresh identity.`);
+      return blockedResult('error');
+    }
+    // D3 correction: corrections hold the write section under the same
+    // refreshed lease as capture/import/reset/migration (see above).
+    return withHeldCritical('write', async () => {
+      try {
+        const result = await state.gateway.execute(command, { operationId: operation.value });
+        if (!result.ok) {
+          const reason = gatewayFailureReason(result.failure);
+          historyStatus.fail(result.detail ?? 'canonical correction failed');
+          return blockedResult(reason);
+        }
+        await refreshCommitted();
+        coordination.announceCommit({ storageId: state.storageId, operationId: String(operation.value) });
+        return { ok: true, id: correctionResultId(result.receipt, correction.entryId) };
+      } catch (error) {
+        const reason = error instanceof Error && /epoch/i.test(error.message) ? 'blocked' : 'error';
+        historyStatus.fail(error instanceof Error ? error.message : String(error));
+        return blockedResult(reason);
+      }
+    });
+  }
+
+  /**
+   * Build the `correctExpense` replacement for a legacy-shaped history
+   * edit, or report the validation issue. Mapping (documented, no
+   * invented fields): the committed actual amount is the card amount, so
+   * the edited cost replaces it; the edited civil date replaces the
+   * financial date; name/category carry as descriptive links; omitted
+   * category/flexible links carry over from the original per command
+   * semantics. Classification has no canonical counterpart and is not
+   * stored: the read model leaves the field empty instead of guessing.
+   * @param {unknown} expense
+   * @returns {{ ok: true, entryId: string, replacement: Record<string, unknown>, occurredAtLocalDate: string, note: string } | { ok: false, issue: string }}
+   */
+  function buildCorrectionReplacement(expense) {
+    const record = expense && typeof expense === 'object' ? expense : {};
+    const entryId = toText(record.id);
+    if (!entryId) return { ok: false, issue: 'missing expense id' };
+    const name = toText(record.name).trim();
+    if (!name) return { ok: false, issue: 'missing expense name' };
+    const rawAmount = Number.isFinite(record.expectedCost) ? record.expectedCost : toFiniteNumber(record.actualPaid);
+    if (!Number.isFinite(rawAmount) || rawAmount < 0) return { ok: false, issue: 'invalid expense amount' };
+    const converted = convertUntaggedSarMajor(rawAmount, {
+      database: 'MicroSaveOS_DB',
+      databaseVersion: 1,
+      store: 'expenses',
+      recordKey: 'candidate-correction',
+      field: 'expectedCost',
+    });
+    if (!converted.ok) return { ok: false, issue: 'invalid expense amount' };
+    const dateText = toText(record.date) || state.selectedDate;
+    const localDate = parseCivilDate(dateText);
+    if (!localDate.ok) return { ok: false, issue: 'invalid expense date' };
+    const category = toText(record.category);
+    const flexibleDefinitionId = typeof record.flexibleDefinitionId === 'string' ? record.flexibleDefinitionId : '';
+    return {
+      ok: true,
+      entryId,
+      replacement: {
+        amount: converted.money,
+        localDate: localDate.value,
+        note: name,
+        ...(category ? { category } : {}),
+        ...(flexibleDefinitionId ? { flexibleDefinitionId } : {}),
+      },
+      occurredAtLocalDate: localDate.value,
+      note: name,
+    };
+  }
+
   /** @type {ShellFeaturePorts} */
   const ports = {
     authority: authorityPort,
@@ -531,55 +760,82 @@ export async function prepareCanonicalCandidateHost(options = {}) {
         const dateText = toText(input?.date) || state.selectedDate;
         const localDate = parseCivilDate(dateText);
         if (!localDate.ok) return blockedResult('validation');
-        const token = coordination.beginCritical('write');
-        try {
-          const converted = convertUntaggedSarMajor(cost, {
-            database: 'MicroSaveOS_DB',
-            databaseVersion: 1,
-            store: 'expenses',
-            recordKey: 'candidate-capture',
-            field: 'cost',
-          });
-          if (!converted.ok) return blockedResult('validation');
-          /** @type {FinanceCommand} */
-          const command = {
-            kind: 'recordExpense',
-            bookId: state.bookId,
-            amount: converted.money,
-            occurredAt: { kind: 'civilDate', localDate: localDate.value },
-            note: name,
-            category: toText(input?.category) || 'food',
-            flexibleDefinitionId: input?.source === 'flexible' && typeof input?.flexibleDefinitionId === 'string'
-              ? input.flexibleDefinitionId
-              : null,
-          };
-          const result = await state.gateway.execute(command);
-          if (!result.ok) {
-            const reason = result.failure?.kind === 'invalidCommand' ? 'validation' : 'error';
-            captureStatus.fail(result.detail ?? 'canonical capture failed');
+        // D3 correction: an empty category stays empty (null), never a
+        // made-up default. The command treats null as "no category yet".
+        // Retry-stable identity: a retry after a lost acknowledgement
+        // reuses the caller's operation ID and replays idempotently; a new
+        // intent mints a fresh ID that cannot collide with journal history.
+        const operation = resolveCallerOperationId(input?.operationId, context);
+        if (!operation.ok) {
+          captureStatus.fail('canonical capture refused: invalid operation identity.');
+          return blockedResult('validation');
+        }
+        const converted = convertUntaggedSarMajor(cost, {
+          database: 'MicroSaveOS_DB',
+          databaseVersion: 1,
+          store: 'expenses',
+          recordKey: 'candidate-capture',
+          field: 'cost',
+        });
+        if (!converted.ok) return blockedResult('validation');
+        /** @type {FinanceCommand} */
+        const command = {
+          kind: 'recordExpense',
+          bookId: state.bookId,
+          amount: converted.money,
+          occurredAt: { kind: 'civilDate', localDate: localDate.value },
+          note: name,
+          category: toText(input?.category) || null,
+          flexibleDefinitionId: input?.source === 'flexible' && typeof input?.flexibleDefinitionId === 'string'
+            ? input.flexibleDefinitionId
+            : null,
+        };
+        // Already applied by an earlier attempt (lost acknowledgement)?
+        // Replay from the journal instead of committing a second actual.
+        const committed = findCommittedIntent(state.repository, operation.value, command);
+        if (committed.status === 'replayed') {
+          const recorded = committed.receipt?.effects?.find((effect) => effect.kind === 'expenseRecorded');
+          coordination.announceCommit({ storageId: state.storageId, operationId: String(operation.value) });
+          return { ok: true, id: recorded && 'entryId' in recorded ? String(recorded.entryId) : undefined };
+        }
+        if (committed.status === 'conflict') {
+          captureStatus.fail(`operation ${String(operation.value)} is already committed with different content; a new intent needs a fresh identity.`);
+          return blockedResult('error');
+        }
+        // D3 correction: capture holds the write section under the same
+        // refreshed lease as import/reset/migration, so an update cannot
+        // activate across a live write merely because the TTL elapsed.
+        return withHeldCritical('write', async () => {
+          try {
+            const result = await state.gateway.execute(command, { operationId: operation.value });
+            if (!result.ok) {
+              const reason = gatewayFailureReason(result.failure);
+              captureStatus.fail(result.detail ?? 'canonical capture failed');
+              return blockedResult(reason);
+            }
+            const recorded = result.receipt.effects.find((effect) => effect.kind === 'expenseRecorded');
+            coordination.announceCommit({ storageId: state.storageId, operationId: String(operation.value) });
+            return { ok: true, id: recorded && 'entryId' in recorded ? String(recorded.entryId) : undefined };
+          } catch (error) {
+            const reason = error instanceof Error && /epoch/i.test(error.message) ? 'blocked' : 'error';
+            captureStatus.fail(error instanceof Error ? error.message : String(error));
             return blockedResult(reason);
           }
-          const recorded = result.receipt.effects.find((effect) => effect.kind === 'expenseRecorded');
-          coordination.announceCommit({ storageId: state.storageId });
-          return { ok: true, id: recorded && 'entryId' in recorded ? String(recorded.entryId) : undefined };
-        } catch (error) {
-          const reason = error instanceof Error && /epoch/i.test(error.message) ? 'blocked' : 'error';
-          captureStatus.fail(error instanceof Error ? error.message : String(error));
-          return blockedResult(reason);
-        } finally {
-          coordination.endCritical(token);
-        }
+        });
       },
       async payExpense() {
-        captureStatus.fail(P04D_D2_D3_OWNED_REASON);
+        // D3: a paid actual has no unpaid counterpart in the canonical
+        // model, so pay/reopen cannot map exactly. Correct or reverse the
+        // expense through history instead; never mutate in place or v1.
+        captureStatus.fail(P04D_D3_PAY_BLOCKED_REASON);
         return blockedResult('blocked');
       },
       async markUnpaid() {
-        captureStatus.fail(P04D_D2_D3_OWNED_REASON);
+        captureStatus.fail(P04D_D3_PAY_BLOCKED_REASON);
         return blockedResult('blocked');
       },
       async autoFillDay() {
-        planStatus.fail(P04D_D2_D3_OWNED_REASON);
+        planStatus.fail(P04D_D3_PAY_BLOCKED_REASON);
         return 0;
       },
       getStatus() {
@@ -591,16 +847,101 @@ export async function prepareCanonicalCandidateHost(options = {}) {
       async listDayExpenses(date) {
         return projectDayHistory(currentBook(), toText(date));
       },
-      async updateExpense() {
-        return blockedResult('blocked');
+      async updateExpense(expense, options = {}) {
+        const blocked = requireWritable('history.updateExpense');
+        if (blocked) return blocked.result;
+        if (!state.bookId) {
+          historyStatus.fail(P04D_D2_NO_BOOK_REASON);
+          return blockedResult('blocked');
+        }
+        const built = buildCorrectionReplacement(expense);
+        if (!built.ok) {
+          historyStatus.fail(`canonical correction refused: ${built.issue}.`);
+          return blockedResult('validation');
+        }
+        return runExpenseCorrection({
+          scope: 'history.updateExpense',
+          entryId: built.entryId,
+          replacement: built.replacement,
+          occurredAtLocalDate: built.occurredAtLocalDate,
+          note: built.note,
+          operationIdRaw: options?.operationId,
+        });
       },
-      async deleteExpense() {
-        return blockedResult('blocked');
+      async deleteExpense(id, options = {}) {
+        const blocked = requireWritable('history.deleteExpense');
+        if (blocked) return blocked.result;
+        if (!state.bookId) {
+          historyStatus.fail(P04D_D2_NO_BOOK_REASON);
+          return blockedResult('blocked');
+        }
+        const entryId = toText(id);
+        if (!entryId) return blockedResult('validation');
+        const occurredAt = parseCivilDate(state.selectedDate);
+        if (!occurredAt.ok) {
+          historyStatus.fail('canonical reversal refused: invalid selected date.');
+          return blockedResult('validation');
+        }
+        // Delete is an append-only reversal (`replacement: null`); the
+        // original record stays in canonical history/audit state while the
+        // live Transactions view hides the reversed entry.
+        return runExpenseCorrection({
+          scope: 'history.deleteExpense',
+          entryId,
+          replacement: null,
+          occurredAtLocalDate: occurredAt.value,
+          note: `reversal of ${entryId}`,
+          operationIdRaw: options?.operationId,
+        });
       },
-      async deleteSelected() {
-        return blockedResult('blocked');
+      async deleteSelected(ids, options = {}) {
+        const blocked = requireWritable('history.deleteSelected');
+        if (blocked) return blocked.result;
+        if (!state.bookId) {
+          historyStatus.fail(P04D_D2_NO_BOOK_REASON);
+          return blockedResult('blocked');
+        }
+        if (!Array.isArray(ids)) return blockedResult('validation');
+        const list = ids.filter((id) => typeof id === 'string' && id);
+        if (list.length !== ids.length) return blockedResult('validation');
+        if (list.length === 0) return { ok: true };
+        const occurredAt = parseCivilDate(state.selectedDate);
+        if (!occurredAt.ok) {
+          historyStatus.fail('canonical batch reversal refused: invalid selected date.');
+          return blockedResult('validation');
+        }
+        const perIntentIds = Array.isArray(options?.operationIds) ? options.operationIds : [];
+        const failures = [];
+        let succeeded = 0;
+        for (let index = 0; index < list.length; index += 1) {
+          const result = await runExpenseCorrection({
+            scope: 'history.deleteSelected',
+            entryId: list[index],
+            replacement: null,
+            occurredAtLocalDate: occurredAt.value,
+            note: `reversal of ${list[index]}`,
+            operationIdRaw: perIntentIds[index],
+          });
+          if (result.ok) {
+            succeeded += 1;
+          } else {
+            failures.push(`${list[index]}: ${result.reason}`);
+          }
+        }
+        if (failures.length > 0) {
+          // Explicit partial failure: never report all-success when any
+          // reversal failed. Succeeded reversals stay committed (append-only
+          // facts cannot be un-appended); the caller retries only failures
+          // with fresh operation identities.
+          historyStatus.fail(
+            `canonical batch delete partially failed (${succeeded}/${list.length} reversed): ${failures.join('; ')}`,
+          );
+          return blockedResult('partial');
+        }
+        return { ok: true };
       },
       async markSelectedUnpaid() {
+        historyStatus.fail(P04D_D3_BULK_UNPAID_BLOCKED_REASON);
         return blockedResult('blocked');
       },
       getStatus() {
@@ -765,8 +1106,9 @@ export async function prepareCanonicalCandidateHost(options = {}) {
         const importId = toText(options.importId);
         const confirmation = toText(options.confirmation);
         if (!importId) return { ok: false, reason: 'validation' };
-        const token = coordination.beginCritical('import');
-        try {
+        // D3: the import section is lease-refreshed, so a large restore
+        // keeps gating update activation across the whole commit point.
+        return withHeldCritical('import', async () => {
           // The storage adapter owns document preview: the durable adapter
           // runs the P04-C portable validation, while test adapters preview
           // their own document shape. Either way the host never invents data.
@@ -786,12 +1128,10 @@ export async function prepareCanonicalCandidateHost(options = {}) {
           state.storageId = result.activeStorageId;
           coordination.announceCommit({ storageId: state.storageId });
           return { ok: true, reason: '' };
-        } catch (error) {
+        }).catch((error) => {
           portabilityStatus.fail(error instanceof Error ? error.message : String(error));
           return { ok: false, reason: 'error' };
-        } finally {
-          coordination.endCritical(token);
-        }
+        });
       },
       async factoryReset(onBlockedOrOptions = null) {
         // Legacy-compatible shape: a bare callback means "notify when
@@ -810,8 +1150,8 @@ export async function prepareCanonicalCandidateHost(options = {}) {
         }
         const resetId = toText(asRecord.resetId);
         const confirmation = toText(asRecord.confirmation);
-        const token = coordination.beginCritical('reset');
-        try {
+        // D3: lease-refreshed like import (see restoreSnapshot).
+        await withHeldCritical('reset', async () => {
           const result = await storage.resetScope(resetId, confirmation, context.origin.scopeId);
           if (!result.ok) {
             portabilityStatus.fail(result.detail ?? result.reason ?? 'canonical reset failed');
@@ -820,9 +1160,7 @@ export async function prepareCanonicalCandidateHost(options = {}) {
           await reopenActive(result.activeStorageId);
           state.storageId = result.activeStorageId;
           coordination.announceCommit({ storageId: state.storageId });
-        } finally {
-          coordination.endCritical(token);
-        }
+        });
       },
       clearLocalPreferences() {
         authorityPort.assertWritable('portability.clearLocalPreferences');
@@ -965,18 +1303,15 @@ export async function prepareCanonicalCandidateHost(options = {}) {
       if (!identity.ok) {
         return failClosed(`canonical migration id is invalid: ${identity.detail}`);
       }
-      const token = coordination.beginCritical('migration');
-      try {
-        const result = await storage.migrate(identity.value, options.snapshot);
-        if (!result.ok) {
-          return failClosed(`canonical migration failed at ${result.phase}: ${result.detail}`);
-        }
-        state.migration = result;
-        await reopenActive(result.activeStorageId);
-        state.storageId = result.activeStorageId;
-      } finally {
-        coordination.endCritical(token);
+      // D3: the migration section is lease-refreshed, so a large
+      // migration keeps gating update activation across its commit point.
+      const migrated = /** @type {MigrationResult} */ (await withHeldCritical('migration', () => storage.migrate(identity.value, options.snapshot)));
+      if (!migrated.ok) {
+        return failClosed(`canonical migration failed at ${migrated.phase}: ${migrated.detail}`);
       }
+      state.migration = migrated;
+      await reopenActive(migrated.activeStorageId);
+      state.storageId = migrated.activeStorageId;
     } else {
       await reopenActive(selectedStorageId);
       state.migration = null;

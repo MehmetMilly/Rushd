@@ -11,6 +11,8 @@ export const P04D_D2_PREPARING_REASON: string;
 export const P04D_D2_NO_BOOK_REASON: string;
 export const P04D_D2_D3_OWNED_REASON: string;
 export const P04D_D2_D4_OWNED_REASON: string;
+export const P04D_D3_PAY_BLOCKED_REASON: string;
+export const P04D_D3_BULK_UNPAID_BLOCKED_REASON: string;
 
 export interface CanonicalStorageAdapter {
   readonly control?: ControlStore;

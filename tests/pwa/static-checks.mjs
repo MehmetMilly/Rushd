@@ -117,4 +117,27 @@ function stripComments(source) {
   assert.ok(!('icons' in manifest) || (Array.isArray(manifest.icons) && manifest.icons.length > 0), 'manifest must not half-claim icons');
 }
 
+// 9. D3 candidate shell: owned by the manifest, dependency-light, and the
+// application boundary rejects unknown injected port sets. Default
+// production still passes no candidate inputs.
+{
+  for (const file of ['src/application/p04-d/candidate-shell.js', 'src/application/p04-d/candidate-shell.d.ts']) {
+    assert.ok(ownedProductionFiles.includes(file), `${file} must be in the production manifest`);
+    assert.ok(existsSync(file), `${file} must exist`);
+  }
+  const shell = stripComments(await readFile('src/application/p04-d/candidate-shell.js', 'utf8'));
+  assert.match(shell, /createLegacyApplication/, 'candidate shell must reuse the established composition root');
+  assert.ok(!shell.includes('createGuestApplication'), 'candidate shell must not mount an alternate root');
+  for (const forbidden of ['localStorage', 'sessionStorage', 'location', 'document', 'cookie', 'URLSearchParams']) {
+    assert.ok(!shell.includes(forbidden), `candidate-shell must not read ${forbidden} (injection only)`);
+  }
+  const registration = stripComments(await readFile('src/pwa/registration.js', 'utf8'));
+  assert.doesNotMatch(registration, /^import\s/m, 'pwa registration must stay import-free');
+  const bootstrap = await readFile('src/application/bootstrap.js', 'utf8');
+  assert.match(bootstrap, /refusing unknown featurePorts/, 'bootstrap must reject unknown injected port sets');
+  const main = await readFile('src/main.ts', 'utf8');
+  assert.ok(!main.includes('candidatePorts'), 'default main.ts must not pass candidate ports');
+  assert.ok(!main.includes('authorityMode'), 'default main.ts must not pass an authority request');
+}
+
 console.log('p04-d2 static checks passed');

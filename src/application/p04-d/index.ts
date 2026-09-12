@@ -42,6 +42,8 @@ export {
   resolveP04DAuthority,
 } from './authority-latch.js';
 export { bindAuthorityState, createLegacyFeaturePorts } from './legacy-ports.js';
+export { createCandidateIdFactory, prepareCandidateShell } from './candidate-shell.js';
+export type { CandidateShell, CandidateShellOptions } from './candidate-shell.js';
 export {
   MUTATION_COVERAGE_INVENTORY,
   findDuplicateOwners,

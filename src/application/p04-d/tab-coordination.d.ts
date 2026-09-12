@@ -8,6 +8,7 @@ export const COORDINATION_CHANNEL: string;
 export const COORDINATION_EPOCH_KEY: string;
 export const COORDINATION_LOCKS_KEY: string;
 export const COORDINATION_LOCK_TTL_MS: number;
+export const COORDINATION_HEARTBEAT_MS: number;
 
 export interface CriticalSectionToken {
   readonly kind: CriticalSectionKind;
@@ -47,6 +48,7 @@ export interface TabCoordinator {
   assertEpoch(openedEpoch: number): void;
   beginCritical(kind: CriticalSectionKind): CriticalSectionToken;
   endCritical(token: Pick<CriticalSectionToken, 'kind' | 'tabId'> | null | undefined): void;
+  refreshCritical(token: Pick<CriticalSectionToken, 'kind' | 'tabId'> | null | undefined): CriticalSectionToken;
   activeCriticalSections(): CriticalSectionToken[];
   canActivateUpdate(): boolean;
   announceCommit(info?: { readonly storageId?: string; readonly operationId?: string }): void;

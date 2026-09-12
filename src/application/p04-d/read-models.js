@@ -7,13 +7,28 @@
 // dates from committed civil dates. No v1 object is read here and no field
 // is invented beyond an explicit, documented display default.
 //
-// Display-mapping notes (D3-owned refinements):
-// - Canonical expenses are actuals; `expectedCost` mirrors the committed
-//   actual until D3 projects obligations/plans as expected amounts.
-// - `classification` has no canonical counterpart yet and defaults to
-//   `essential`; D3 replaces it with the real derivation.
-// - `name` mirrors the committed expense note; D3 owns bilingual display
-//   shaping. Amounts stay exact (minor units / 100 for SAR majors).
+// Display-mapping notes (D3 canonical contract, corrected):
+// - Canonical expenses are actuals. The established cards need one
+//   legacy-shaped number, so the committed actual amount is displayed as
+//   BOTH `expectedCost` and `actualPaid`, with `isPaid` true for every
+//   live entry. There is no unpaid canonical expense: legacy unpaid rows
+//   do not migrate as spendable facts, and no expected/obligation amount
+//   is projected here (obligations and plans stay D4-owned).
+// - `classification` has no canonical counterpart, so the field is EMPTY,
+//   never `essential`: no false tag renders (the cards' luxury tag and
+//   luxury styling only trigger on an explicit `luxury` value). A
+//   luxury-labeled legacy row keeps its committed amount and note, but the
+//   canonical view does not claim a classification it cannot derive.
+// - `category` is preserved only when canonical state actually contains
+//   it; an empty canonical category stays empty instead of substituting a
+//   made-up `other` or `food`. Category pickers remain user-chosen input,
+//   never inferred facts.
+// - `name` mirrors the committed expense note verbatim; no bilingual
+//   reshaping happens here. Amounts stay exact (minor units / 100 SAR).
+// - Intentionally unavailable (never fabricated): exact dates for
+//   obligations that retain only a due cycle, plan links, monthly
+//   budget/safe-to-spend values, and any non-committed field. Home
+//   safe-to-spend reads `null` (unknown) until D4 owns availability.
 
 import {
   isExpenseLive,
@@ -53,6 +68,8 @@ function liveIn(state, entry) {
 
 /**
  * Project one canonical expense entry to the legacy-shaped day row.
+ * Classification is empty when canonical state has none (never guessed);
+ * category is preserved verbatim (never substituted).
  * @param {ExpenseEntry} entry
  * @param {boolean} paid
  * @returns {HomeDayExpense}
@@ -65,8 +82,8 @@ export function projectHomeDayExpense(entry, paid) {
     expectedCost: amount,
     actualPaid: amount,
     isPaid: paid,
-    category: entry.category || 'other',
-    classification: 'essential',
+    category: entry.category || '',
+    classification: '',
     date: String(entry.localDate),
   };
 }
@@ -124,8 +141,8 @@ export function projectHistoryRecord(entry, paid) {
     expectedCost: amount,
     actualPaid: amount,
     isPaid: paid,
-    category: entry.category || 'other',
-    classification: 'essential',
+    category: entry.category || '',
+    classification: '',
     cycleId: String(entry.cycleId),
     entryId: String(entry.entryId),
     sourceOperationId: String(entry.sourceOperationId),

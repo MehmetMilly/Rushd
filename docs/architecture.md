@@ -613,6 +613,71 @@ migrate/write/reload, two-tab invalidation, update coordination,
 old-tab blocking, failure recovery, and offline reload with zero remote
 requests against the real OPFS stack.
 
+## Home, Add, and Transactions canonical ports (P04-D Task D3)
+
+D3 routes the established Home, Add, and Transactions experiences through
+the canonical ports while default production stays entirely
+legacy-authoritative and visually unchanged:
+
+- `src/application/p04-d/candidate-shell.js` (+ `.d.ts`): the explicit
+  candidate-shell adapter. `prepareCandidateShell` prepares the canonical
+  host, then mounts the same `createLegacyApplication` with the same
+  established template, passing the host-bound ports through build/test
+  injection only. `createCandidateIdFactory` mints reload-unique,
+  retry-stable operation identities (per-process entropy; a retry reuses
+  its intent's ID and replays idempotently).
+- `src/application/p04-d/canonical-host.js`: history edits append a
+  linked `correctExpense` correction, deletes append a reversal
+  (`replacement: null`), and batch deletes run individually confirmed
+  reversals with explicit partial-failure handling (never all-success on
+  a partial). Originals stay in canonical history while live views hide
+  reversed entries. Pay/reopen/auto-fill and bulk-unpaid have no exact
+  canonical equivalent and stay visibly blocked without touching v1.
+  Capture accepts a caller retry identity and announces commits with the
+  operation ID; a journal-first replay check replays already-committed
+  intents (same canonical command) before preview, so a retry after a
+  lost acknowledgement cannot duplicate even state-dependent
+  corrections, while a reused ID with different content is refused.
+  Capture, correction, migration, import, and reset sections all hold
+  the write lease under refresh, so long operations keep gating update
+  activation past the TTL.
+- `src/application/p04-d/read-models.js`: canonical display contract.
+  Committed actuals render as both card and paid amounts; classification
+  stays empty when canonical state has none (never guessed, so no false
+  tag renders); category is preserved only when actually present;
+  obligation dates, plan links, and budget/safe-to-spend values are
+  never fabricated (safe-to-spend reads unknown until D4).
+- `src/application/p04-d/tab-coordination.js`: lease refresh
+  (`refreshCritical`, heartbeat interval) for long sections and a
+  monotonic in-memory epoch guard, so a stored rollback can never
+  re-enable a stale tab.
+- `src/pwa/registration.js`: `activateCandidateUpdate` is the single
+  epoch-bump site — it requests waiting activation and then bumps, so
+  one transition increments the epoch exactly once. Withheld
+  activations never bump. There is no parallel watcher that could
+  double-bump the same transition.
+- `src/application/bootstrap.js`: explicitly injected port sets must
+  implement the complete shell surface and are rejected otherwise, even
+  in legacy mode.
+- `src/app/root-controller.js` + `src/app/root-template.html` (smallest
+  seam): candidate mode sources the selected day, day rows, totals, and
+  safe-to-spend from canonical state, routes Add/corrections/reversals
+  through the ports (mutating visible state only after durable success),
+  keeps one operation identity per open Add/edit/delete intent across
+  retries (new payloads mint fresh; success/cancel/close ends the
+  intent), blocks `openPayModal` without opening, and disables/hides
+  pay/auto-fill/template/flexible/reopen/unpaid/classification controls
+  whenever candidate mode is active (not only when blocked). Template,
+  flexible, plan, insights, goals, and portability cutover stay D4-owned.
+
+The D3 gate is `npm run test:p04d3`: host correction/reversal suites,
+controller routing proof (every D3-owned action reaches exactly one port
+in candidate mode and cannot reach `Store`/`DB`), coordination/epoch
+suites, and the Playwright Chromium harness
+(`tests/pwa/p04-d3-browser.mjs`) driving the real established template
+in explicit candidate mode (add-once, correction, reversal, cross-tab,
+failure, epoch evidence) with clearly fake data.
+
 ## Main Screens
 
 - Dashboard: selected-day expense list, safe-to-spend hero, date window, payment and add-expense flows.

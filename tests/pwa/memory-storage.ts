@@ -27,6 +27,123 @@ export interface MemoryStorageOptions {
   readonly control?: ControlStore;
 }
 
+/**
+ * Hydrate a staging namespace with the committed payload carried by an
+ * exported memory document. Returns true only when every book, journal
+ * entry, outbox intent, delivery record, and the enqueue counter was
+ * restored and the lookup indexes rebuilt, so row identity (not just the
+ * activation pointer) survives the import commit point. Test-adapter-only:
+ * it reaches the repository's internal committed store, which has no
+ * public restore path by design.
+ */
+function restoreSnapshotBytes(staging: InMemoryFinanceRepository, snapshotBytes: unknown): boolean {
+  if (typeof snapshotBytes !== 'string' || snapshotBytes.length === 0) return false;
+  let parsed: {
+    books?: unknown;
+    operations?: unknown;
+    outbox?: unknown;
+    delivery?: unknown;
+    enqueueSequence?: unknown;
+  };
+  try {
+    parsed = JSON.parse(snapshotBytes);
+  } catch {
+    return false;
+  }
+  if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.books)) return false;
+  const store = (staging as unknown as {
+    store?: {
+      books: Map<string, unknown>;
+      operations: Map<string, unknown>;
+      outbox: unknown[];
+      delivery: Map<string, unknown>;
+      enqueueSequence: number;
+      entryIndex: Map<string, unknown>;
+      obligationIndex: Map<string, unknown>;
+      goalIndex: Map<string, unknown>;
+      observationIndex: Map<string, unknown>;
+      planIndex: Map<string, unknown>;
+      occurrenceIndex: Map<string, unknown>;
+      settlementIndex: Map<string, unknown>;
+    };
+  }).store;
+  if (!store || !(store.books instanceof Map) || !(store.operations instanceof Map)) return false;
+  const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+  const books = new Map<string, unknown>();
+  for (const state of parsed.books as Array<Record<string, unknown>>) {
+    const book = state?.['book'] as Record<string, unknown> | undefined;
+    const id = typeof book?.['id'] === 'string' ? (book['id'] as string) : null;
+    if (id === null) return false;
+    books.set(id, clone(state));
+  }
+  const operations = new Map<string, unknown>();
+  if (parsed.operations !== undefined) {
+    if (!Array.isArray(parsed.operations)) return false;
+    for (const record of parsed.operations as Array<Record<string, unknown>>) {
+      const id = typeof record?.['operationId'] === 'string' ? (record['operationId'] as string) : null;
+      if (id === null) return false;
+      operations.set(id, clone(record));
+    }
+  }
+  if (parsed.outbox !== undefined && !Array.isArray(parsed.outbox)) return false;
+  const delivery = new Map<string, unknown>();
+  if (parsed.delivery !== undefined) {
+    if (!Array.isArray(parsed.delivery)) return false;
+    for (const state of parsed.delivery as Array<Record<string, unknown>>) {
+      const id = typeof state?.['operationId'] === 'string' ? (state['operationId'] as string) : null;
+      if (id === null) return false;
+      delivery.set(id, clone(state));
+    }
+  }
+  if (parsed.enqueueSequence !== undefined && (typeof parsed.enqueueSequence !== 'number' || !Number.isSafeInteger(parsed.enqueueSequence) || parsed.enqueueSequence < 0)) {
+    return false;
+  }
+  store.books = books;
+  store.operations = operations;
+  store.outbox = clone(parsed.outbox ?? []);
+  store.delivery = delivery;
+  store.enqueueSequence = (parsed.enqueueSequence as number) ?? 0;
+  const entryIndex = new Map<string, unknown>();
+  const obligationIndex = new Map<string, unknown>();
+  const goalIndex = new Map<string, unknown>();
+  const observationIndex = new Map<string, unknown>();
+  const planIndex = new Map<string, unknown>();
+  const occurrenceIndex = new Map<string, unknown>();
+  const settlementIndex = new Map<string, unknown>();
+  for (const state of books.values() as IterableIterator<Record<string, unknown>>) {
+    const bookId = (state['book'] as Record<string, unknown>)['id'] as string;
+    for (const entry of (state['entries'] as Array<Record<string, unknown>>) ?? []) {
+      entryIndex.set(entry['entryId'] as string, { bookId, entryId: entry['entryId'], kind: entry['kind'] });
+    }
+    for (const obligation of (state['obligations'] as Array<Record<string, unknown>>) ?? []) {
+      obligationIndex.set(obligation['obligationId'] as string, { bookId, obligationId: obligation['obligationId'] });
+    }
+    for (const goal of (state['goals'] as Array<Record<string, unknown>>) ?? []) {
+      goalIndex.set(goal['goalId'] as string, { bookId, goalId: goal['goalId'] });
+    }
+    for (const observation of (state['observations'] as Array<Record<string, unknown>>) ?? []) {
+      observationIndex.set(observation['observationId'] as string, { bookId, observationId: observation['observationId'] });
+    }
+    for (const plan of (state['plans'] as Array<Record<string, unknown>>) ?? []) {
+      planIndex.set(plan['planId'] as string, { bookId, planId: plan['planId'] });
+    }
+    for (const occurrence of (state['planOccurrences'] as Array<Record<string, unknown>>) ?? []) {
+      occurrenceIndex.set(occurrence['occurrenceId'] as string, { bookId, occurrenceId: occurrence['occurrenceId'] });
+    }
+    for (const settlement of (state['settlements'] as Array<Record<string, unknown>>) ?? []) {
+      settlementIndex.set(settlement['settlementId'] as string, { bookId, settlementId: settlement['settlementId'] });
+    }
+  }
+  store.entryIndex = entryIndex;
+  store.obligationIndex = obligationIndex;
+  store.goalIndex = goalIndex;
+  store.observationIndex = observationIndex;
+  store.planIndex = planIndex;
+  store.occurrenceIndex = occurrenceIndex;
+  store.settlementIndex = settlementIndex;
+  return true;
+}
+
 export function createMemoryStorage(options: MemoryStorageOptions) {
   const control = options.control ?? createMemoryControlStore();
   const namespaces = new Map<string, InMemoryFinanceRepository>();
@@ -133,7 +250,7 @@ export function createMemoryStorage(options: MemoryStorageOptions) {
       };
     },
     async previewImport(raw: unknown) {
-      let document = (raw ?? {}) as { scopeId?: unknown; deviceId?: unknown; format?: unknown };
+      let document = (raw ?? {}) as { scopeId?: unknown; deviceId?: unknown; format?: unknown; snapshotBytes?: unknown };
       if (typeof raw === 'string') {
         try {
           document = JSON.parse(raw) as typeof document;
@@ -150,6 +267,11 @@ export function createMemoryStorage(options: MemoryStorageOptions) {
       if (document.deviceId !== (options.context.origin.deviceId as string)) {
         return { ok: false as const, reason: 'foreign-record' };
       }
+      // D3 fix: a document without payload bytes cannot restore row
+      // identity, so it is refused here instead of importing as empty.
+      if (typeof document.snapshotBytes !== 'string' || document.snapshotBytes.length === 0) {
+        return { ok: false as const, reason: 'corrupt-document' };
+      }
       return { ok: true as const };
     },
     async importReplacement(importId: string, raw: unknown, confirmation: string) {
@@ -162,7 +284,7 @@ export function createMemoryStorage(options: MemoryStorageOptions) {
         cancelled: false as const,
         activeStorageId: pointer.activeStorageId,
       });
-      let document = (raw ?? {}) as { scopeId?: unknown; deviceId?: unknown; format?: unknown };
+      let document = (raw ?? {}) as { scopeId?: unknown; deviceId?: unknown; format?: unknown; snapshotBytes?: unknown };
       if (typeof raw === 'string') {
         try {
           document = JSON.parse(raw) as typeof document;
@@ -188,7 +310,14 @@ export function createMemoryStorage(options: MemoryStorageOptions) {
         };
       }
       const stagingStorageId = `imp-${importId}`;
-      repoFor(stagingStorageId, true);
+      // D3 fix: copy the exported payload bytes into the staging namespace
+      // before the pointer flip, so row identity (not just the pointer)
+      // survives the import commit point. A document without restorable
+      // bytes fails closed instead of activating an empty database.
+      const staging = repoFor(stagingStorageId, true);
+      if (!restoreSnapshotBytes(staging, document.snapshotBytes)) {
+        return fail('corrupt-document', 'portable document carries no restorable snapshot payload');
+      }
       const swapped = await control.compareAndSwapPointer(pointer.generation, {
         activeStorageId: stagingStorageId,
         schemaVersion: 1,

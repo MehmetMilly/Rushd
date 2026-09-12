@@ -23,6 +23,17 @@
 // deterministic stale-lock expiry.
 //
 // This module never touches finance state, IndexedDB, or the network.
+//
+// D3 lease and epoch rules:
+// - Critical-section holders refresh their lease with `refreshCritical`
+//   (recommended at least every `COORDINATION_HEARTBEAT_MS`, well under the
+//   TTL), so a live long-running write/import/reset/migration keeps gating
+//   update activation no matter how long it runs. An entry older than the
+//   TTL without a refresh is still treated as a crashed tab and pruned.
+// - The epoch is monotonic within a live tab: each coordinator remembers
+//   the highest epoch it has seen (persisted value, bumped value, or
+//   broadcast announcement) and refuses rollbacks. A direct write of an
+//   older epoch value into the shared store cannot re-enable a stale tab.
 
 /** Critical-section kinds coordinated across tabs. */
 export const CRITICAL_SECTIONS = Object.freeze(['write', 'import', 'reset', 'migration']);
@@ -32,6 +43,12 @@ export const COORDINATION_EPOCH_KEY = 'rushd_p04d_epoch';
 export const COORDINATION_LOCKS_KEY = 'rushd_p04d_locks';
 /** A lock older than this is treated as a crashed tab and pruned. */
 export const COORDINATION_LOCK_TTL_MS = 30_000;
+/**
+ * Recommended lease-refresh interval for long critical sections, well
+ * under the TTL. Holders call `refreshCritical` at least this often so a
+ * live operation longer than the TTL still blocks update activation.
+ */
+export const COORDINATION_HEARTBEAT_MS = 10_000;
 
 function isCriticalSection(kind) {
   return CRITICAL_SECTIONS.includes(kind);
@@ -114,6 +131,10 @@ export function createTabCoordinator(options = {}) {
   const store = options.store ?? environment?.localStorage ?? createMemoryStore();
   const invalidateHandlers = new Set();
   const epochHandlers = new Set();
+  // D3 monotonic guard: the highest epoch this live tab has observed.
+  // Persisted, bumped, and broadcast values all flow through it, so a
+  // rollback written into the shared store can never re-enable this tab.
+  let highestEpochSeen = null;
 
   /** @type {{ postMessage(m: unknown): void, onmessage: ((m: unknown) => void) | null, close?: () => void }} */
   let bus;
@@ -203,6 +224,9 @@ export function createTabCoordinator(options = {}) {
         }
       }
     } else if (data.type === 'rushd-p04d-epoch') {
+      if (typeof data.epoch === 'number' && Number.isSafeInteger(data.epoch) && data.epoch >= 0) {
+        highestEpochSeen = highestEpochSeen === null ? data.epoch : Math.max(highestEpochSeen, data.epoch);
+      }
       for (const handler of [...epochHandlers]) {
         try {
           handler(data);
@@ -213,26 +237,56 @@ export function createTabCoordinator(options = {}) {
     }
   };
 
+  /**
+   * Read the persisted epoch through the monotonic guard: the returned
+   * value never moves backwards within this live tab, even if the shared
+   * store was overwritten with an older value.
+   * @returns {number}
+   */
+  function readEpochGuarded() {
+    const raw = store.getItem(COORDINATION_EPOCH_KEY);
+    const parsed = raw === null || raw === undefined ? 0 : Number(raw);
+    const stored = Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
+    if (highestEpochSeen === null || stored > highestEpochSeen) {
+      highestEpochSeen = stored;
+      return stored;
+    }
+    if (stored < highestEpochSeen) {
+      // Repair the rollback in the shared cell so a reloading tab also
+      // observes the monotonic value; a storage failure degrades to the
+      // in-memory guard only.
+      try {
+        store.setItem(COORDINATION_EPOCH_KEY, String(highestEpochSeen));
+      } catch {
+        /* storage blocked: the in-memory guard still holds for this tab */
+      }
+      return highestEpochSeen;
+    }
+    return stored;
+  }
+
   const api = {
     tabId,
     /**
      * Current coordination epoch. Tabs that opened under an older epoch
-     * are hard-blocked from further writes.
+     * are hard-blocked from further writes. Monotonic within this live
+     * tab: a rollback of the shared cell can never lower this value.
      * @returns {number}
      */
     getEpoch() {
-      const raw = store.getItem(COORDINATION_EPOCH_KEY);
-      const parsed = raw === null || raw === undefined ? 0 : Number(raw);
-      return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
+      return readEpochGuarded();
     },
     /**
      * Publish a new epoch (incompatible update/storage transition) and
-     * notify every tab. Returns the new epoch.
+     * notify every tab. Returns the new epoch. Always advances from the
+     * guarded value, so concurrent bumps from tabs that missed an
+     * announcement still move forward, never sideways or back.
      * @param {string} [reason]
      * @returns {number}
      */
     bumpEpoch(reason = '') {
-      const next = api.getEpoch() + 1;
+      const next = readEpochGuarded() + 1;
+      highestEpochSeen = next;
       try {
         store.setItem(COORDINATION_EPOCH_KEY, String(next));
       } catch {
@@ -286,6 +340,30 @@ export function createTabCoordinator(options = {}) {
         writeLocks(locks);
       }
       bus.postMessage({ type: 'rushd-p04d-release', kind: token?.kind ?? null, tabId });
+    },
+    /**
+     * Refresh the lease on a held critical section without releasing it.
+     * Long operations call this at least every `COORDINATION_HEARTBEAT_MS`
+     * so update activation cannot cross a live operation merely because
+     * the wall clock passed the crash-prune TTL. Throws when this tab
+     * holds no live section for the token (released, pruned, or foreign).
+     * @param {{ kind: string, tabId: string } | null | undefined} token
+     * @returns {{ kind: string, tabId: string, atMs: number }} The refreshed token.
+     */
+    refreshCritical(token) {
+      if (!token || typeof token !== 'object' || !isCriticalSection(token.kind) || token.tabId !== tabId) {
+        throw new Error(`cannot refresh a foreign or malformed critical section: ${String(token?.kind ?? token)}`);
+      }
+      const { locks } = pruneLocks(readLocks());
+      const held = locks[tabId];
+      if (!held || held.kind !== token.kind) {
+        throw new Error(`no live '${token.kind}' critical section held by this tab; release and re-enter instead of refreshing.`);
+      }
+      const refreshed = { kind: token.kind, tabId, atMs: now() };
+      locks[tabId] = refreshed;
+      writeLocks(locks);
+      bus.postMessage({ type: 'rushd-p04d-acquire', kind: refreshed.kind, tabId, atMs: refreshed.atMs });
+      return refreshed;
     },
     /**
      * Currently held (non-stale) critical sections across tabs.

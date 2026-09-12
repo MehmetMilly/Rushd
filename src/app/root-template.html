@@ -141,7 +141,7 @@
                                 style="font-size: 48px; color: var(--c-text-secondary); margin-bottom: 12px;">calendar_today</span>
                             <h3 class="text-base font-bold">{{ t.noExpenses }}</h3>
                             <p class="text-xs text-secondary mb-4">{{ t.clearSchedule }}</p>
-                            <ms-btn variant="primary" icon="bolt" @click="autoFillToday">
+                            <ms-btn variant="primary" icon="bolt" @click="autoFillToday" :disabled="p04dCandidateActive">
                                 {{ t.autoFill }}
                             </ms-btn>
                         </div>
@@ -153,7 +153,7 @@
                                     <span class="material-symbols-rounded" style="font-size: 16px;">check_circle</span>
                                     {{ selectedExpenseIds.length }} {{ t.selectionCount }}
                                 </span>
-                                <button class="sel-btn sel-unpaid" @click="markSelectedUnpaid" :disabled="selectedPaidCount === 0">
+                                <button class="sel-btn sel-unpaid" @click="markSelectedUnpaid" :disabled="selectedPaidCount === 0 || p04dCandidateActive">
                                     <span class="material-symbols-rounded" style="font-size: 14px;">undo</span>
                                     {{ t.markSelectedUnpaid }}
                                 </button>
@@ -761,7 +761,7 @@
                                         </button>
                                     </div>
                                     <button class="w-full py-2 text-brand font-bold text-xs hover:bg-surface-1 rounded-lg transition-colors"
-                                        @click="openTemplateModal">
+                                        @click="openTemplateModal" :disabled="p04dCandidateActive">
                                         {{ t.planAddTemplate }}
                                     </button>
                                 </div>
@@ -801,7 +801,7 @@
                                         </button>
                                     </div>
                                     <button class="w-full py-2 text-brand font-bold text-xs hover:bg-surface-1 rounded-lg transition-colors"
-                                        @click="openTemplateModal">
+                                        @click="openTemplateModal" :disabled="p04dCandidateActive">
                                         {{ t.planAddTemplate }}
                                     </button>
                                 </div>
@@ -845,7 +845,7 @@
                                         </button>
                                     </div>
                                     <button class="w-full py-2 text-brand font-bold text-xs hover:bg-surface-1 rounded-lg transition-colors"
-                                        @click="openTemplateModal">
+                                        @click="openTemplateModal" :disabled="p04dCandidateActive">
                                         {{ t.planAddTemplate }}
                                     </button>
                                 </div>
@@ -904,7 +904,7 @@
                                         </div>
                                     </div>
                                     <button class="w-full py-2 text-brand font-bold text-xs hover:bg-surface-1 rounded-lg transition-colors"
-                                        @click="openFlexibleDefinitionModal">
+                                        @click="openFlexibleDefinitionModal" :disabled="p04dCandidateActive">
                                         {{ t.planAddFlexible }}
                                     </button>
                                 </div>
@@ -1169,11 +1169,11 @@
 
                     <!-- V3: Two Bottom Buttons - Confirm & Free - moved lower -->
                     <div class="flex gap-2 mt-[14px] mb-0">
-                        <button class="ms-btn btn-premium-confirm flex-1 rounded-[24px]" @click="commitPayment">
+                        <button class="ms-btn btn-premium-confirm flex-1 rounded-[24px]" @click="commitPayment" :disabled="p04dCandidateActive">
                             <ms-icon name="check" size="18" class="me-1"></ms-icon>
                             <span>{{ t.confirm }}</span>
                         </button>
-                        <button @click="markAsFree" class="free-btn flex-1 rounded-[24px]">
+                        <button @click="markAsFree" class="free-btn flex-1 rounded-[24px]" :disabled="p04dCandidateActive">
                             <span class="free-icon relative z-10">✨</span>
                             <span class="relative z-10">{{ t.free }}</span>
                         </button>
@@ -1217,7 +1217,7 @@
                             class="w-full p-3 bg-surface-1 border border-glass rounded-lg text-white font-mono text-lg focus:border-brand outline-none">
                     </div>
 
-                    <div v-if="addModal.mode === 'expense' && flexibleDefinitions.length > 0">
+                    <div v-if="addModal.mode === 'expense' && flexibleDefinitions.length > 0 && !p04dCandidateActive">
                         <label class="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-2 block">{{
                             t.expenseSource }}</label>
                         <div class="flex bg-surface-1 rounded-lg p-1 border border-glass">
@@ -1286,7 +1286,7 @@
                     </div>
 
                     <!-- Classification Toggle -->
-                    <div v-if="addModal.mode === 'expense'">
+                    <div v-if="addModal.mode === 'expense' && !p04dCandidateActive">
                         <label class="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-2 block">{{ t.classification }}</label>
                         <div class="flex bg-surface-1 rounded-lg p-1 border border-glass">
                             <button @click="addModal.form.classification = 'essential'"
@@ -1340,7 +1340,7 @@
 
                     <!-- Submit Button -->
                     <button class="ms-btn btn-premium-add mt-3 mb-0 rounded-[24px]" @click="submitNewExpense"
-                        :loading="addModal.isSubmitting">
+                        :loading="addModal.isSubmitting" :disabled="p04dAddSubmitBlocked">
                         <div class="relative z-10 flex items-center justify-center">
                             <ms-icon name="add" size="18" class="me-1"></ms-icon>
                             <span>{{ addModal.mode === 'template' ? t.addTemplate : addModal.mode === 'flexibleDefinition' ? t.addFlexibleItem : t.addTo + ' ' +
@@ -1694,7 +1694,7 @@
                             {{ editModal.type === 'template' ? t.editTemplate : t.editExpense }}
                         </h3>
                         <!-- Subtle "Unpaid" toggle -->
-                        <button v-if="editModal.type === 'expense' && editModal.form.isPaid" @click="markUnpaidFromEdit"
+                        <button v-if="editModal.type === 'expense' && editModal.form.isPaid && !p04dCandidateActive" @click="markUnpaidFromEdit"
                             class="unpaid-tag mt-[2px]">
                             <span class="material-symbols-rounded" style="font-size: 12px;">undo</span>
                             {{ t.unpaid }}
@@ -1773,7 +1773,7 @@
                     </div>
 
                     <!-- Classification Toggle (expenses only) -->
-                    <div class="edit-input-group" v-if="editModal.type === 'expense'">
+                    <div class="edit-input-group" v-if="editModal.type === 'expense' && !p04dCandidateActive">
                         <label class="edit-input-label">{{ t.classification }}</label>
                         <div class="flex bg-surface-1 rounded-lg p-1 border border-glass">
                             <button type="button" @click="editModal.form.classification = 'essential'"

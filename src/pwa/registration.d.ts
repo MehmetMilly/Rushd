@@ -9,12 +9,22 @@ export interface UpdateCoordination {
   activeCriticalSections?(): Array<{ readonly kind: string; readonly tabId: string }>;
 }
 
+export interface EpochCoordination {
+  bumpEpoch(reason?: string): number;
+}
+
 export function registerCandidatePwa(options?: {
   readonly environment?: typeof globalThis;
   readonly swUrl?: string;
   readonly scope?: string;
-  readonly coordination?: UpdateCoordination | null;
+  readonly coordination?: (UpdateCoordination & Partial<EpochCoordination>) | null;
 }): Promise<{ readonly ok: boolean; readonly reason: string; readonly registration?: unknown }>;
+
+export function activateCandidateUpdate(
+  registration: { readonly waiting?: { postMessage(message: unknown): void } | null } | null,
+  coordination: (UpdateCoordination & Partial<EpochCoordination>) | null,
+  reason?: string,
+): Promise<{ readonly activated: boolean; readonly epoch: number | null; readonly reason: string }>;
 
 export function maybeActivateWaiting(
   registration: { readonly waiting?: { postMessage(message: unknown): void } | null } | null,

@@ -9,6 +9,153 @@ export function installRootController(app, dataRuntime, environment = globalThis
     // keeps delegating to the legacy DB/Store exactly as before; the ports
     // are exposed read-only for inspection and do not change any behavior.
     const injectedPorts = options && typeof options === 'object' ? options.featurePorts : null;
+    // P04-D3 candidate seam: D3-owned Home/Add/Transactions actions read
+    // and write through the injected feature ports when the resolved
+    // authority is non-legacy. Legacy mode keeps delegating to the v1
+    // DB/Store exactly as before. The controller never resolves authority
+    // itself: it only branches on the injected port set's live state, and
+    // candidate mode is reachable only through explicit build/test
+    // injection (never URL, storage, or globals).
+    const p04dCandidatePorts = injectedPorts && typeof injectedPorts === 'object' ? injectedPorts : null;
+    const p04dAuthorityState = () => {
+        try {
+            return p04dCandidatePorts && p04dCandidatePorts.authority
+                ? p04dCandidatePorts.authority.getState()
+                : null;
+        } catch {
+            return null;
+        }
+    };
+    // True when the injected ports carry a non-legacy authority (the
+    // candidate host's preparing/ready/blocked states).
+    const p04dIsCandidate = () => {
+        const state = p04dAuthorityState();
+        return !!state && state.kind !== 'legacy';
+    };
+    const p04dIsWritable = () => {
+        const state = p04dAuthorityState();
+        return !!state && state.writable === true;
+    };
+    // Candidate-blocked copy lives here (not in the translation catalog)
+    // because candidate mode is test/build-only scaffolding text until the
+    // D4/P06 product copy lands. Both launch languages stay first-class.
+    const p04dBlockedCopy = (lang, key) => {
+        const arabic = lang === 'ar';
+        switch (key) {
+            case 'template':
+                return arabic ? 'إنشاء القوالب غير متاح في وضع المراجعة؛ لم يُحفظ شيء.' : 'Template creation is unavailable in review mode; nothing was saved.';
+            case 'flexible':
+                return arabic ? 'العناصر المرنة غير متاحة في وضع المراجعة؛ لم يُحفظ شيء.' : 'Flexible items are unavailable in review mode; nothing was saved.';
+            case 'pay':
+                return arabic ? 'الدفع وإعادة الفتح غير متاحين هنا؛ صحّح المصروف أو اعكسه من السجل.' : 'Pay and reopen are unavailable here; correct or reverse the expense from history instead.';
+            case 'autofill':
+                return arabic ? 'الملء التلقائي غير متاح في وضع المراجعة.' : 'Auto-fill is unavailable in review mode.';
+            case 'bulkUnpaid':
+                return arabic ? 'إلغاء الدفع الجماعي غير متاح؛ اعكس المصاريف واحدًا واحدًا.' : 'Bulk mark-unpaid is unavailable; reverse expenses individually.';
+            case 'partial':
+                return arabic ? 'تعذّر عكس بعض المصاريف؛ الباقي ظاهر في القائمة ويمكن إعادة المحاولة.' : 'Some expenses could not be reversed; the rest are still listed and can be retried.';
+            default:
+                return arabic ? 'وضع المراجعة غير جاهز بعد؛ العرض فقط حاليًا.' : 'Review mode is not ready yet; view-only for now.';
+        }
+    };
+    // P04-D3 correction: one stable operation identity per open UI intent.
+    // Add, edit, single delete, and batch delete keep their ID (or exact
+    // per-item ID set) across retries after any false/ambiguous failure,
+    // including commit-then-`ok:false` and post-commit refresh failure, so
+    // a retry replays idempotently instead of duplicating the actual. A
+    // new ID is minted only for a genuinely new intent: after success,
+    // explicit cancel/close, reload, or a changed payload (an ID is never
+    // reused for different payloads). Slots are plain closure state, never
+    // finance truth: success paths always resync committed state before
+    // the next intent can start.
+    const p04dIntentStore = { add: null, edit: null, confirm: null };
+    const p04dMintIntentId = () => {
+        let uuid = null;
+        try {
+            const factory = dataRuntime && dataRuntime.Core && dataRuntime.Core.UUID;
+            if (typeof factory === 'function') uuid = factory.call(dataRuntime.Core);
+        } catch {
+            uuid = null;
+        }
+        if (typeof uuid !== 'string' || !uuid) {
+            try {
+                if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') {
+                    uuid = globalThis.crypto.randomUUID();
+                }
+            } catch {
+                uuid = null;
+            }
+        }
+        if (typeof uuid !== 'string' || !uuid) {
+            uuid = `u${Date.now().toString(36)}${Math.floor(Math.random() * 0xffffff).toString(36)}`;
+        }
+        return `op-${uuid}`.slice(0, 100);
+    };
+    const p04dFingerprint = (value) => {
+        try {
+            return JSON.stringify(value ?? null);
+        } catch {
+            return null;
+        }
+    };
+    // Reuse the slot's ID when the payload fingerprint is unchanged
+    // (retry of the same intent); mint when the slot is empty, cleared, or
+    // the payload changed. A null fingerprint never matches, so an
+    // unserializable payload always mints fresh instead of colliding.
+    const p04dIntentOperationId = (slot, fingerprint) => {
+        const current = p04dIntentStore[slot];
+        if (current && current.operationId && current.fingerprint !== null && current.fingerprint === fingerprint) {
+            return current.operationId;
+        }
+        const operationId = p04dMintIntentId();
+        p04dIntentStore[slot] = { operationId, fingerprint };
+        return operationId;
+    };
+    const p04dClearIntent = (slot) => {
+        p04dIntentStore[slot] = null;
+    };
+    // Batch/single-delete confirm slot: reuse the exact per-item ID set
+    // when the entry set (and date) matches, mint otherwise.
+    const p04dConfirmIds = (key, ids) => {
+        const current = p04dIntentStore.confirm;
+        if (current && current.key === key && Array.isArray(current.operationIds)
+            && current.operationIds.length === ids.length) {
+            return current.operationIds;
+        }
+        const operationIds = ids.map(() => p04dMintIntentId());
+        p04dIntentStore.confirm = { key, operationId: operationIds[0], operationIds };
+        return operationIds;
+    };
+    // Mirror the canonical Home read model into the reactive view state so
+    // the established template renders committed canonical rows with no
+    // visual change. This assigns only in-memory view fields; it never
+    // reads or writes v1 finance persistence.
+    const syncP04DCandidateHome = async (vm) => {
+        const ports = p04dCandidatePorts;
+        if (!ports) return;
+        try {
+            if (typeof ports.home.refresh === 'function') await ports.home.refresh();
+        } catch {
+            /* a failed refresh keeps the last committed rows; writers stay gated */
+        }
+        const rows = ports.home.listSelectedDayExpenses();
+        vm.store.currentViewExpenses = Array.isArray(rows) ? rows.map((row) => ({ ...row })) : [];
+        try {
+            vm.store.currentDate = ports.home.getSelectedDate() || vm.store.currentDate;
+        } catch {
+            /* keep the current date on read failure */
+        }
+        // Safe-to-spend has no canonical projection yet (`getSafeToSpend`
+        // reads unknown). `Store.safeToSpend` is a getter over the viewed
+        // statistics, so the viewed month is marked unknown and the hero
+        // shows its truthful unavailable state instead of a fabricated
+        // number. Month-level Insights stay D4-owned.
+        try {
+            if (vm.store.statistics) vm.store.statistics.budgetKnown = false;
+        } catch {
+            /* the hero keeps its last state on mirror failure */
+        }
+    };
     if (injectedPorts && app && app.config && app.config.globalProperties) {
         // D2 residual fix: expose the port set as a read-only inspection
         // handle so outside code cannot swap or relabel the authority cell.
@@ -461,6 +608,16 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     // so Rushd only shows the monthly amount it can actually compute.
                     return this.store.safeToSpend;
                 },
+                // P04-D3 candidate affordances: false in legacy mode, so the
+                // established visuals and behavior stay exactly as before.
+                p04dCandidateActive() {
+                    return p04dIsCandidate();
+                },
+                p04dAddSubmitBlocked() {
+                    if (!p04dIsCandidate()) return false;
+                    if (!p04dIsWritable()) return true;
+                    return this.addModal.mode === 'template' || this.addModal.mode === 'flexibleDefinition' || this.addModal.form.source === 'flexible';
+                },
                 isArabicText() {
                     const arRegex = /[\u0600-\u06FF]/;
                     return (text) => arRegex.test(text);
@@ -810,6 +967,22 @@ export function installRootController(app, dataRuntime, environment = globalThis
                 async initApp() {
                     if (!this.isRoot) return;
 
+                    // P04-D3: candidate mode keeps the established shell
+                    // mounted on committed canonical state. Onboarding and
+                    // month-end v1 flows stay out; theme/motion/date chrome
+                    // behaves exactly as in legacy.
+                    if (p04dIsCandidate()) {
+                        this.applyLangDirection();
+                        this.applyTheme(this.store.settings.theme);
+                        this.applyMotionProfile(this.store.settings.motionLevel);
+                        const candidateToday = this.core.Date.getTodayISO();
+                        const candidateLocale = this.t._locale;
+                        this.dateWindow = this.core.Date.generateWindow(candidateToday, 60, 60, candidateLocale, this.calendarType);
+                        await syncP04DCandidateHome(this);
+                        this.$nextTick(() => this.centerDateScroller(this.store.currentDate, 'instant'));
+                        return;
+                    }
+
                     // Apply language direction
                     this.applyLangDirection();
 
@@ -851,7 +1024,20 @@ export function installRootController(app, dataRuntime, environment = globalThis
                 },
 
                 // --- NAVIGATION ---
-                selectDate(iso) {
+                async selectDate(iso) {
+                    // P04-D3: the selected day, its rows, and totals come
+                    // from committed canonical state in candidate mode.
+                    if (p04dIsCandidate()) {
+                        if (this.selectionMode) this.exitSelectionMode();
+                        try {
+                            await p04dCandidatePorts.home.selectDate(iso);
+                        } catch {
+                            this.showToast(p04dBlockedCopy(this.lang, 'authority'));
+                        }
+                        await syncP04DCandidateHome(this);
+                        this.centerDateScroller(this.store.currentDate);
+                        return;
+                    }
                     if (this.selectionMode) this.exitSelectionMode();
                     this.store.loadDay(iso);
                 },
@@ -884,6 +1070,12 @@ export function installRootController(app, dataRuntime, environment = globalThis
                 // phase and must be computed from actual data.
 
                 async autoFillToday() {
+                    // P04-D3: template generation has no canonical owner
+                    // yet; it stays visibly blocked and never reaches v1.
+                    if (p04dIsCandidate()) {
+                        this.showToast(p04dBlockedCopy(this.lang, 'autofill'));
+                        return;
+                    }
                     const dateStr = this.store.currentDate;
                     // P1-07 review fix: historical Auto-Fill is visibly blocked — the
                     // rules that were in effect back then are not preserved, so Rushd
@@ -1169,6 +1361,35 @@ export function installRootController(app, dataRuntime, environment = globalThis
 
                 // --- EXPENSE HANDLING ---
                 deleteExpense(id) {
+                    // P04-D3: swipe-delete appends a canonical reversal and
+                    // hides the reversed entry; the original stays in
+                    // canonical history.
+                    if (p04dIsCandidate()) {
+                        if (!p04dIsWritable()) {
+                            this.showToast(p04dBlockedCopy(this.lang, 'authority'));
+                            return;
+                        }
+                        this.showConfirmDialog(
+                            this.t.deleteExpenseQ,
+                            this.lang === 'ar'
+                                ? 'سيُعكس المصروف مع بقاء السجل الأصلي في السجل.'
+                                : 'The expense will be reversed; the original record stays in history.',
+                            async () => {
+                                const confirmIds = p04dConfirmIds(`del:${id}@${this.store.currentDate}`, [id]);
+                                const result = await p04dCandidatePorts.history.deleteExpense(
+                                    id,
+                                    confirmIds[0] ? { operationId: confirmIds[0] } : undefined,
+                                );
+                                if (!result.ok) {
+                                    this.showToast(result.reason === 'validation' ? this.t.invalidMoneyInput : p04dBlockedCopy(this.lang, 'authority'));
+                                    return;
+                                }
+                                await syncP04DCandidateHome(this);
+                                p04dClearIntent('confirm');
+                            }
+                        );
+                        return;
+                    }
                     this.showConfirmDialog(
                         this.t.deleteExpenseQ,
                         this.t.cannotUndo,
@@ -1208,6 +1429,42 @@ export function installRootController(app, dataRuntime, environment = globalThis
                 deleteSelectedExpenses() {
                     const count = this.selectedExpenseIds.length;
                     if (count === 0) return;
+                    // P04-D3: batch delete appends one reversal per expense.
+                    // A partial failure is explicit and never reports a
+                    // false all-success.
+                    if (p04dIsCandidate()) {
+                        if (!p04dIsWritable()) {
+                            this.showToast(p04dBlockedCopy(this.lang, 'authority'));
+                            return;
+                        }
+                        this.showConfirmDialog(
+                            this.t.deleteSelectedQ,
+                            this.lang === 'ar'
+                                ? 'سيُعكس كل مصروف محدد مع بقاء السجلات الأصلية في السجل.'
+                                : 'Each selected expense will be reversed; original records stay in history.',
+                            async () => {
+                                const ids = [...this.selectedExpenseIds];
+                                // Stable per-item identities: a retry of the
+                                // same batch reuses the exact ID set, so
+                                // already-reversed entries replay instead of
+                                // duplicating; IDs never cross payloads.
+                                const confirmIds = p04dConfirmIds(
+                                    `batch:${[...ids].sort().join(',')}@${this.store.currentDate}`,
+                                    ids,
+                                );
+                                const result = await p04dCandidatePorts.history.deleteSelected(ids, { operationIds: confirmIds });
+                                await syncP04DCandidateHome(this);
+                                this.exitSelectionMode();
+                                if (!result.ok) {
+                                    this.showToast(result.reason === 'validation' ? this.t.invalidMoneyInput : p04dBlockedCopy(this.lang, 'partial'));
+                                    return;
+                                }
+                                p04dClearIntent('confirm');
+                                this.showToast(this.t.selectionDeleted.replace('{n}', ids.length));
+                            }
+                        );
+                        return;
+                    }
                     this.showConfirmDialog(
                         this.t.deleteSelectedQ,
                         this.t.deleteSelectedMsg.replace('{n}', count),
@@ -1222,6 +1479,13 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     );
                 },
                 markSelectedUnpaid() {
+                    // P04-D3: bulk mark-unpaid has no canonical equivalent
+                    // and stays blocked without touching v1 or canonical
+                    // state.
+                    if (p04dIsCandidate()) {
+                        this.showToast(p04dBlockedCopy(this.lang, 'bulkUnpaid'));
+                        return;
+                    }
                     const paidIds = this.store.currentViewExpenses
                         .filter(e => this.selectedExpenseIds.includes(e.id) && e.isPaid)
                         .map(e => e.id);
@@ -1263,6 +1527,9 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     this.confirmDialog.open = false;
                 },
                 handleConfirmDialogCancel() {
+                    // Explicit cancel ends the pending delete intent: the
+                    // next confirmation starts a new one.
+                    p04dClearIntent('confirm');
                     this.confirmDialog.open = false;
                 },
 
@@ -1482,6 +1749,12 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     this.resetApplyTemplatesPreview();
                 },
                 openFlexibleDefinitionModal() {
+                    // P04-D3: flexible definitions are D4-owned and stay
+                    // visibly unavailable instead of writing v1.
+                    if (p04dIsCandidate()) {
+                        this.showToast(p04dBlockedCopy(this.lang, 'flexible'));
+                        return;
+                    }
                     this.addModal.form = createAddModalForm();
                     this.addModal.mode = 'flexibleDefinition';
                     this.addModal.form.source = 'flexible';
@@ -1511,6 +1784,14 @@ export function installRootController(app, dataRuntime, environment = globalThis
 
                 // --- PAYMENT MODAL LOGIC ---
                 openPayModal(item) {
+                    // P04-D3 correction: in candidate mode the pay modal
+                    // never opens — pay and reopen have no canonical
+                    // equivalent. A direct invocation (button, swipe, or
+                    // test) toasts and returns without opening or mutating.
+                    if (p04dIsCandidate()) {
+                        this.showToast(p04dBlockedCopy(this.lang, 'pay'));
+                        return;
+                    }
                     this.payModal.item = item;
                     // Reset Numpad string. If paid, show paid amount. If not, show expected.
                     this.payModal.amount = item.isPaid ? item.actualPaid.toString() : item.expectedCost.toString();
@@ -1520,6 +1801,8 @@ export function installRootController(app, dataRuntime, environment = globalThis
 
                 // V3: EDIT EXPENSE / TEMPLATE MODAL LOGIC
                 openEditModal(item, type = 'expense') {
+                    // A freshly opened editor is a new intent (see openAddModal).
+                    p04dClearIntent('edit');
                     this.editModal.item = item;
                     this.editModal.type = type; // 'expense' or 'template'
                     const normalizedTemplate = type === 'template' ? normalizeDefinitionRecord(item) : null;
@@ -1546,6 +1829,13 @@ export function installRootController(app, dataRuntime, environment = globalThis
                 },
                 async saveEditedExpense() {
                     if (!this.editModal.item) return;
+
+                    // P04-D3: expense edits append a linked canonical
+                    // correction; template edits stay visibly blocked.
+                    if (p04dIsCandidate()) {
+                        await this.saveEditedExpenseViaPorts();
+                        return;
+                    }
 
                     const form = this.editModal.form;
                     const original = this.editModal.item;
@@ -1631,8 +1921,104 @@ export function installRootController(app, dataRuntime, environment = globalThis
 
                     this.editModal.open = false;
                 },
+                // P04-D3: append-only canonical correction. The edited
+                // amount/date/name/category replace the live fact through
+                // `correctExpense` (linked reversal plus replacement); the
+                // original record stays in canonical history. Toggling an
+                // expense back to unpaid has no canonical equivalent, so it
+                // stays blocked instead of silently keeping a paid fact.
+                // Classification has no canonical field and keeps the
+                // explicit display default; it is never fabricated.
+                async saveEditedExpenseViaPorts() {
+                    if (!this.editModal.item) return;
+                    const ports = p04dCandidatePorts;
+                    if (!ports || !p04dIsWritable()) {
+                        this.showToast(p04dBlockedCopy(this.lang, 'authority'));
+                        return;
+                    }
+                    if (this.editModal.type === 'template') {
+                        this.showToast(p04dBlockedCopy(this.lang, 'template'));
+                        return;
+                    }
+                    const form = this.editModal.form;
+                    const original = this.editModal.item;
+                    const expectedCost = parseMoneyInput(form.cost);
+                    if (expectedCost === null) {
+                        this.showToast(this.t.invalidMoneyInput);
+                        return;
+                    }
+                    if (form.isPaid === false) {
+                        this.showToast(p04dBlockedCopy(this.lang, 'pay'));
+                        return;
+                    }
+                    // Stable intent identity (see submitNewExpenseViaPorts):
+                    // same payload retries reuse the ID, edits mint fresh.
+                    const fingerprint = p04dFingerprint({
+                        id: original.id,
+                        name: form.name,
+                        cost: expectedCost,
+                        date: form.date || original.date,
+                        category: form.category,
+                    });
+                    const operationId = p04dIntentOperationId('edit', fingerprint);
+                    const result = await ports.history.updateExpense({
+                        id: original.id,
+                        date: form.date || original.date,
+                        name: form.name,
+                        expectedCost,
+                        actualPaid: expectedCost,
+                        isPaid: true,
+                        category: form.category,
+                        classification: '',
+                    }, operationId ? { operationId } : undefined);
+                    if (!result.ok) {
+                        this.showToast(result.reason === 'validation' ? this.t.invalidMoneyInput : p04dBlockedCopy(this.lang, 'authority'));
+                        return;
+                    }
+                    await syncP04DCandidateHome(this);
+                    p04dClearIntent('edit');
+                    this.editModal.open = false;
+                },
                 async deleteEditedExpense() {
                     if (!this.editModal.item) return;
+
+                    // P04-D3: expense deletes append a canonical reversal;
+                    // template deletes stay visibly blocked.
+                    if (p04dIsCandidate()) {
+                        if (this.editModal.type === 'template') {
+                            this.showToast(p04dBlockedCopy(this.lang, 'template'));
+                            return;
+                        }
+                        if (!p04dIsWritable()) {
+                            this.showToast(p04dBlockedCopy(this.lang, 'authority'));
+                            return;
+                        }
+                        const targetId = this.editModal.item.id;
+                        this.showConfirmDialog(
+                            this.t.deleteExpenseQ,
+                            this.lang === 'ar'
+                                ? 'سيُعكس المصروف مع بقاء السجل الأصلي في السجل.'
+                                : 'The expense will be reversed; the original record stays in history.',
+                            async () => {
+                                // Stable intent identity: confirming again
+                                // after a false failure reuses the same
+                                // reversal ID and replays idempotently.
+                                const confirmIds = p04dConfirmIds(`del:${targetId}@${this.store.currentDate}`, [targetId]);
+                                const result = await p04dCandidatePorts.history.deleteExpense(
+                                    targetId,
+                                    confirmIds[0] ? { operationId: confirmIds[0] } : undefined,
+                                );
+                                if (!result.ok) {
+                                    this.showToast(result.reason === 'validation' ? this.t.invalidMoneyInput : p04dBlockedCopy(this.lang, 'authority'));
+                                    return;
+                                }
+                                await syncP04DCandidateHome(this);
+                                p04dClearIntent('confirm');
+                                this.editModal.open = false;
+                            }
+                        );
+                        return;
+                    }
 
                     if (this.editModal.type === 'template') {
                         this.showConfirmDialog(
@@ -1657,6 +2043,13 @@ export function installRootController(app, dataRuntime, environment = globalThis
                 },
                 markUnpaidFromEdit() {
                     if (!this.editModal.item || this.editModal.type === 'template') return;
+                    // P04-D3: reopening has no canonical equivalent, so the
+                    // toggle itself stays blocked instead of arming an
+                    // unsavable edit.
+                    if (p04dIsCandidate()) {
+                        this.showToast(p04dBlockedCopy(this.lang, 'pay'));
+                        return;
+                    }
                     // Just toggle form state — actual save happens on "Update" click
                     this.editModal.form.isPaid = false;
                     this.editModal.form.actualPaid = 0;
@@ -1698,6 +2091,12 @@ export function installRootController(app, dataRuntime, environment = globalThis
 
                 // V2: Mark as Free (100% savings)
                 async markAsFree() {
+                    // P04-D3: paid-amount semantics stay blocked in
+                    // candidate mode (see commitPayment).
+                    if (p04dIsCandidate()) {
+                        this.showToast(p04dBlockedCopy(this.lang, 'pay'));
+                        return;
+                    }
                     this.payModal.amount = '0';
                     await this.commitPayment();
                 },
@@ -1714,6 +2113,13 @@ export function installRootController(app, dataRuntime, environment = globalThis
                 },
 
                 async commitPayment() {
+                    // P04-D3: a paid actual cannot be mutated in place and
+                    // there is no dated unpaid obligation to create, so pay
+                    // stays visibly blocked and never falls through to v1.
+                    if (p04dIsCandidate()) {
+                        this.showToast(p04dBlockedCopy(this.lang, 'pay'));
+                        return;
+                    }
                     const amt = parseMoneyInput(this.payModal.amount);
                     if (amt === null) {
                         this.showToast(this.t.invalidMoneyInput);
@@ -1735,6 +2141,12 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     this.payModal.open = false;
                 },
                 async markUnpaid() {
+                    // P04-D3: reopening a paid actual has no exact canonical
+                    // equivalent; correct or reverse it from history instead.
+                    if (p04dIsCandidate()) {
+                        this.showToast(p04dBlockedCopy(this.lang, 'pay'));
+                        return;
+                    }
                     const item = this.payModal.item;
                     item.isPaid = false;
                     item.actualPaid = 0;
@@ -1750,6 +2162,10 @@ export function installRootController(app, dataRuntime, environment = globalThis
                         void fab.offsetWidth;
                         fab.classList.add('fab-burst');
                     }
+                    // A freshly opened modal is a new intent: retries of a
+                    // previous intent are over (success, cancel, or close),
+                    // so the next submit mints its own operation identity.
+                    p04dClearIntent('add');
                     this.addModal.form = createAddModalForm();
                     this.addModal.mode = 'expense';
                     this.addModal.open = true;
@@ -1757,6 +2173,13 @@ export function installRootController(app, dataRuntime, environment = globalThis
                 async submitNewExpense() {
                     // V2: Prevent double-entry with isSubmitting flag
                     if (this.addModal.isSubmitting) return;
+                    // P04-D3: manual Add commits through the canonical
+                    // capture port; template/flexible creation stays
+                    // visibly unavailable instead of writing v1.
+                    if (p04dIsCandidate()) {
+                        await this.submitNewExpenseViaPorts();
+                        return;
+                    }
                     if (!this.addModal.form.name) return;
 
                     this.addModal.isSubmitting = true;
@@ -1840,6 +2263,76 @@ export function installRootController(app, dataRuntime, environment = globalThis
                         this.addModal.isSubmitting = false;
                     }
                 },
+                // P04-D3: manual Add through the canonical capture port and
+                // the P03 gateway. The user-entered amount is an actual
+                // committed outflow. The modal closes and totals refresh
+                // only after the durable commit; any validation, authority,
+                // revision, operation-ID, storage, or acknowledgement
+                // failure leaves the modal open and retryable with no
+                // duplicate record (one operation identity per intent).
+                async submitNewExpenseViaPorts() {
+                    if (this.addModal.isSubmitting) return;
+                    const ports = p04dCandidatePorts;
+                    if (!ports || !p04dIsWritable()) {
+                        this.showToast(p04dBlockedCopy(this.lang, 'authority'));
+                        return;
+                    }
+                    if (this.addModal.mode === 'template') {
+                        this.showToast(p04dBlockedCopy(this.lang, 'template'));
+                        return;
+                    }
+                    if (this.addModal.mode === 'flexibleDefinition') {
+                        this.showToast(p04dBlockedCopy(this.lang, 'flexible'));
+                        return;
+                    }
+                    if (!this.addModal.form.name) return;
+                    if (this.addModal.form.source === 'flexible') {
+                        this.showToast(p04dBlockedCopy(this.lang, 'flexible'));
+                        return;
+                    }
+                    const cost = parseMoneyInput(this.addModal.form.cost);
+                    if (cost === null) {
+                        this.showToast(this.t.invalidMoneyInput);
+                        return;
+                    }
+                    this.addModal.isSubmitting = true;
+                    try {
+                        // Stable intent identity: the same ID is reused while
+                        // this modal's payload is unchanged, so a retry after
+                        // a false/ambiguous failure (including commit-then-
+                        // `ok:false`) replays idempotently. A changed payload
+                        // mints fresh instead of reusing an ID.
+                        const fingerprint = p04dFingerprint({
+                            name: this.addModal.form.name,
+                            cost,
+                            category: this.addModal.form.category,
+                            date: this.store.currentDate,
+                        });
+                        const operationId = p04dIntentOperationId('add', fingerprint);
+                        const result = await ports.capture.submitExpense({
+                            name: this.addModal.form.name,
+                            cost,
+                            category: this.addModal.form.category,
+                            classification: '',
+                            source: 'manual',
+                            flexibleDefinitionId: null,
+                            date: this.store.currentDate,
+                            ...(operationId ? { operationId } : {}),
+                        });
+                        if (!result.ok) {
+                            this.showToast(result.reason === 'validation' ? this.t.invalidMoneyInput : p04dBlockedCopy(this.lang, 'authority'));
+                            return;
+                        }
+                        // Resync committed state before the intent closes, so
+                        // the next intent starts from committed truth.
+                        await syncP04DCandidateHome(this);
+                        p04dClearIntent('add');
+                        this.addModal.open = false;
+                        this.addModal.form = createAddModalForm();
+                    } finally {
+                        this.addModal.isSubmitting = false;
+                    }
+                },
 
                 // --- SETTINGS LOGIC ---
                 applyTheme(theme) {
@@ -1910,6 +2403,12 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     );
                 },
                 openTemplateModal() {
+                    // P04-D3: template creation is D4-owned and stays
+                    // visibly unavailable instead of writing v1.
+                    if (p04dIsCandidate()) {
+                        this.showToast(p04dBlockedCopy(this.lang, 'template'));
+                        return;
+                    }
                     // Open the add modal in template mode
                     this.addModal.form = createAddModalForm();
                     this.addModal.mode = 'template';

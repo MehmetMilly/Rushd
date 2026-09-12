@@ -112,6 +112,21 @@ export interface CaptureInput {
   readonly source?: 'manual' | 'flexible';
   readonly flexibleDefinitionId?: string | null;
   readonly date?: string;
+  /**
+   * Retry identity for one user intent. A retry after a lost
+   * acknowledgement reuses the same operation ID so the gateway replays
+   * idempotently; a new intent (or a reload) must mint a fresh ID that
+   * cannot collide with persisted journal history.
+   */
+  readonly operationId?: string;
+}
+
+/** Per-intent operation identity for history mutations (D3). */
+export interface HistoryMutationOptions {
+  /** Retry identity for a single correction/reversal; see `CaptureInput.operationId`. */
+  readonly operationId?: string;
+  /** Per-entry retry identities for batch deletes, aligned with `ids`. */
+  readonly operationIds?: readonly string[];
 }
 
 export interface CaptureResult {
@@ -149,9 +164,21 @@ export interface HistoryExpenseRecord {
 export interface HistoryPort {
   readonly name: 'history';
   listDayExpenses(date: string): Promise<HistoryExpenseRecord[]>;
-  updateExpense(expense: HistoryExpenseRecord): Promise<CaptureResult>;
-  deleteExpense(id: string): Promise<CaptureResult>;
-  deleteSelected(ids: string[]): Promise<CaptureResult>;
+  /**
+   * Append-only correction: a linked reversal plus replacement through
+   * `correctExpense`. The original record stays in canonical history.
+   */
+  updateExpense(expense: HistoryExpenseRecord, options?: HistoryMutationOptions): Promise<CaptureResult>;
+  /**
+   * Append-only reversal: `correctExpense` with `replacement: null`.
+   * The original record stays in canonical history.
+   */
+  deleteExpense(id: string, options?: HistoryMutationOptions): Promise<CaptureResult>;
+  /**
+   * Individually confirmed append-only reversals. Never reports
+   * all-success when any entry fails (`reason: 'partial'`).
+   */
+  deleteSelected(ids: string[], options?: HistoryMutationOptions): Promise<CaptureResult>;
   markSelectedUnpaid(ids: string[]): Promise<CaptureResult>;
   getStatus(): PortStatus;
 }

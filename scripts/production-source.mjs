@@ -24,6 +24,8 @@ export const ownedProductionFiles = Object.freeze([
     'src/application/p04-d/mutation-coverage.d.ts',
     'src/application/p04-d/candidate-token.js',
     'src/application/p04-d/candidate-token.d.ts',
+    'src/application/p04-d/candidate-shell.js',
+    'src/application/p04-d/candidate-shell.d.ts',
     'src/application/p04-d/tab-coordination.js',
     'src/application/p04-d/tab-coordination.d.ts',
     'src/application/p04-d/command-gateway.js',

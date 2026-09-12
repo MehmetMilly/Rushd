@@ -10,8 +10,16 @@
 // - a waiting update activates (via `rushd-pwa-skip-waiting`) only while
 //   `coordination.canActivateUpdate()` is true, so an update can never take
 //   over across another tab's write/import/reset/migration section;
-// - after activation the caller bumps the coordination epoch, which
-//   hard-blocks old binaries from further writes until they reload.
+// - after activation the coordination epoch is bumped, which hard-blocks
+//   old binaries from further writes until they reload.
+//
+// D3 correction: exactly one bump site. `activateCandidateUpdate` requests
+// activation and then bumps the epoch; nothing else bumps on the update
+// path, so one activation transition increments the epoch exactly once. A
+// withheld activation (live critical section, no waiting worker, or
+// messaging failure) never bumps. The candidate update driver calls this
+// one function — there is no parallel `controllerchange` watcher that
+// could double-bump the same transition.
 //
 // This module performs no fetching and constructs no account/cloud client.
 // It has no imports so the PWA gate can exercise it in plain Node.
@@ -32,7 +40,10 @@ function hasServiceWorker(environment) {
 
 /**
  * Register the candidate service worker. Candidate/test callers only.
- * @param {{ environment?: typeof globalThis, swUrl?: string, scope?: string, coordination?: { canActivateUpdate(): boolean } | null }} [options]
+ * Registration only wires update discovery; the epoch advances exactly
+ * once through `activateCandidateUpdate` when the waiting worker is asked
+ * to activate.
+ * @param {{ environment?: typeof globalThis, swUrl?: string, scope?: string, coordination?: { canActivateUpdate(): boolean, bumpEpoch?(reason?: string): number } | null }} [options]
  * @returns {Promise<{ ok: boolean, reason: string, registration?: unknown }>}
  */
 export async function registerCandidatePwa(options = {}) {
@@ -68,7 +79,7 @@ function wireUpdateFound(registration, coordination) {
       if (typeof worker.removeEventListener === 'function') {
         worker.removeEventListener('statechange', onStateChange);
       }
-      void maybeActivateWaiting(registration, coordination);
+      void activateCandidateUpdate(registration, coordination);
     };
     worker.addEventListener('statechange', onStateChange);
   });
@@ -95,6 +106,33 @@ export async function maybeActivateWaiting(registration, coordination) {
   } catch (error) {
     return { activated: false, reason: error instanceof Error ? error.message : String(error) };
   }
+}
+
+/**
+ * D3 epoch glue: request activation of a waiting worker and, on success,
+ * bump the coordination epoch so tabs that opened under the old binary
+ * lose write authority until they reload. A withheld activation
+ * (critical section active, no waiting worker, or messaging failure)
+ * never bumps the epoch.
+ * @param {{ waiting?: { postMessage(m: unknown): void } | null }} registration
+ * @param {{ canActivateUpdate(): boolean, activeCriticalSections?(): Array<{ kind: string, tabId: string }>, bumpEpoch?(reason?: string): number } | null} coordination
+ * @param {string} [reason]
+ * @returns {Promise<{ activated: boolean, epoch: number | null, reason: string }>}
+ */
+export async function activateCandidateUpdate(registration, coordination, reason = 'candidate-update-activated') {
+  const requested = await maybeActivateWaiting(registration, coordination);
+  if (!requested.activated) {
+    return { activated: false, epoch: null, reason: requested.reason };
+  }
+  if (coordination && typeof coordination.bumpEpoch === 'function') {
+    try {
+      const epoch = coordination.bumpEpoch(reason);
+      return { activated: true, epoch, reason: '' };
+    } catch (error) {
+      return { activated: true, epoch: null, reason: error instanceof Error ? error.message : String(error) };
+    }
+  }
+  return { activated: true, epoch: null, reason: 'epoch-unavailable' };
 }
 
 /**
