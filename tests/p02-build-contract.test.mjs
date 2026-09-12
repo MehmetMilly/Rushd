@@ -5,6 +5,13 @@ import { listProductionSourceFiles, ownedProductionFiles } from '../scripts/prod
 const requiredOwnedFiles = [
     'src/application/bootstrap.d.ts',
     'src/application/commands/index.ts',
+    'src/application/p04-d/contracts.ts',
+    'src/application/p04-d/legacy-ports.js',
+    'src/application/p04-d/legacy-ports.d.ts',
+    'src/application/p04-d/authority-latch.js',
+    'src/application/p04-d/authority-latch.d.ts',
+    'src/application/p04-d/mutation-coverage.ts',
+    'src/application/p04-d/index.ts',
     'src/data/legacy-v1/contracts.ts',
     'src/domain/primitives/money.ts',
     'src/shared/contracts.ts',
@@ -22,7 +29,19 @@ assert.ok(tsconfig.include.includes('src/application/bootstrap.js'), 'Actual boo
 assert.ok(tsconfig.include.includes('src/application/debug-test-bridge.js'), 'Actual debug bridge must stay in the typecheck graph.');
 
 const bootstrap = await readFile('src/application/bootstrap.js', 'utf8');
-assert.match(bootstrap, /@returns \{\{ app: VueApplication, dataRuntime: LegacyDataRuntime \}\}/, 'bootstrap.js must retain its checked public return contract.');
+assert.match(bootstrap, /@returns \{\{ app: VueApplication, dataRuntime: LegacyDataRuntime, featurePorts: ShellFeaturePorts, authority: AuthorityState \}\}/, 'bootstrap.js must retain its checked public return contract with the P04-D seam.');
+assert.match(bootstrap, /createLegacyDataRuntime/, 'P04-D must keep the legacy data runtime as the default authority.');
+assert.match(bootstrap, /resolveP04DAuthority/, 'P04-D must resolve production authority through the latch.');
+assert.doesNotMatch(bootstrap, /createGuestApplication/, 'P04-D must not mount an alternate root application.');
+assert.match(bootstrap, /installRootController\(app, dataRuntime, environment, \{ featurePorts: activePorts \}\)/, 'P04-D must pass the resolved port set through the controller seam.');
+
+const latch = await readFile('src/application/p04-d/authority-latch.js', 'utf8');
+assert.match(latch, /canonicalPreparing/, 'P04-D latch must name the blocked candidate state.');
+assert.doesNotMatch(latch, /openDatabase|indexedDB\.open|navigator\.storage|serviceWorker/, 'P04-D1 latch must not open storage or workers.');
+
+const rootController = await readFile('src/app/root-controller.js', 'utf8');
+assert.match(rootController, /\$p04dPorts/, 'P04-D controller seam must expose the injected port set.');
+assert.doesNotMatch(rootController, /canonicalReady|canonicalCandidate/, 'P04-D1 controller must not resolve candidate authority.');
 
 const main = await readFile('src/main.ts', 'utf8');
 assert.match(main, /createLegacyApplication/, 'P04-C composition root must keep createLegacyApplication.');

@@ -519,6 +519,39 @@ here; persistence, reload/multi-tab/quota/device proof, auth, server
 ownership, replication, and backup lifecycle belong to their phases and
 must satisfy this contract rather than renegotiate it.
 
+## Compatibility seam and regression lock (P04-D Task D1)
+
+D1 introduces the feature-port and authority-latch seam from
+`docs/implementation/P04_D_RESTART_ARCHITECTURE.md` (Candidate B) without
+changing visible or runtime behavior:
+
+- `src/application/p04-d/contracts.ts`: authority state plus deep
+  Home/capture/history/Plan/Insights/Goals/portability/navigation/lifecycle
+  port contracts. D1 implements legacy delegates only.
+- `src/application/p04-d/legacy-ports.js` (+ `.d.ts`): the current v1 `DB`/`Store`
+  behavior behind those ports. Delegation only; no finance formulas are
+  copied and no new writes are created.
+- `src/application/p04-d/authority-latch.js` (+ `.d.ts`): build/test-controlled latch.
+  Ordinary production always resolves to `legacy`. Candidate mode is
+  reachable only through an explicit caller-supplied request object — never
+  URL parameters, localStorage, cookies, imported user data, or mutable
+  global flags — and still resolves to a blocked `canonicalPreparing` state
+  on the legacy port set. No v2 database, migration, account/cloud client,
+  or service worker is opened.
+- `src/application/p04-d/mutation-coverage.ts`: mechanical inventory naming
+  every enabled controller action capable of changing finance, settings,
+  import, or reset state with its single owning port.
+- `src/application/bootstrap.js`: `createLegacyApplication` accepts an
+  optional explicit port set (`featurePorts`, `authorityMode`,
+  `candidatePorts`); the default remains the current legacy behavior.
+- `src/app/root-controller.js`: smallest injection seam — the resolved port
+  set is exposed as `$p04dPorts` with zero behavior change.
+
+`src/main.ts` still mounts `createLegacyApplication`; no alternate root app
+or shell exists. The D1 test surface is `tests/application/p04-d-*.test.mjs`
+(latch isolation, legacy delegation, mutation coverage) plus the extended
+`tests/p02-build-contract.test.mjs` assertions.
+
 ## Main Screens
 
 - Dashboard: selected-day expense list, safe-to-spend hero, date window, payment and add-expense flows.

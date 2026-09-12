@@ -1,0 +1,52 @@
+// P04-D1: public entry point for the compatibility seam.
+export type {
+  AuthorityPort,
+  AuthorityState,
+  CanonicalPreparingAuthorityState,
+  CanonicalReadyAuthorityState,
+  CaptureInput,
+  CapturePort,
+  CaptureResult,
+  FeaturePortName,
+  GoalsPort,
+  HistoryExpenseRecord,
+  HistoryPort,
+  HomeDayExpense,
+  HomePort,
+  InsightsPort,
+  LegacyAuthorityState,
+  MonthEndSummaryInput,
+  MonthStatisticsView,
+  NavigationIntent,
+  NavigationIntentPort,
+  PlanPort,
+  PortabilityPort,
+  PortStatus,
+  P04DAuthorityRequest,
+  P04DAuthorityResolution,
+  P04DBuildMode,
+  ShellFeaturePorts,
+  TemplateApplyPreview,
+  TemplateProfileView,
+  UnavailableAuthorityState,
+  UpdateLifecyclePort,
+  VaultGoalInput,
+} from './contracts.js';
+export {
+  P04D_CANDIDATE_MODE,
+  P04D_D1_CANDIDATE_BLOCKED_REASON,
+  P04D_LEGACY_MODE,
+  describeAuthority,
+  isAuthorityWritable,
+  normalizeP04DBuildMode,
+  resolveP04DAuthority,
+} from './authority-latch.js';
+export { bindAuthorityState, createLegacyFeaturePorts } from './legacy-ports.js';
+export {
+  MUTATION_COVERAGE_INVENTORY,
+  findDuplicateOwners,
+  findMissingOwners,
+  findStaleEntries,
+  inventoryActions,
+} from './mutation-coverage.js';
+export type { MutationOwnerEntry } from './mutation-coverage.js';
