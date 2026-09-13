@@ -18,6 +18,7 @@
     "test:pwa": "node tests/pwa/static-checks.mjs && vitest run --config tests/pwa/vitest.p04d2.config.ts && node tests/pwa/p04-d2-browser.mjs",
     "test:pwa:browser": "node tests/pwa/p04-d2-browser.mjs",
     "test:p04d3": "node tests/application/p04-d3-routing.test.mjs && vitest run --config tests/pwa/vitest.p04d3.config.ts && node tests/pwa/p04-d3-browser.mjs",
+    "test:p04d5": "node tests/pwa/p04-d5-a55-browser.mjs",
     "test:legacy-idb": "npm run build && PLAYWRIGHT_BROWSERS_PATH=0 RUSHD_LEGACY_IDB_ROOT=dist node scripts/legacy-idb-proof.cjs",
     "test:rollback": "node tests/rollback/retirement-contract.test.mjs && npm run build && PLAYWRIGHT_BROWSERS_PATH=0 RUSHD_ROLLBACK_REPEAT=2 node scripts/p04d-rollback-harness.mjs",
     "test:characterization": "node scripts/p00-characterization.test.mjs",

@@ -467,6 +467,7 @@ function makePorts(authorityState, behavior = {}) {
         calls.push(['lifecycle.setCalendarType', calendarType]);
       },
       getOnboardingState: () => behavior.onboardingState ?? null,
+      hasUsableBook: () => behavior.usableBook ?? true,
       persistOnboardingState: async (status, src) => {
         calls.push(['lifecycle.persistOnboardingState', status, src]);
         return { status, updatedAt: '2026-09-05T00:00:00.000Z', source: src ?? '' };
@@ -744,6 +745,68 @@ const BLOCKED = { kind: 'blocked-stub', writable: false };
   ctx.templateProfiles = [{ id: 'legacy' }];
   await ctx.setActiveTemplateProfile.call(ctx, 'legacy');
   assert.deepEqual(runtime.calls, [['db.setSetting', 'activeTemplateProfileId', 'legacy'], ['store.refreshFlexibleStats']], 'legacy profile switch must keep its delegate');
+}
+
+// 14. Setup claims are gated on a usable book and fail closed.
+{
+  const runtime = makeRecordingRuntime();
+  const ports = makePorts(READY, {
+    onboardingState: { status: 'completed', updatedAt: 'x', source: 'migration' },
+    usableBook: false,
+  });
+  const ctx = installWith({ runtime, environment: makeEnvironment(), ports });
+  assert.equal(await ctx.resolveOnboardingStatus.call(ctx), 'pending', 'no book must read as pending even with stored completion');
+  assert.equal(ctx.onboardingState.status, 'pending', 'no book must set pending state');
+  await ctx.reopenOnboardingFromSettings.call(ctx);
+  assert.ok(!ctx.toasts.some((message) => message.includes('مكتمل بعد الترحيل')), 'no book must never claim setup completion');
+  assert.ok(ctx.toasts.some((message) => message.includes('أعد التحميل')), 'no book must point at reload recovery');
+  assert.deepEqual(runtime.calls, [], 'book gating must not reach Store/DB');
+}
+{
+  // Missing method or read error fails closed, never as completion.
+  const runtime = makeRecordingRuntime();
+  const ports = makePorts(READY, { onboardingState: { status: 'completed', updatedAt: 'x', source: 'migration' } });
+  delete ports.lifecycle.hasUsableBook;
+  const ctx = installWith({ runtime, environment: makeEnvironment(), ports });
+  assert.equal(await ctx.resolveOnboardingStatus.call(ctx), 'pending', 'missing book read must fail closed to pending');
+  await ctx.reopenOnboardingFromSettings.call(ctx);
+  assert.ok(!ctx.toasts.some((message) => message.includes('مكتمل بعد الترحيل')), 'missing book read must never claim completion');
+}
+{
+  // A usable book keeps the established completion claim.
+  const runtime = makeRecordingRuntime();
+  const ports = makePorts(READY, {
+    onboardingState: { status: 'completed', updatedAt: 'x', source: 'migration' },
+    usableBook: true,
+  });
+  const ctx = installWith({ runtime, environment: makeEnvironment(), ports });
+  assert.equal(await ctx.resolveOnboardingStatus.call(ctx), 'completed', 'usable book keeps the stored completion');
+  await ctx.reopenOnboardingFromSettings.call(ctx);
+  assert.ok(ctx.toasts.some((message) => message.includes('مكتمل بعد الترحيل')), 'usable book keeps the established copy');
+}
+
+// 15. Candidate init honors the book gate without v1 reads.
+{
+  const runtime = makeRecordingRuntime();
+  const ports = makePorts(READY, { usableBook: false });
+  const ctx = installWith({ runtime, environment: makeEnvironment(), ports });
+  ctx.isRoot = true;
+  ctx.currentView = 'dashboard';
+  ctx.$nextTick = () => {};
+  const priorDocument = globalThis.document;
+  globalThis.document = {
+    documentElement: { dir: '', lang: '', dataset: {}, style: {} },
+    querySelector: () => null,
+  };
+  try {
+    await ctx.initApp.call(ctx);
+  } finally {
+    if (priorDocument === undefined) delete globalThis.document;
+    else globalThis.document = priorDocument;
+  }
+  assert.equal(ctx.onboardingState?.status, 'pending', 'bookless init must leave setup pending');
+  assert.ok(ctx.toasts.length >= 1, 'bookless init must say so visibly');
+  assert.deepEqual(runtime.calls, [], 'book-gated init must not reach Store/DB');
 }
 
 console.log('p04-d4 routing passed');

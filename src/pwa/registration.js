@@ -175,10 +175,11 @@ export function describeUpdateReadiness(coordination) {
  * after a successful online boot, so the next reload works offline even
  * for hashed bundles the worker's install precache cannot name. Pure and
  * synchronous for unit testing: entries may be performance-resource-like
- * `{ url }` records or plain URL strings. Only same-origin `http(s)` URLs
+ * records (`{ name }` as exposed by `getEntriesByType('resource')`, or
+ * `{ url }`), or plain URL strings. Only same-origin `http(s)` URLs
  * are kept (finance data never travels the network, so nothing sensitive
  * can match); order is preserved, duplicates dropped, count capped.
- * @param {Array<{ url?: unknown } | string> | null | undefined} entries
+ * @param {Array<{ url?: unknown, name?: unknown } | string> | null | undefined} entries
  * @param {string} origin The page origin that owns the offline scope.
  * @returns {string[]}
  */
@@ -188,7 +189,8 @@ export function selectWarmUrls(entries, origin) {
   if (!Array.isArray(entries) || typeof origin !== 'string' || !origin) return kept;
   for (const entry of entries) {
     if (kept.length >= PWA_WARM_URL_LIMIT) break;
-    const raw = typeof entry === 'string' ? entry : entry?.url;
+    // PerformanceResourceTiming exposes `name`; accept `url` too.
+    const raw = typeof entry === 'string' ? entry : (entry?.url ?? entry?.name);
     if (typeof raw !== 'string' || !raw) continue;
     let parsed;
     try {

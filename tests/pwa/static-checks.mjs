@@ -185,7 +185,9 @@ function stripComments(source) {
   const raw = await readFile('public/rushd-pwa-sw.js', 'utf8');
   const source = stripComments(raw);
   assert.match(source, /rushd-pwa-v2/, 'candidate SW must carry the D5 cache version');
-  assert.match(source, /PRECACHE_URLS/, 'candidate SW must precache the stable offline closure at install');
+  assert.match(source, /REQUIRED_URLS/, 'candidate SW must precache required offline assets at install');
+  assert.match(source, /BEST_EFFORT_URLS/, 'candidate SW must keep optional assets best-effort');
+  assert.match(source, /cache\.addAll\(REQUIRED_URLS\)/, 'candidate SW must fail installation without the required closure');
   for (const asset of [
     '/sqlite-worker.js',
     '/pkg/dist/wa-sqlite.mjs',
@@ -196,6 +198,8 @@ function stripComments(source) {
   ]) {
     assert.ok(source.includes(asset), `candidate SW precache must cover ${asset}`);
   }
+  assert.match(source, /satisfyRangeFromCache/, 'candidate SW must serve valid Range requests from the cached full body');
+  assert.match(source, /206/, 'candidate SW must answer satisfiable ranges with 206');
   assert.match(source, /mode === 'navigate'|isNavigationRequest/, 'candidate SW must detect navigations for the offline fallback');
   assert.match(source, /503/, 'candidate SW must answer offline subresource misses without rejecting');
   assert.ok(source.includes("'range'") || source.includes('"range"'), 'candidate SW must not poison the cache with range responses');

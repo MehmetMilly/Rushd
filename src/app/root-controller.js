@@ -840,14 +840,16 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     // P04-D5: neither answer may claim completion while no
                     // usable canonical book exists (post-reset recovery):
                     // without a book the scope is pending, never completed.
+                    // D5 round-2: fail closed — a missing method or read
+                    // error counts as no book, never as completion.
                     if (p04dIsCandidate()) {
-                        let usableBook = true;
+                        let usableBook = false;
                         try {
                             usableBook = typeof p04dCandidatePorts.lifecycle.hasUsableBook === 'function'
-                                ? p04dCandidatePorts.lifecycle.hasUsableBook() !== false
-                                : true;
+                                ? p04dCandidatePorts.lifecycle.hasUsableBook() === true
+                                : false;
                         } catch {
-                            usableBook = true;
+                            usableBook = false;
                         }
                         if (!usableBook) {
                             this.onboardingState = { status: 'pending', updatedAt: '', source: 'no-book' };
@@ -1188,8 +1190,20 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     // P04-D4: setup is complete after migration; reopening
                     // onboarding would stage v1 profiles and templates, so it
                     // stays visibly blocked in candidate mode.
+                    // P04-D5 round-2: the completion claim is gated on a
+                    // usable book and fails closed. Without one the user is
+                    // told to reload (boot re-provisions the book); the
+                    // existing blocked copy is reused, no new screens.
                     if (p04dIsCandidate()) {
-                        this.showToast(p04dBlockedCopy(this.lang, 'onboarding'));
+                        let usableBook = false;
+                        try {
+                            usableBook = typeof p04dCandidatePorts.lifecycle.hasUsableBook === 'function'
+                                ? p04dCandidatePorts.lifecycle.hasUsableBook() === true
+                                : false;
+                        } catch {
+                            usableBook = false;
+                        }
+                        this.showToast(p04dBlockedCopy(this.lang, usableBook ? 'onboarding' : 'authority'));
                         return;
                     }
                     this.openOnboardingModal({
@@ -1240,6 +1254,22 @@ export function installRootController(app, dataRuntime, environment = globalThis
                         await syncP04DCandidatePlan(this);
                         await syncP04DCandidateInsights(this);
                         await syncP04DCandidateGoals(this);
+                        // P04-D5 round-2: the candidate shell never claims a
+                        // usable setup without a usable book. Boot already
+                        // provisions one; when that failed, stay pending and
+                        // say so with the existing blocked copy (a reload
+                        // retries provisioning). Fail closed on read errors.
+                        try {
+                            const usable = typeof p04dCandidatePorts.lifecycle.hasUsableBook === 'function'
+                                ? p04dCandidatePorts.lifecycle.hasUsableBook() === true
+                                : false;
+                            this.onboardingState = usable
+                                ? this.onboardingState
+                                : { status: 'pending', updatedAt: '', source: 'no-book' };
+                            if (!usable) this.showToast(p04dBlockedCopy(this.lang, 'authority'));
+                        } catch {
+                            this.onboardingState = { status: 'pending', updatedAt: '', source: 'no-book' };
+                        }
                         p04dPersistNavIntent(this);
                         this.$nextTick(() => this.centerDateScroller(this.store.currentDate, 'instant'));
                         return;

@@ -39,7 +39,7 @@ export function describeUpdateReadiness(
 ): { readonly ready: boolean; readonly activeSections: Array<{ readonly kind: string; readonly tabId: string }> };
 
 export function selectWarmUrls(
-  entries: ReadonlyArray<{ readonly url?: unknown } | string> | null | undefined,
+  entries: ReadonlyArray<{ readonly url?: unknown; readonly name?: unknown } | string> | null | undefined,
   origin: string,
 ): string[];
 

@@ -35,7 +35,15 @@ import {
   REPLACE_ACTIVE_CONFIRMATION,
   RESET_SCOPE_CONFIRMATION,
 } from '../../src/data/portability/format';
-import { selectWarmUrls, warmPwaCache } from '../../src/pwa/registration.js';
+// D5 round-2: dynamic import keeps fail-on-base reproducible. A full
+// product revert removes these exports; the A8 cases then fail as plain
+// assertions instead of breaking module load (see the first assertion in
+// each A8 case).
+const registration = await import('../../src/pwa/registration.js').catch(() => ({} as Record<string, never>));
+const { selectWarmUrls, warmPwaCache } = registration as {
+  selectWarmUrls?: (entries: Array<{ url?: unknown; name?: unknown } | string> | null | undefined, origin: string) => string[];
+  warmPwaCache?: (options?: { environment?: typeof globalThis; cacheName?: string; urls?: string[] }) => Promise<{ warmed: number; requested: number; reason: string }>;
+};
 import { createDeterministicContext } from '../domain/support/deterministic-context';
 import { createMemoryStorage } from './memory-storage';
 
@@ -95,6 +103,7 @@ async function openTab(options: {
   snapshot?: ReturnType<typeof fakeV1Snapshot> | undefined;
   migrationId?: string;
   tabId?: string;
+  bus?: { postMessage(message: unknown): void; onmessage: ((message: never) => void) | null; close?: () => void };
 }) {
   const { context: deterministic } = createDeterministicContext({ deviceId: 'dev-a55-correction' });
   let counter = 0;
@@ -110,6 +119,7 @@ async function openTab(options: {
     tabId: options.tabId ?? `a55-${options.tag}`,
     environment: SYNC_ENV,
     store: options.coordStore,
+    ...(options.bus ? { bus: options.bus } : {}),
   });
   const host = await prepareCanonicalCandidateHost({
     environment: { localStorage: memoryLocalStorage() } as unknown as typeof globalThis,
@@ -341,12 +351,15 @@ describe('P04-D5 A55 correction', () => {
   });
 
   it('A8: page-side warming keeps same-origin assets only, capped and de-duplicated', () => {
+    expect(typeof selectWarmUrls).toBe('function');
     const origin = 'http://127.0.0.1:4173';
-    expect(selectWarmUrls(null, origin)).toEqual([]);
-    expect(selectWarmUrls(
+    expect(selectWarmUrls!(null, origin)).toEqual([]);
+    expect(selectWarmUrls!(
       [
         `${origin}/assets/index-abc123.js`,
         { url: `${origin}/pkg/dist/wa-sqlite.wasm` },
+        // PerformanceResourceTiming exposes `name`, not `url`.
+        { name: `${origin}/assets/index-abc123.css` },
         `${origin}/assets/index-abc123.js`,
         'https://cdn.example.com/remote.js',
         'data:text/plain,hi',
@@ -357,9 +370,10 @@ describe('P04-D5 A55 correction', () => {
     )).toEqual([
       `${origin}/assets/index-abc123.js`,
       `${origin}/pkg/dist/wa-sqlite.wasm`,
+      `${origin}/assets/index-abc123.css`,
     ]);
     const many = Array.from({ length: 200 }, (_, index) => `${origin}/assets/chunk-${index}.js`);
-    expect(selectWarmUrls(many, origin).length).toBeLessThanOrEqual(60);
+    expect(selectWarmUrls!(many, origin).length).toBeLessThanOrEqual(60);
   });
 
   it('A8: cache warming is best-effort and never throws', async () => {
@@ -375,14 +389,209 @@ describe('P04-D5 A55 correction', () => {
       },
     } as unknown as typeof globalThis;
     const origin = 'http://127.0.0.1:4173';
-    const warmed = await warmPwaCache({
+    expect(typeof warmPwaCache).toBe('function');
+    const warmed = await warmPwaCache!({
       environment,
       urls: [`${origin}/a.js`, `${origin}/evicted.js`, `${origin}/b.js`],
     });
     expect(warmed).toEqual({ warmed: 2, requested: 3, reason: '' });
     expect(added).toEqual([`${origin}/a.js`, `${origin}/b.js`]);
-    expect(await warmPwaCache({ environment: {} as typeof globalThis, urls: [`${origin}/a.js`] }))
+    expect(await warmPwaCache!({ environment: {} as typeof globalThis, urls: [`${origin}/a.js`] }))
       .toEqual({ warmed: 0, requested: 1, reason: 'cache-unavailable' });
-    expect(await warmPwaCache({ environment })).toEqual({ warmed: 0, requested: 0, reason: 'no-urls' });
+    expect(await warmPwaCache!({ environment })).toEqual({ warmed: 0, requested: 0, reason: 'no-urls' });
+  });
+
+  it('A9 round-2: flip, epoch bump, namespace announce, then provision — in that order', async () => {
+    const control = createMemoryControlStore();
+    const coordStore = memoryStore();
+    const { context } = createDeterministicContext({ deviceId: 'dev-a55-correction' });
+    const storage = createMemoryStorage({ context, control });
+    const tabA = await openTab({ tag: 'orderA', control, coordStore, storage, snapshot: fakeV1Snapshot() });
+
+    // Instrument the adoption sequence: pointer flip, epoch bump,
+    // namespace announcements, and the first post-flip repository write.
+    const events: string[] = [];
+    const announced: string[] = [];
+    const performer = tabA.coordination as unknown as Record<string, (...args: never[]) => unknown>;
+    const baseBump = tabA.coordination.bumpEpoch.bind(tabA.coordination);
+    performer['bumpEpoch'] = ((reason?: string) => {
+      events.push('bump');
+      return baseBump(reason);
+    }) as never;
+    const baseAnnounce = tabA.coordination.announceCommit.bind(tabA.coordination);
+    performer['announceCommit'] = ((info?: { storageId?: string }) => {
+      if (typeof info?.storageId === 'string') announced.push(info.storageId);
+      return baseAnnounce(info);
+    }) as never;
+    const rawControl = control as unknown as Record<string, (...args: never[]) => Promise<{ ok: boolean }>>;
+    const baseCas = control.compareAndSwapPointer.bind(control);
+    rawControl['compareAndSwapPointer'] = (async (...args: never[]) => {
+      const result = await baseCas(...(args as [number, Omit<Parameters<typeof baseCas>[1], 'generation'>]));
+      if (result.ok) events.push('flip');
+      return result;
+    }) as never;
+    const rawStorage = storage as unknown as Record<string, (...args: never[]) => Promise<{ openActive?: never } & Record<string, unknown>>>;
+    const baseOpen = storage.openActive.bind(storage);
+    rawStorage['openActive'] = (async (...args: never[]) => {
+      const repository = (await baseOpen(...(args as [string, { reset?: boolean }]))) as unknown as Record<string, (...a: never[]) => Promise<unknown>>;
+      const baseRun = (repository['runTransaction'] as (...a: never[]) => Promise<unknown>).bind(repository);
+      repository['runTransaction'] = (async (...args: never[]) => {
+        if (events.includes('flip')) events.push('provision-tx');
+        return baseRun(...args);
+      }) as never;
+      return repository;
+    }) as never;
+
+    await tabA.host.featurePorts.portability.factoryReset({
+      resetId: 'rs-a55-order',
+      confirmation: RESET_SCOPE_CONFIRMATION,
+    });
+    const flipAt = events.indexOf('flip');
+    const bumpAt = events.indexOf('bump');
+    const provisionAt = events.indexOf('provision-tx');
+    expect(flipAt).toBeGreaterThanOrEqual(0);
+    expect(bumpAt).toBeGreaterThanOrEqual(0);
+    expect(provisionAt).toBeGreaterThanOrEqual(0);
+    // No orphan-write window: the epoch retires stale tabs before any
+    // reopen/provision command runs on the new namespace.
+    expect(flipAt).toBeLessThan(bumpAt);
+    expect(bumpAt).toBeLessThan(provisionAt);
+    // The new namespace is announced before provisioning serves it.
+    expect(announced).toContain(tabA.host.storageId);
+    await tabA.host.close();
+  });
+
+  it('A9 round-2: adoption holds one outer lease; provision nests no write section', async () => {
+    const control = createMemoryControlStore();
+    const coordStore = memoryStore();
+    const { context } = createDeterministicContext({ deviceId: 'dev-a55-correction' });
+    const storage = createMemoryStorage({ context, control });
+    const tabA = await openTab({ tag: 'leaseA', control, coordStore, storage, snapshot: fakeV1Snapshot() });
+
+    let begins = 0;
+    let ends = 0;
+    const performer = tabA.coordination as unknown as Record<string, (...args: never[]) => unknown>;
+    const baseBegin = tabA.coordination.beginCritical.bind(tabA.coordination);
+    performer['beginCritical'] = ((kind: string) => {
+      begins += 1;
+      return baseBegin(kind as 'write');
+    }) as never;
+    const baseEnd = tabA.coordination.endCritical.bind(tabA.coordination);
+    performer['endCritical'] = ((token: { kind: string; tabId: string }) => {
+      ends += 1;
+      return baseEnd(token);
+    }) as never;
+
+    await tabA.host.featurePorts.portability.factoryReset({
+      resetId: 'rs-a55-lease',
+      confirmation: RESET_SCOPE_CONFIRMATION,
+    });
+    // Exactly the outer reset section: a nested write section would begin
+    // and end a second lease, dropping the outer one mid-adoption and
+    // reopening update activation while adoption still runs.
+    expect(begins).toBe(1);
+    expect(ends).toBe(1);
+    expect(tabA.coordination.canActivateUpdate()).toBe(true);
+    await tabA.host.close();
+  });
+
+  it('A9 round-2: a deaf tab is still blocked by the persisted epoch it never received', async () => {
+    const control = createMemoryControlStore();
+    const sharedCoordStore = memoryStore();
+    const { context } = createDeterministicContext({ deviceId: 'dev-a55-correction' });
+    const storage = createMemoryStorage({ context, control });
+    const tabA = await openTab({ tag: 'deafA', control, coordStore: sharedCoordStore, storage, snapshot: fakeV1Snapshot() });
+    // Deaf bus: sends nothing receivable, receives nothing. The tab still
+    // shares the persisted coordination store like a frozen phone tab
+    // shares localStorage.
+    const deafBus = {
+      postMessage() {},
+      set onmessage(_handler: ((message: never) => void) | null) {},
+      get onmessage() {
+        return null;
+      },
+      close() {},
+    };
+    const tabB = await openTab({ tag: 'deafB', control, coordStore: sharedCoordStore, storage, bus: deafBus });
+
+    await tabA.host.featurePorts.portability.factoryReset({
+      resetId: 'rs-a55-deaf',
+      confirmation: RESET_SCOPE_CONFIRMATION,
+    });
+    // B received no broadcast, yet every write attempt re-reads the
+    // persisted epoch and must refuse the orphaned namespace.
+    expect(tabB.coordination.getEpoch()).toBe(1);
+    expect(tabB.host.featurePorts.authority.getState().kind).toBe('canonicalReady');
+    const staleWrite = await submitDayExpense(tabB.host, 'deafB', 'a55-deaf-fork', 50);
+    expect(staleWrite.ok).toBe(false);
+    expect(tabB.host.featurePorts.authority.getState().kind).toBe('unavailable');
+    await tabA.host.close();
+    await tabB.host.close();
+  });
+
+  it('A9 round-2: epoch and broadcast both missed still refuses via namespace currency', async () => {    const control = createMemoryControlStore();
+    const { context } = createDeterministicContext({ deviceId: 'dev-a55-correction' });
+    const storage = createMemoryStorage({ context, control });
+    const tabA = await openTab({ tag: 'curA', control, coordStore: memoryStore(), storage, snapshot: fakeV1Snapshot() });
+    // Private coordination store plus a deaf bus: this tab observes
+    // neither the persisted epoch nor any broadcast.
+    const deafBus = {
+      postMessage() {},
+      set onmessage(_handler: ((message: never) => void) | null) {},
+      get onmessage() {
+        return null;
+      },
+      close() {},
+    };
+    const tabB = await openTab({ tag: 'curB', control, coordStore: memoryStore(), storage, bus: deafBus });
+
+    await tabA.host.featurePorts.portability.factoryReset({
+      resetId: 'rs-a55-cur',
+      confirmation: RESET_SCOPE_CONFIRMATION,
+    });
+    expect(tabB.coordination.getEpoch()).toBe(0);
+    expect(tabB.host.featurePorts.authority.getState().kind).toBe('canonicalReady');
+    // The per-write namespace check is the last line: the pointer moved
+    // on, so the held repository is orphaned and the write must refuse.
+    const staleWrite = await submitDayExpense(tabB.host, 'curB', 'a55-cur-fork', 50);
+    expect(staleWrite.ok).toBe(false);
+    expect(tabB.host.featurePorts.authority.getState().kind).toBe('unavailable');
+    // No fork happened: the orphaned namespace holds no stray row.
+    await tabB.host.refresh();
+    expect(tabB.host.featurePorts.home.listSelectedDayExpenses().map((row) => row.name))
+      .not.toContain('a55-cur-fork');
+    await tabA.host.close();
+    await tabB.host.close();
+  });
+
+  it('A9 round-2: failed adoption fails the performer closed instead of forking', async () => {
+    const control = createMemoryControlStore();
+    const coordStore = memoryStore();
+    const { context } = createDeterministicContext({ deviceId: 'dev-a55-correction' });
+    const storage = createMemoryStorage({ context, control });
+    const tabA = await openTab({ tag: 'failA', control, coordStore, storage, snapshot: fakeV1Snapshot() });
+
+    // Break the reopen of the flipped namespace: the epoch already moved
+    // and other tabs already retired, so the performer must go
+    // unavailable rather than keep writing its orphaned repository.
+    const rawStorage = storage as unknown as Record<string, (...args: never[]) => Promise<unknown>>;
+    const baseOpen = storage.openActive.bind(storage);
+    let breakNext = false;
+    rawStorage['openActive'] = (async (...args: never[]) => {
+      if (breakNext) {
+        breakNext = false;
+        throw new Error('injected reopen failure');
+      }
+      return baseOpen(...(args as [string, { reset?: boolean }]));
+    }) as never;
+    breakNext = true;
+    await expect(tabA.host.featurePorts.portability.factoryReset({
+      resetId: 'rs-a55-fail',
+      confirmation: RESET_SCOPE_CONFIRMATION,
+    })).rejects.toThrow();
+    expect(tabA.host.featurePorts.authority.getState().kind).toBe('unavailable');
+    const stray = await submitDayExpense(tabA.host, 'failA', 'a55-fail-fork', 50);
+    expect(stray.ok).toBe(false);
+    await tabA.host.close();
   });
 });

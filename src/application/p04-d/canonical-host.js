@@ -609,20 +609,67 @@ export async function prepareCanonicalCandidateHost(options = {}) {
   }
 
   /**
+   * D5 round-2 correction: verify this host still holds the active
+   * namespace before any canonical write. The epoch re-read on every
+   * `assertWritable` already blocks tabs that observed a flip; this
+   * covers tabs that missed the broadcast entirely (frozen background
+   * tabs): a pointer that moved on without this host means its
+   * repository is orphaned, so the host goes visibly unavailable instead
+   * of forking it. A control-store read failure also fails closed —
+   * never a blind write. Reads are local (IndexedDB/memory) and offline.
+   * @param {string} scope Caller label for status reporting.
+   * @param {{ fail(message: string): void } | null} statusCell
+   * @returns {Promise<boolean>} True when the held namespace is current.
+   */
+  async function requireCurrentNamespace(scope, statusCell) {
+    let active = '';
+    try {
+      const pointer = await control.getPointer();
+      active = pointer?.activeStorageId ?? '';
+    } catch (error) {
+      const reason = `P04-D writes blocked for '${scope}': the activation pointer is unreadable (${error instanceof Error ? error.message : String(error)}).`;
+      setAuthority({ kind: 'unavailable', writable: false, reason });
+      try {
+        statusCell?.fail?.(reason);
+      } catch {
+        /* status reporting is best-effort */
+      }
+      return false;
+    }
+    if (typeof active === 'string' && active && active !== state.storageId) {
+      setAuthority({ kind: 'unavailable', writable: false, reason: P04D_D5_STORAGE_MOVED_REASON });
+      try {
+        statusCell?.fail?.(P04D_D5_STORAGE_MOVED_REASON);
+      } catch {
+        /* status reporting is best-effort */
+      }
+      return false;
+    }
+    return true;
+  }
+
+  /**
    * D5 correction: guarantee a usable canonical book before serving writes.
    * Reset (and an empty-but-valid import) activates a namespace with no
    * guest book, which used to leave capture truthfully-but-hopelessly
    * blocked while onboarding still claimed completion. Provisioning runs
    * the same facts a fresh install would hold — one `createBook` plus one
    * zero-funds `openCycle` for the selected month — through the P03 gateway
-   * under a write section, so it is atomic per command, idempotent across
+   * so it is atomic per command, idempotent across
    * retries (deterministic operation identities replay from the journal),
    * and offline-capable (no network, no invented allowance). A book that
    * already exists (or already has an open cycle) is left untouched.
+   *
+   * D5 round-2: callers inside an outer import/reset critical section pass
+   * `lease: false` so provisioning reuses that lease instead of nesting a
+   * `write` section over it (one lock per tab: nesting would drop the
+   * outer lease and reopen update activation mid-adoption). Standalone
+   * callers (boot) hold their own `write` lease.
    * @param {string} scope Caller label for status reporting.
+   * @param {{ lease?: boolean }} [options]
    * @returns {Promise<boolean>} True when a usable book is present.
    */
-  async function provisionFreshBookIfMissing(scope) {
+  async function provisionFreshBookIfMissing(scope, options = {}) {
     if (state.bookId) {
       const open = projectOpenCycleId(currentBook());
       if (open) return true;
@@ -635,6 +682,9 @@ export async function prepareCanonicalCandidateHost(options = {}) {
       authorityPort.assertWritable(`${scope}.provision`);
     } catch (error) {
       lifecycleStatus.fail(error instanceof Error ? error.message : String(error));
+      return false;
+    }
+    if (!(await requireCurrentNamespace(`${scope}.provision`, lifecycleStatus))) {
       return false;
     }
     const made = makeBookId(LEGACY_GUEST_BOOK_ID);
@@ -680,7 +730,7 @@ export async function prepareCanonicalCandidateHost(options = {}) {
       startingFunds: { currency: 'SAR', minorUnits: 0 },
       startDate: monthStart.value,
     };
-    return withHeldCritical('write', async () => {
+    const provisionTask = async () => {
       try {
         if (!state.bookId) {
           const committed = findCommittedIntent(state.repository, bookOperation.value, createBook);
@@ -722,27 +772,48 @@ export async function prepareCanonicalCandidateHost(options = {}) {
         lifecycleStatus.fail(error instanceof Error ? error.message : String(error));
         return false;
       }
-    });
+    };
+    if (options.lease === false) return provisionTask();
+    return withHeldCritical('write', provisionTask);
   }
 
   /**
-   * D5 correction: adopt an import/reset activation flip. The pointer
-   * already flipped inside the storage adapter; this reopens the new
-   * namespace, guarantees a usable book, then retires every other tab's
-   * writer with an epoch bump that this tab immediately rebases (it
-   * already holds the fresh repository). Receivers that miss the
-   * broadcast still hit the storage-namespace guard on invalidate.
+   * D5 round-2 correction: adopt an import/reset activation flip with no
+   * orphan-write window. The pointer already flipped inside the storage
+   * adapter; the epoch bump is persisted and broadcast and this tab
+   * rebases BEFORE any reopen/provision command runs, so a second tab can
+   * no longer pass `assertEpoch` during adoption — even one that misses
+   * the broadcast, because every write attempt re-reads the persisted
+   * epoch (and the namespace check refuses orphaned repositories
+   * outright). The new namespace is announced promptly, then this tab
+   * reopens it and guarantees a usable book under the outer import/reset
+   * lease (no nested section: one lock per tab). A closing announcement
+   * confirms the adopted namespace.
    * @param {'import' | 'reset'} kind
    * @param {string} newStorageId
    */
   async function adoptActivationFlip(kind, newStorageId) {
-    await reopenActive(newStorageId);
-    state.storageId = newStorageId;
-    await provisionFreshBookIfMissing(kind);
     try {
       openedEpoch = coordination.bumpEpoch(`p04-d:${kind}-activated`);
     } catch {
-      /* the storage-namespace guard still blocks stale writers below */
+      /* the namespace checks still block stale writers below */
+    }
+    coordination.announceCommit({ storageId: newStorageId });
+    try {
+      await reopenActive(newStorageId);
+      state.storageId = newStorageId;
+      await provisionFreshBookIfMissing(kind, { lease: false });
+    } catch (error) {
+      // The flip already retired other tabs; this tab must not keep
+      // writing to the orphaned repository it still holds. Fail closed:
+      // a reload rejoins the current namespace.
+      const reason = `P04-D ${kind} adoption failed after activation: ${error instanceof Error ? error.message : String(error)}; reload to rejoin.`;
+      setAuthority({ kind: 'unavailable', writable: false, reason });
+      state.repository = null;
+      state.gateway = null;
+      state.bookId = null;
+      coordination.announceCommit({ storageId: newStorageId });
+      throw error;
     }
     coordination.announceCommit({ storageId: state.storageId });
   }
@@ -791,6 +862,18 @@ export async function prepareCanonicalCandidateHost(options = {}) {
     }
     if (!state.bookId) {
       write.statusCell.fail(P04D_D2_NO_BOOK_REASON);
+      return { ok: false, reason: 'blocked' };
+    }
+    // D5 round-2: every writer re-verifies epoch and namespace currency
+    // here (not only at the port entry), so a flip that lands between
+    // entry and commit cannot fork an orphaned namespace.
+    try {
+      authorityPort.assertWritable(write.scope);
+    } catch (error) {
+      write.statusCell.fail(error instanceof Error ? error.message : String(error));
+      return { ok: false, reason: 'blocked' };
+    }
+    if (!(await requireCurrentNamespace(write.scope, write.statusCell))) {
       return { ok: false, reason: 'blocked' };
     }
     const committed = findCommittedIntent(state.repository, operation.value, write.command);
@@ -883,6 +966,16 @@ export async function prepareCanonicalCandidateHost(options = {}) {
     if (!operation.ok) {
       historyStatus.fail('canonical correction refused: invalid operation identity.');
       return blockedResult('validation');
+    }
+    // D5 round-2: same entry/commit re-verification as runCanonicalWrite.
+    try {
+      authorityPort.assertWritable(correction.scope);
+    } catch (error) {
+      historyStatus.fail(error instanceof Error ? error.message : String(error));
+      return blockedResult('blocked');
+    }
+    if (!(await requireCurrentNamespace(correction.scope, historyStatus))) {
+      return blockedResult('blocked');
     }
     /** @type {FinanceCommand} */
     const command = {
@@ -1069,6 +1162,10 @@ export async function prepareCanonicalCandidateHost(options = {}) {
     }
     if (!state.bookId) {
       goalsStatus.fail(P04D_D2_NO_BOOK_REASON);
+      return null;
+    }
+    // D5 round-2: refuse orphaned-namespace settlement like any writer.
+    if (!(await requireCurrentNamespace(scope, goalsStatus))) {
       return null;
     }
     const record = summary && typeof summary === 'object' ? summary : {};
@@ -1406,6 +1503,10 @@ export async function prepareCanonicalCandidateHost(options = {}) {
         }
         if (!state.bookId) {
           captureStatus.fail(P04D_D2_NO_BOOK_REASON);
+          return blockedResult('blocked');
+        }
+        // D5 round-2: refuse orphaned-namespace capture like any writer.
+        if (!(await requireCurrentNamespace('capture.submitExpense', captureStatus))) {
           return blockedResult('blocked');
         }
         const dateText = toText(input?.date) || state.selectedDate;
@@ -1789,6 +1890,10 @@ export async function prepareCanonicalCandidateHost(options = {}) {
         const book = currentBook();
         if (!book || !Array.isArray(book.plans)) {
           return { ...emptyApplyPreview(toText(effectiveDate), 'canonical apply refused: no plans exist.'), blocked: true };
+        }
+        // D5 round-2: refuse orphaned-namespace apply like any writer.
+        if (!(await requireCurrentNamespace('plan.confirmApply', planStatus))) {
+          return { ...emptyApplyPreview(toText(effectiveDate), P04D_D5_STORAGE_MOVED_REASON), blocked: true };
         }
         // D4 correction: all-or-blocked from the UI perspective. Phase 1
         // previews every plan without writing; any preview failure

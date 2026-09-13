@@ -18,6 +18,12 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const RAW_DIR = 'artifacts/agent-reports/p04d2-raw';
 const WORKER_BUNDLE = `${RAW_DIR}/v2-worker.bundle.mjs`;
 const PAGE_API_BUNDLE = `${RAW_DIR}/page-api.bundle.mjs`;
+// D5 round-2: the worker's required offline closure names the production
+// `/sqlite-worker.js` URL, so the fixture bundles the real worker source
+// and serves it there (plus the shell document at `/index.html`). A
+// fixture that 404s required assets must fail installation, exactly like
+// production.
+const SQLITE_WORKER_BUNDLE = `${RAW_DIR}/sqlite-worker.bundle.mjs`;
 const MIME = { '.mjs': 'text/javascript', '.js': 'text/javascript', '.wasm': 'application/wasm', '.html': 'text/html', '.webmanifest': 'application/manifest+json' };
 
 const failures = [];
@@ -30,9 +36,14 @@ function startServer() {
   const server = createServer(async (req, res) => {
     try {
       const url = new URL(req.url ?? '/', 'http://x');
-      if (url.pathname === '/' || url.pathname === '/page') {
+      if (url.pathname === '/' || url.pathname === '/page' || url.pathname === '/index.html') {
         res.writeHead(200, { 'Content-Type': 'text/html' });
         res.end('<!doctype html><html><head><link rel="manifest" href="/manifest.webmanifest"></head><body>p04-d2</body></html>');
+        return;
+      }
+      if (url.pathname === '/sqlite-worker.js') {
+        res.writeHead(200, { 'Content-Type': 'text/javascript', 'Cache-Control': 'public, max-age=3600' });
+        res.end(await readFile(join(ROOT, SQLITE_WORKER_BUNDLE)));
         return;
       }
       if (url.pathname === '/harness/v2-worker.js') {
@@ -76,6 +87,11 @@ function buildBundles() {
   execFileSync(
     esbuild,
     ['src/data/v2/sqlite-worker.ts', '--bundle', '--format=esm', '--platform=browser', `--outfile=${WORKER_BUNDLE}`],
+    { cwd: ROOT, stdio: 'pipe' },
+  );
+  execFileSync(
+    esbuild,
+    ['src/data/v2/sqlite-worker.ts', '--bundle', '--format=esm', '--platform=browser', `--outfile=${SQLITE_WORKER_BUNDLE}`],
     { cwd: ROOT, stdio: 'pipe' },
   );
   execFileSync(
