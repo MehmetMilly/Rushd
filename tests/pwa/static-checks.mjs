@@ -179,4 +179,52 @@ function stripComments(source) {
   assert.ok(!/P04D_BUILD_MODE|useLegacy|useCanonical/i.test(boot), 'production-boot must expose no runtime authority switch');
 }
 
+// 11. D5 A55 correction: offline closure precache + navigation fallback,
+// page-side warming, usable-book recovery, and pointer-flip epoch safety.
+{
+  const raw = await readFile('public/rushd-pwa-sw.js', 'utf8');
+  const source = stripComments(raw);
+  assert.match(source, /rushd-pwa-v2/, 'candidate SW must carry the D5 cache version');
+  assert.match(source, /PRECACHE_URLS/, 'candidate SW must precache the stable offline closure at install');
+  for (const asset of [
+    '/sqlite-worker.js',
+    '/pkg/dist/wa-sqlite.mjs',
+    '/pkg/dist/wa-sqlite.wasm',
+    '/pkg/src/sqlite-api.js',
+    '/pkg/src/examples/OPFSCoopSyncVFS.js',
+    '/index.html',
+  ]) {
+    assert.ok(source.includes(asset), `candidate SW precache must cover ${asset}`);
+  }
+  assert.match(source, /mode === 'navigate'|isNavigationRequest/, 'candidate SW must detect navigations for the offline fallback');
+  assert.match(source, /503/, 'candidate SW must answer offline subresource misses without rejecting');
+  assert.ok(source.includes("'range'") || source.includes('"range"'), 'candidate SW must not poison the cache with range responses');
+  for (const forbidden of ['indexedDB', 'openDatabase', 'localStorage', 'sessionStorage', 'WebSocket', 'importScripts']) {
+    assert.ok(!source.includes(forbidden), `candidate SW must not reference ${forbidden}`);
+  }
+  assert.ok(!source.includes('https://') && !source.includes('http://'), 'candidate SW must hardcode no remote URLs');
+
+  const registration = await readFile('src/pwa/registration.js', 'utf8');
+  const registrationSource = stripComments(registration);
+  assert.doesNotMatch(registrationSource, /^import\s/m, 'pwa registration must stay import-free');
+  assert.match(registrationSource, /CANDIDATE_PWA_CACHE = 'rushd-pwa-v2'/, 'page cache name must mirror the worker version');
+  assert.match(registrationSource, /selectWarmUrls/, 'pwa registration must select same-origin warm URLs');
+  assert.match(registrationSource, /warmPwaCache/, 'pwa registration must warm hashed bundles after boot');
+  const versionLine = source.match(/PWA_CACHE_VERSION = '([^']+)'/);
+  assert.ok(versionLine && versionLine[1] === 'rushd-pwa-v2', 'worker cache version and page cache name must agree');
+
+  const host = stripComments(await readFile('src/application/p04-d/canonical-host.js', 'utf8'));
+  assert.match(host, /provisionFreshBookIfMissing/, 'canonical host must provision a usable book when storage holds none');
+  assert.match(host, /adoptActivationFlip/, 'canonical host must adopt import/reset flips through one guarded path');
+  assert.match(host, /bumpEpoch\(`p04-d:/, 'import/reset adoption must retire other tabs with an epoch bump');
+  assert.match(host, /P04D_D5_STORAGE_MOVED_REASON/, 'canonical host must block writes that miss the flip broadcast');
+  assert.match(host, /hasUsableBook/, 'canonical host must expose book existence for setup claims');
+
+  const legacyPorts = stripComments(await readFile('src/application/p04-d/legacy-ports.js', 'utf8'));
+  assert.match(legacyPorts, /hasUsableBook/, 'legacy ports must carry the book-existence read for contract parity');
+
+  const controller = await readFile('src/app/root-controller.js', 'utf8');
+  assert.match(controller, /hasUsableBook/, 'onboarding status must not claim completion without a usable book');
+}
+
 console.log('p04-d2 static checks passed');

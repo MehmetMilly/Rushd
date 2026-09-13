@@ -837,7 +837,22 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     // P04-D4: migration implies setup is done; the port's
                     // local flow status answers when present, otherwise the
                     // migrated book counts as completed. Never reads v1.
+                    // P04-D5: neither answer may claim completion while no
+                    // usable canonical book exists (post-reset recovery):
+                    // without a book the scope is pending, never completed.
                     if (p04dIsCandidate()) {
+                        let usableBook = true;
+                        try {
+                            usableBook = typeof p04dCandidatePorts.lifecycle.hasUsableBook === 'function'
+                                ? p04dCandidatePorts.lifecycle.hasUsableBook() !== false
+                                : true;
+                        } catch {
+                            usableBook = true;
+                        }
+                        if (!usableBook) {
+                            this.onboardingState = { status: 'pending', updatedAt: '', source: 'no-book' };
+                            return 'pending';
+                        }
                         try {
                             const stored = p04dCandidatePorts.lifecycle.getOnboardingState();
                             if (stored) {

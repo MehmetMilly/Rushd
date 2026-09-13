@@ -344,6 +344,8 @@ export interface UpdateLifecyclePort {
   setCalendarType(calendarType: string): void;
   getOnboardingState(): OnboardingStateView | null;
   persistOnboardingState(status: string, source?: string): Promise<OnboardingStateView>;
+  /** True when active storage holds a usable guest book. Gates setup-completion claims. */
+  hasUsableBook(): boolean;
   getMonthStartDeferral(): unknown;
   deferMonthStartPrompt(referenceDate: string): void;
   clearMonthStartDeferral(): void;

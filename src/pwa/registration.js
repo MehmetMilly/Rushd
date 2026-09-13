@@ -26,6 +26,13 @@
 
 export const CANDIDATE_SW_URL = '/rushd-pwa-sw.js';
 export const CANDIDATE_SW_SCOPE = '/';
+// D5: PWA cache warmed by the page after boot. This literal must equal the
+// service worker's `PWA_CACHE_VERSION` (asserted by `static-checks.mjs`);
+// the worker stays a dependency-free static file, so the name is mirrored
+// here instead of imported.
+export const CANDIDATE_PWA_CACHE = 'rushd-pwa-v2';
+/** Maximum warmed URLs per boot: bounds quota use on constrained devices. */
+export const PWA_WARM_URL_LIMIT = 60;
 
 /**
  * @param {unknown} environment
@@ -161,4 +168,78 @@ export function describeUpdateReadiness(coordination) {
     ? coordination.activeCriticalSections()
     : [];
   return { ready: coordination.canActivateUpdate(), activeSections };
+}
+
+/**
+ * D5: select the same-origin asset URLs worth warming into the PWA cache
+ * after a successful online boot, so the next reload works offline even
+ * for hashed bundles the worker's install precache cannot name. Pure and
+ * synchronous for unit testing: entries may be performance-resource-like
+ * `{ url }` records or plain URL strings. Only same-origin `http(s)` URLs
+ * are kept (finance data never travels the network, so nothing sensitive
+ * can match); order is preserved, duplicates dropped, count capped.
+ * @param {Array<{ url?: unknown } | string> | null | undefined} entries
+ * @param {string} origin The page origin that owns the offline scope.
+ * @returns {string[]}
+ */
+export function selectWarmUrls(entries, origin) {
+  const kept = [];
+  const seen = new Set();
+  if (!Array.isArray(entries) || typeof origin !== 'string' || !origin) return kept;
+  for (const entry of entries) {
+    if (kept.length >= PWA_WARM_URL_LIMIT) break;
+    const raw = typeof entry === 'string' ? entry : entry?.url;
+    if (typeof raw !== 'string' || !raw) continue;
+    let parsed;
+    try {
+      parsed = new URL(raw, origin);
+    } catch {
+      continue;
+    }
+    if (parsed.origin !== origin) continue;
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') continue;
+    const url = parsed.href;
+    if (seen.has(url)) continue;
+    seen.add(url);
+    kept.push(url);
+  }
+  return kept;
+}
+
+/**
+ * D5: best-effort page-side warming of the PWA cache. Runs once after an
+ * online boot + registration so hashed app bundles (which install
+ * precaching cannot enumerate) are available offline. Same-origin only,
+ * per-URL failures are skipped, and every failure mode resolves to a
+ * `{ warmed }` summary instead of throwing — warming must never affect
+ * boot, finance state, or update coordination.
+ * @param {{ environment?: typeof globalThis, cacheName?: string, urls?: string[] }} [options]
+ * @returns {Promise<{ warmed: number, requested: number, reason: string }>}
+ */
+export async function warmPwaCache(options = {}) {
+  const environment = options.environment ?? globalThis;
+  const cacheName = typeof options.cacheName === 'string' && options.cacheName
+    ? options.cacheName
+    : CANDIDATE_PWA_CACHE;
+  const urls = Array.isArray(options.urls) ? options.urls.filter((url) => typeof url === 'string') : [];
+  if (urls.length === 0) return { warmed: 0, requested: 0, reason: 'no-urls' };
+  try {
+    const cachesRef = environment?.caches;
+    if (!cachesRef || typeof cachesRef.open !== 'function') {
+      return { warmed: 0, requested: urls.length, reason: 'cache-unavailable' };
+    }
+    const cache = await cachesRef.open(cacheName);
+    let warmed = 0;
+    for (const url of urls.slice(0, PWA_WARM_URL_LIMIT)) {
+      try {
+        await cache.add(url);
+        warmed += 1;
+      } catch {
+        /* one evicted asset must not fail the rest */
+      }
+    }
+    return { warmed, requested: urls.length, reason: '' };
+  } catch {
+    return { warmed: 0, requested: urls.length, reason: 'warm-failed' };
+  }
 }

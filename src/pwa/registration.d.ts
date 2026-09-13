@@ -3,6 +3,8 @@
 
 export const CANDIDATE_SW_URL: string;
 export const CANDIDATE_SW_SCOPE: string;
+export const CANDIDATE_PWA_CACHE: string;
+export const PWA_WARM_URL_LIMIT: number;
 
 export interface UpdateCoordination {
   canActivateUpdate(): boolean;
@@ -35,3 +37,14 @@ export function maybeActivateWaiting(
 export function describeUpdateReadiness(
   coordination: UpdateCoordination | null,
 ): { readonly ready: boolean; readonly activeSections: Array<{ readonly kind: string; readonly tabId: string }> };
+
+export function selectWarmUrls(
+  entries: ReadonlyArray<{ readonly url?: unknown } | string> | null | undefined,
+  origin: string,
+): string[];
+
+export function warmPwaCache(options?: {
+  readonly environment?: typeof globalThis;
+  readonly cacheName?: string;
+  readonly urls?: string[];
+}): Promise<{ readonly warmed: number; readonly requested: number; readonly reason: string }>;

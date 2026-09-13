@@ -38,7 +38,7 @@ import { prepareCanonicalCandidateHost } from './canonical-host.js';
 import { createCandidateIdFactory } from './candidate-shell.js';
 import { Core } from '../../shared/core.js';
 import { createTabCoordinator } from './tab-coordination.js';
-import { registerCandidatePwa } from '../../pwa/registration.js';
+import { registerCandidatePwa, selectWarmUrls, warmPwaCache } from '../../pwa/registration.js';
 import { extractLegacyIndexedDb, snapshotFromStores } from '../../data/migration/extract.ts';
 import { decodeLifecycleId } from '../../data/migration/lifecycle-id.ts';
 import {
@@ -375,6 +375,30 @@ export async function bootProductionApplication(options) {
   try {
     const registered = await registerCandidatePwa({ environment, coordination });
     pwa = { ok: registered.ok, reason: registered.reason };
+    // D5: after an online boot + registration, warm the PWA cache with the
+    // same-origin assets this load actually used (hashed bundles the
+    // worker's install precache cannot name), so the next reload hydrates
+    // offline. Best-effort only: failures never affect the boot result.
+    if (registered.ok) {
+      try {
+        const entries = typeof environment?.performance?.getEntriesByType === 'function'
+          ? environment.performance.getEntriesByType('resource')
+          : [];
+        // Origin comes from the document base (never a runtime authority
+        // input); without it there is nothing safe to warm.
+        let origin = '';
+        try {
+          const doc = environment?.document;
+          if (doc && typeof doc.baseURI === 'string') origin = new URL(doc.baseURI).origin;
+        } catch {
+          origin = '';
+        }
+        const urls = selectWarmUrls(entries, origin);
+        if (urls.length > 0) await warmPwaCache({ environment, urls });
+      } catch {
+        /* offline-cache warming is best-effort chrome */
+      }
+    }
   } catch (error) {
     pwa = { ok: false, reason: error instanceof Error ? error.message : String(error) };
   }

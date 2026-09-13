@@ -68,7 +68,7 @@ import { markCandidatePorts } from './candidate-token.js';
 import { requireCommandContext } from '../commands/index.ts';
 import { composeCycleId, makeBookId, makeGoalId, makeOperationId, makePlanId } from '../../domain/contracts/identity.ts';
 import { effectiveVersionStatus } from '../../domain/contracts/ledger.ts';
-import { canonicalJson } from '../../domain/contracts/canonical.ts';
+import { canonicalJson, stableDigest } from '../../domain/contracts/canonical.ts';
 import { parseCivilDate } from '../../domain/primitives/civil-date.ts';
 import { deriveTrackedPool } from '../../domain/allocations/derive.ts';
 import { convertUntaggedSarMajor } from '../../data/migration/money-conversion.ts';
@@ -124,6 +124,10 @@ export const P04D_D4_GOAL_DELETE_BLOCKED_REASON =
   'P04-D4: goals are append-only and have no delete command; unassign and release the allocation instead of deleting the goal.';
 export const P04D_D4_ALLOWANCE_BLOCKED_REASON =
   'P04-D4: the monthly allowance migrated into the opening cycle starting funds and no command rewrites it; the figure below is read-only.';
+export const P04D_D5_NO_BOOK_PROVISION_REASON =
+  'P04-D5: active canonical storage holds no guest book yet; provisioning a fresh empty book before serving writes.';
+export const P04D_D5_STORAGE_MOVED_REASON =
+  'P04-D5: the active canonical storage moved in another tab; reload to rejoin before writing.';
 
 // Local-preference keys shared with the legacy shell. These hold UI chrome
 // only (theme/motion/language/calendar mirrors, onboarding flow status,
@@ -464,7 +468,11 @@ export async function prepareCanonicalCandidateHost(options = {}) {
   const environment = options.environment ?? globalThis;
   const context = requireCommandContext(options.context);
   const coordination = options.coordination ?? createTabCoordinator({ environment });
-  const openedEpoch = coordination.getEpoch();
+  // D5 correction: the performing tab rebases this value after its own
+  // import/reset activation bump, so its fresh repository stays writable
+  // while every other tab hard-blocks until reload. Never reassigned
+  // except by that same-tab activation path.
+  let openedEpoch = coordination.getEpoch();
   const control = options.control ?? options.storage?.control ?? defaultControlStore(environment);
   const storage = options.storage ?? createDefaultStorage({
     boundScope: context.origin.scopeId,
@@ -530,7 +538,11 @@ export async function prepareCanonicalCandidateHost(options = {}) {
       },
       migration: state.migration,
       coordination,
-      openedEpoch,
+      // Live binding: the same-tab import/reset path rebases the epoch it
+      // opened under after its own activation bump.
+      get openedEpoch() {
+        return openedEpoch;
+      },
       reason,
       refresh: () => refreshCommitted(),
       close: () => closeHost(),
@@ -546,7 +558,22 @@ export async function prepareCanonicalCandidateHost(options = {}) {
       });
     }
   });
-  const unsubscribeInvalidate = coordination.onInvalidate(() => {
+  // D5 correction: an invalidate that names a storage namespace this host
+  // does not hold means another tab flipped the activation pointer
+  // (import/reset) and this tab missed the epoch broadcast. Refreshing the
+  // orphaned repository would serve a fork, so the host goes visibly
+  // unavailable instead: no write can reach the stale namespace, and a
+  // reload rejoins the current one. Same-namespace commits still refresh.
+  const unsubscribeInvalidate = coordination.onInvalidate((announcement) => {
+    try {
+      const announced = announcement?.storageId;
+      if (typeof announced === 'string' && announced && announced !== state.storageId) {
+        setAuthority({ kind: 'unavailable', writable: false, reason: P04D_D5_STORAGE_MOVED_REASON });
+        return;
+      }
+    } catch {
+      /* fall through to the refresh below */
+    }
     void refreshCommitted().catch(() => undefined);
   });
 
@@ -579,6 +606,145 @@ export async function prepareCanonicalCandidateHost(options = {}) {
     state.gateway = createCommandGateway({ repository: next, context });
     state.bookId = resolveGuestBookId(next);
     await refreshCommitted();
+  }
+
+  /**
+   * D5 correction: guarantee a usable canonical book before serving writes.
+   * Reset (and an empty-but-valid import) activates a namespace with no
+   * guest book, which used to leave capture truthfully-but-hopelessly
+   * blocked while onboarding still claimed completion. Provisioning runs
+   * the same facts a fresh install would hold — one `createBook` plus one
+   * zero-funds `openCycle` for the selected month — through the P03 gateway
+   * under a write section, so it is atomic per command, idempotent across
+   * retries (deterministic operation identities replay from the journal),
+   * and offline-capable (no network, no invented allowance). A book that
+   * already exists (or already has an open cycle) is left untouched.
+   * @param {string} scope Caller label for status reporting.
+   * @returns {Promise<boolean>} True when a usable book is present.
+   */
+  async function provisionFreshBookIfMissing(scope) {
+    if (state.bookId) {
+      const open = projectOpenCycleId(currentBook());
+      if (open) return true;
+    }
+    if (!state.gateway || !state.repository) {
+      lifecycleStatus.fail(P04D_D2_NO_BOOK_REASON);
+      return false;
+    }
+    try {
+      authorityPort.assertWritable(`${scope}.provision`);
+    } catch (error) {
+      lifecycleStatus.fail(error instanceof Error ? error.message : String(error));
+      return false;
+    }
+    const made = makeBookId(LEGACY_GUEST_BOOK_ID);
+    if (!made.ok) {
+      lifecycleStatus.fail('canonical recovery refused: invalid guest book identity.');
+      return false;
+    }
+    const monthText = typeof state.selectedDate === 'string' ? state.selectedDate.slice(0, 7) : '';
+    const monthStart = parseCivilDate(/^\d{4}-(0[1-9]|1[0-2])$/.test(monthText) ? `${monthText}-01` : state.selectedDate);
+    if (!monthStart.ok) {
+      lifecycleStatus.fail('canonical recovery refused: invalid selected month.');
+      return false;
+    }
+    let fingerprint = '';
+    try {
+      fingerprint = String(stableDigest(`p04-d5-fresh-book:${state.storageId}`)).slice(0, 16);
+    } catch {
+      fingerprint = '';
+    }
+    if (!fingerprint) {
+      lifecycleStatus.fail('canonical recovery refused: recovery identity is unavailable.');
+      return false;
+    }
+    const bookOperation = makeOperationId(`pf-book-${fingerprint}`);
+    const cycleOperation = makeOperationId(`pf-cycle-${fingerprint}`);
+    if (!bookOperation.ok || !cycleOperation.ok) {
+      lifecycleStatus.fail('canonical recovery refused: invalid recovery identity.');
+      return false;
+    }
+    /** @type {FinanceCommand} */
+    const createBook = {
+      kind: 'createBook',
+      bookId: made.value,
+      displayName: 'Rushd guest book',
+      currency: 'SAR',
+      timeZone: 'Asia/Riyadh',
+      cycleAnchor: { kind: 'firstOfMonth' },
+    };
+    /** @type {FinanceCommand} */
+    const openCycle = {
+      kind: 'openCycle',
+      bookId: made.value,
+      startingFunds: { currency: 'SAR', minorUnits: 0 },
+      startDate: monthStart.value,
+    };
+    return withHeldCritical('write', async () => {
+      try {
+        if (!state.bookId) {
+          const committed = findCommittedIntent(state.repository, bookOperation.value, createBook);
+          if (committed.status === 'conflict') {
+            lifecycleStatus.fail(`recovery operation ${String(bookOperation.value)} is already committed with different content.`);
+            return false;
+          }
+          if (committed.status !== 'replayed') {
+            const result = await state.gateway.execute(createBook, { operationId: bookOperation.value });
+            if (!result.ok) {
+              lifecycleStatus.fail(result.detail ?? 'canonical recovery could not create the guest book');
+              return false;
+            }
+          }
+          state.bookId = resolveGuestBookId(state.repository);
+          await refreshCommitted();
+        }
+        if (!state.bookId) {
+          lifecycleStatus.fail('canonical recovery could not read the guest book after creating it.');
+          return false;
+        }
+        if (!projectOpenCycleId(currentBook())) {
+          const committed = findCommittedIntent(state.repository, cycleOperation.value, openCycle);
+          if (committed.status === 'conflict') {
+            lifecycleStatus.fail(`recovery operation ${String(cycleOperation.value)} is already committed with different content.`);
+            return false;
+          }
+          if (committed.status !== 'replayed') {
+            const result = await state.gateway.execute(openCycle, { operationId: cycleOperation.value });
+            if (!result.ok) {
+              lifecycleStatus.fail(result.detail ?? 'canonical recovery could not open the current cycle');
+              return false;
+            }
+          }
+          await refreshCommitted();
+        }
+        return !!state.bookId;
+      } catch (error) {
+        lifecycleStatus.fail(error instanceof Error ? error.message : String(error));
+        return false;
+      }
+    });
+  }
+
+  /**
+   * D5 correction: adopt an import/reset activation flip. The pointer
+   * already flipped inside the storage adapter; this reopens the new
+   * namespace, guarantees a usable book, then retires every other tab's
+   * writer with an epoch bump that this tab immediately rebases (it
+   * already holds the fresh repository). Receivers that miss the
+   * broadcast still hit the storage-namespace guard on invalidate.
+   * @param {'import' | 'reset'} kind
+   * @param {string} newStorageId
+   */
+  async function adoptActivationFlip(kind, newStorageId) {
+    await reopenActive(newStorageId);
+    state.storageId = newStorageId;
+    await provisionFreshBookIfMissing(kind);
+    try {
+      openedEpoch = coordination.bumpEpoch(`p04-d:${kind}-activated`);
+    } catch {
+      /* the storage-namespace guard still blocks stale writers below */
+    }
+    coordination.announceCommit({ storageId: state.storageId });
   }
 
   const homeStatus = createStatusCell();
@@ -1986,11 +2152,10 @@ export async function prepareCanonicalCandidateHost(options = {}) {
             return { ok: false, reason: result.reason ?? 'error' };
           }
           // Explicit commit point: the control-store pointer flipped inside
-          // importReplacement. Reopen the new active storage before serving
-          // reads or further writes, so no dual v1/v2 writer can exist.
-          await reopenActive(result.activeStorageId);
-          state.storageId = result.activeStorageId;
-          coordination.announceCommit({ storageId: state.storageId });
+          // importReplacement. Adopt the flip (reopen, guarantee a usable
+          // book, retire other tabs) before serving reads or further
+          // writes, so no dual v1/v2 writer can exist.
+          await adoptActivationFlip('import', result.activeStorageId);
           return { ok: true, reason: '' };
         }).catch((error) => {
           portabilityStatus.fail(error instanceof Error ? error.message : String(error));
@@ -2021,16 +2186,17 @@ export async function prepareCanonicalCandidateHost(options = {}) {
         }
         const resetId = toText(asRecord.resetId);
         const confirmation = toText(asRecord.confirmation);
-        // D3: lease-refreshed like import (see restoreSnapshot).
+        // D3: lease-refreshed like import (see restoreSnapshot). The
+        // adoption below reopens the emptied namespace, provisions a fresh
+        // usable book, and retires other tabs, so the resetter keeps a
+        // supported scope instead of a bookless one.
         await withHeldCritical('reset', async () => {
           const result = await storage.resetScope(resetId, confirmation, context.origin.scopeId);
           if (!result.ok) {
             portabilityStatus.fail(result.detail ?? result.reason ?? 'canonical reset failed');
             throw new Error(result.detail ?? 'canonical reset failed');
           }
-          await reopenActive(result.activeStorageId);
-          state.storageId = result.activeStorageId;
-          coordination.announceCommit({ storageId: state.storageId });
+          await adoptActivationFlip('reset', result.activeStorageId);
         });
       },
       clearLocalPreferences() {
@@ -2169,6 +2335,12 @@ export async function prepareCanonicalCandidateHost(options = {}) {
         authorityPort.assertWritable('lifecycle.setCalendarType');
         writePreference(environment, 'rushd_calendar', calendarType);
       },
+      hasUsableBook() {
+        // D5: onboarding/settings must not claim completion while no
+        // usable book exists. This reads the resolved book handle only —
+        // no I/O, never finance truth beyond existence.
+        return !!state.bookId;
+      },
       getOnboardingState() {
         // D4: onboarding is a local setup flow with no canonical finance
         // fact; its status stays a validated local preference.
@@ -2278,6 +2450,21 @@ export async function prepareCanonicalCandidateHost(options = {}) {
     return failClosed(`canonical storage failed to open: ${error instanceof Error ? error.message : String(error)}`);
   }
 
+  // D5 correction: a committed pointer with no guest book (an
+  // interrupted pre-D5 reset, or an empty-but-valid import) must still
+  // boot into a supported scope. The authority turns ready first so the
+  // provisioning write below passes the same writability gate as any
+  // other writer; provisioning then runs before reads serve, so the
+  // first write in a fresh tab succeeds. Boot never fails on this step.
+  setAuthority({ kind: 'canonicalReady', writable: true, storageId: state.storageId });
+  try {
+    if (state.gateway && !state.bookId) {
+      await provisionFreshBookIfMissing('boot');
+    }
+  } catch (error) {
+    lifecycleStatus.fail(error instanceof Error ? error.message : String(error));
+  }
+
   // Bind canonical ports only after ready. Reads serve committed state;
   // writers flow through the gateway from here on.
   //
@@ -2329,7 +2516,6 @@ export async function prepareCanonicalCandidateHost(options = {}) {
   } catch (error) {
     lifecycleStatus.fail(error instanceof Error ? error.message : String(error));
   }
-  setAuthority({ kind: 'canonicalReady', writable: true, storageId: state.storageId });
   if (!state.bookId) {
     captureStatus.fail(P04D_D2_NO_BOOK_REASON);
   }
@@ -2345,7 +2531,11 @@ export async function prepareCanonicalCandidateHost(options = {}) {
     },
     migration: state.migration,
     coordination,
-    openedEpoch,
+    // Live binding: the same-tab import/reset path rebases the epoch it
+    // opened under after its own activation bump.
+    get openedEpoch() {
+      return openedEpoch;
+    },
     reason: '',
     refresh: () => refreshCommitted(),
     close: () => closeHost(),

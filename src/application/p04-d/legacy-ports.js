@@ -1077,6 +1077,11 @@ export function createLegacyFeaturePorts(
     getOnboardingState() {
       return null;
     },
+    hasUsableBook() {
+      // D5: legacy mode always mounts the v1 shape, so setup-completion
+      // claims keep their existing behavior; only candidate mode gates.
+      return true;
+    },
     async persistOnboardingState(status, source = '') {
       authority.assertWritable('lifecycle.persistOnboardingState');
       const next = {
