@@ -462,7 +462,7 @@ function correctionResultId(receipt, fallbackEntryId) {
   *     resetScope(resetId: string, confirmation: string, scopeId: string): Promise<{ ok: boolean, activeStorageId: string, reason?: string, detail?: string }>,
   *   },
  * }} options
- * @returns {Promise<{ ok: boolean, authority: AuthorityState, featurePorts: ShellFeaturePorts, storageId: string, migration: MigrationResult | null, coordination: TabCoordinator, openedEpoch: number, reason: string, refresh(): Promise<void>, close(): Promise<void> }>}
+ * @returns {Promise<{ ok: boolean, authority: AuthorityState, featurePorts: ShellFeaturePorts, storageId: string, migration: MigrationResult | null, coordination: TabCoordinator, openedEpoch: number, reason: string, refresh(): Promise<void>, close(): Promise<void>, onCommitted(handler: (info: { storageId: string }) => void): () => void }>}
  */
 export async function prepareCanonicalCandidateHost(options = {}) {
   const environment = options.environment ?? globalThis;
@@ -546,6 +546,33 @@ export async function prepareCanonicalCandidateHost(options = {}) {
       reason,
       refresh: () => refreshCommitted(),
       close: () => closeHost(),
+      // A failed host holds no namespace to converge: subscriptions are
+      // accepted and immediately removable but never fire.
+      onCommitted: () => () => undefined,
+    };
+  };
+
+  // D5 round-3: same-namespace commit subscribers. The mounted legacy UI
+  // re-mirrors the visible day from the refreshed read model here, so its
+  // cards track the canonical count without another reload. The set lives
+  // on the host (not the ports): filtering stays with the namespace owner,
+  // and the port surface asserted by the latch is untouched.
+  const committedHandlers = new Set();
+  const notifyCommitted = () => {
+    const info = { storageId: state.storageId };
+    for (const handler of [...committedHandlers]) {
+      try {
+        handler(info);
+      } catch {
+        /* a subscriber failure must not break coordination or hydration */
+      }
+    }
+  };
+  const onCommitted = (handler) => {
+    if (typeof handler !== 'function') return () => undefined;
+    committedHandlers.add(handler);
+    return () => {
+      committedHandlers.delete(handler);
     };
   };
 
@@ -564,6 +591,12 @@ export async function prepareCanonicalCandidateHost(options = {}) {
   // orphaned repository would serve a fork, so the host goes visibly
   // unavailable instead: no write can reach the stale namespace, and a
   // reload rejoins the current one. Same-namespace commits still refresh.
+  // D5 round-3: after that refresh settles, same-namespace subscribers are
+  // notified so the mounted legacy UI re-mirrors the visible day from the
+  // same read model the count uses (cards track count without a reload).
+  // Foreign flips never notify: re-mirroring an orphan would resurrect the
+  // fork in the UI that the unavailable transition just retired. Read-only
+  // throughout: writability and epoch guards are untouched.
   const unsubscribeInvalidate = coordination.onInvalidate((announcement) => {
     try {
       const announced = announcement?.storageId;
@@ -574,7 +607,7 @@ export async function prepareCanonicalCandidateHost(options = {}) {
     } catch {
       /* fall through to the refresh below */
     }
-    void refreshCommitted().catch(() => undefined);
+    void refreshCommitted().then(notifyCommitted, notifyCommitted).catch(() => undefined);
   });
 
   async function refreshCommitted() {
@@ -592,6 +625,7 @@ export async function prepareCanonicalCandidateHost(options = {}) {
   async function closeHost() {
     unsubscribeEpoch();
     unsubscribeInvalidate();
+    committedHandlers.clear();
     const repository = state.repository;
     state.repository = null;
     state.gateway = null;
@@ -2644,6 +2678,7 @@ export async function prepareCanonicalCandidateHost(options = {}) {
     reason: '',
     refresh: () => refreshCommitted(),
     close: () => closeHost(),
+    onCommitted,
   };
 }
 

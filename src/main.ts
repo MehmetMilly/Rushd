@@ -16,7 +16,7 @@ assertTranslationCatalog(TRANSLATIONS);
 // or runtime toggle can change it. The shell stays mounted through
 // preparation and failure; v1 is extraction-only after the mount.
 void (async () => {
-    const { app, dataRuntime } = await bootProductionApplication({
+    const { app, dataRuntime, host } = await bootProductionApplication({
         Vue,
         environment: globalThis,
         template: rootTemplate
@@ -28,6 +28,30 @@ void (async () => {
     // existing test harness exercise the same DB, Store, and mounted proxy as the
     // legacy build without depending on Vue's private production internals.
     installLegacyDebugBridge(globalThis, dataRuntime, mountedProxy);
+
+    // D5 round-3: live same-namespace commit → read-only Home re-mirror, so
+    // every same-origin tab's cards track the canonical count without a
+    // reload (the A55 A9 divergence). The host notifies only for the
+    // namespace it holds — foreign flips already retired this tab and never
+    // notify, so no orphaned fork can reach the UI. The resync assigns
+    // in-memory view rows from the refreshed read model; it performs no
+    // finance write and changes no authority. Best-effort: reload still
+    // converges through the boot mirror when this subscription is absent.
+    try {
+        const proxyRecord = mountedProxy as unknown as Record<string, unknown>;
+        const hostRecord = host as unknown as Record<string, unknown> | null | undefined;
+        const subscribe = hostRecord?.onCommitted;
+        const resync = proxyRecord?.resyncP04DCandidateHome;
+        if (typeof subscribe === 'function' && typeof resync === 'function') {
+            (subscribe as (handler: () => void) => unknown).call(hostRecord, () => {
+                void Promise.resolve()
+                    .then(() => (resync as () => Promise<void>).call(proxyRecord))
+                    .catch(() => undefined);
+            });
+        }
+    } catch {
+        /* live re-mirror is best-effort chrome; the boot mirror still converges on reload */
+    }
 
     console.log('Rushd fully loaded.');
 })().catch((error) => {

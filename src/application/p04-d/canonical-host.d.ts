@@ -62,6 +62,15 @@ export interface CanonicalHost {
   readonly reason: string;
   refresh(): Promise<void>;
   close(): Promise<void>;
+  /**
+   * D5 round-3: subscribe to same-namespace durable commits observed by
+   * this host (its own commits announce too, via the shared bus). The
+   * handler fires only after the refreshed read model settles and never
+   * for foreign-namespace flips (those retire the tab instead). Read-only:
+   * it never changes writability. The composition root uses it to
+   * re-mirror the visible legacy day so cards track the canonical count.
+   */
+  onCommitted(handler: (info: { readonly storageId: string }) => void): () => void;
 }
 
 export function prepareCanonicalCandidateHost(options?: CanonicalHostOptions): Promise<CanonicalHost>;

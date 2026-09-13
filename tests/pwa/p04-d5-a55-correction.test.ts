@@ -594,4 +594,57 @@ describe('P04-D5 A55 correction', () => {
     expect(stray.ok).toBe(false);
     await tabA.host.close();
   });
+
+  it('A9 round-3: same-namespace commits notify onCommitted without changing writability', async () => {
+    const control = createMemoryControlStore();
+    const coordStore = memoryStore();
+    const { context } = createDeterministicContext({ deviceId: 'dev-a55-correction' });
+    const storage = createMemoryStorage({ context, control });
+    const tabA = await openTab({ tag: 'liveA', control, coordStore, storage, snapshot: fakeV1Snapshot() });
+    const tabB = await openTab({ tag: 'liveB', control, coordStore, storage });
+    expect(typeof tabA.host.onCommitted).toBe('function');
+
+    const notified: Array<{ storageId: string }> = [];
+    const off = tabA.host.onCommitted((info) => {
+      notified.push({ storageId: String(info.storageId) });
+    });
+    const committed = await submitDayExpense(tabB.host, 'liveB', 'a55-live-row', 6);
+    expect(committed.ok).toBe(true);
+    // The broadcast refresh + notify path is async: poll briefly.
+    const deadline = Date.now() + 2000;
+    while (notified.length === 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    expect(notified.length).toBeGreaterThan(0);
+    expect(notified[notified.length - 1]!.storageId).toBe(tabA.host.storageId);
+    // Read-only throughout: the observing tab stays writable, and a re-read
+    // serves the committed row (exactly what the UI re-mirror paints).
+    expect(tabA.host.featurePorts.authority.getState().kind).toBe('canonicalReady');
+    await tabA.host.refresh();
+    expect(tabA.host.featurePorts.home.listSelectedDayExpenses().map((row) => row.name))
+      .toContain('a55-live-row');
+    off();
+    await tabA.host.close();
+    await tabB.host.close();
+  });
+
+  it('A9 round-3: foreign-namespace flips never notify onCommitted', async () => {
+    const control = createMemoryControlStore();
+    const coordStore = memoryStore();
+    const { context } = createDeterministicContext({ deviceId: 'dev-a55-correction' });
+    const storage = createMemoryStorage({ context, control });
+    const tab = await openTab({ tag: 'liveF', control, coordStore, storage, snapshot: fakeV1Snapshot() });
+    let notified = 0;
+    tab.host.onCommitted(() => {
+      notified += 1;
+    });
+    const foreign = createTabCoordinator({ tabId: 'a55-live-foreign', environment: SYNC_ENV, store: coordStore });
+    foreign.announceCommit({ storageId: 'imp-live-foreign' });
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    // Retired, not re-mirrored: no notify, visibly unavailable.
+    expect(notified).toBe(0);
+    expect(tab.host.featurePorts.authority.getState().kind).toBe('unavailable');
+    foreign.close();
+    await tab.host.close();
+  });
 });

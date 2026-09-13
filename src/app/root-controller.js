@@ -144,38 +144,49 @@ export function installRootController(app, dataRuntime, environment = globalThis
     // the established template renders committed canonical rows with no
     // visual change. This assigns only in-memory view fields; it never
     // reads or writes v1 finance persistence.
+    // D5 round-3: paint from the already-hydrated cache BEFORE the refresh
+    // round-trip, then refresh and re-paint. Boot already hydrated, so the
+    // first paint shows committed rows immediately; the second picks up a
+    // commit that landed between open and paint. Previously the only paint
+    // waited for the refresh, so an early read saw the canonical count
+    // while the cards still showed the pre-refresh mirror — the A55 A9
+    // count-vs-cards divergence.
     const syncP04DCandidateHome = async (vm) => {
         const ports = p04dCandidatePorts;
         if (!ports) return;
+        const paint = () => {
+            const rows = ports.home.listSelectedDayExpenses();
+            vm.store.currentViewExpenses = Array.isArray(rows) ? rows.map((row) => ({ ...row })) : [];
+            try {
+                vm.store.currentDate = ports.home.getSelectedDate() || vm.store.currentDate;
+            } catch {
+                /* keep the current date on read failure */
+            }
+            // D4: Home safe-to-spend is canonical availability. The monthly
+            // budget still has no canonical fact, so `budgetKnown` stays false
+            // and `Store.safeToSpend` remains unknown. The hero reads
+            // `p04dSafeToSpend` instead of inventing a budget.
+            try {
+                const amount = ports.home.getSafeToSpend();
+                vm.p04dSafeToSpend = amount === null || amount === undefined || !Number.isFinite(Number(amount))
+                    ? null
+                    : Number(amount);
+            } catch {
+                vm.p04dSafeToSpend = null;
+            }
+            try {
+                if (vm.store.statistics) vm.store.statistics.budgetKnown = false;
+            } catch {
+                /* the hero keeps its last state on mirror failure */
+            }
+        };
+        paint();
         try {
             if (typeof ports.home.refresh === 'function') await ports.home.refresh();
         } catch {
             /* a failed refresh keeps the last committed rows; writers stay gated */
         }
-        const rows = ports.home.listSelectedDayExpenses();
-        vm.store.currentViewExpenses = Array.isArray(rows) ? rows.map((row) => ({ ...row })) : [];
-        try {
-            vm.store.currentDate = ports.home.getSelectedDate() || vm.store.currentDate;
-        } catch {
-            /* keep the current date on read failure */
-        }
-        // D4: Home safe-to-spend is canonical availability. The monthly
-        // budget still has no canonical fact, so `budgetKnown` stays false
-        // and `Store.safeToSpend` remains unknown. The hero reads
-        // `p04dSafeToSpend` instead of inventing a budget.
-        try {
-            const amount = ports.home.getSafeToSpend();
-            vm.p04dSafeToSpend = amount === null || amount === undefined || !Number.isFinite(Number(amount))
-                ? null
-                : Number(amount);
-        } catch {
-            vm.p04dSafeToSpend = null;
-        }
-        try {
-            if (vm.store.statistics) vm.store.statistics.budgetKnown = false;
-        } catch {
-            /* the hero keeps its last state on mirror failure */
-        }
+        paint();
     };
     // P04-D4: canonical mirrors for the remaining ports. Each assigns only
     // in-memory view fields the established template already binds; none
@@ -1333,6 +1344,18 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     }
                     if (this.selectionMode) this.exitSelectionMode();
                     this.store.loadDay(iso);
+                },
+                // D5 round-3: read-only live re-mirror of the visible day
+                // when another same-origin tab commits. Wired by the
+                // composition root to the host's same-namespace commit
+                // notifications. It assigns only in-memory view rows from
+                // the refreshed read model: no finance write, no authority
+                // change, no selection/nav/scroll churn — a stale
+                // (epoch-blocked) tab refreshes its cards without becoming
+                // writable.
+                async resyncP04DCandidateHome() {
+                    if (!p04dIsCandidate()) return;
+                    await syncP04DCandidateHome(this);
                 },
                 centerDateScroller(iso, behavior = 'smooth') {
                     // Retry up to 10 times with 150ms intervals (handles v-if transition delays)
