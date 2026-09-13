@@ -45,8 +45,11 @@ assert.match(rootController, /\$p04dPorts/, 'P04-D controller seam must expose t
 assert.doesNotMatch(rootController, /canonicalReady|canonicalCandidate/, 'P04-D1 controller must not resolve candidate authority.');
 
 const main = await readFile('src/main.ts', 'utf8');
-assert.match(main, /createLegacyApplication/, 'P04-C composition root must keep createLegacyApplication.');
+assert.match(main, /bootProductionApplication/, 'P04-D4 production entry must boot through the reviewed production cutover.');
+assert.match(main, /production-boot\.js/, 'P04-D4 production entry must use the build-time authority module.');
 assert.doesNotMatch(main, /createGuestApplication/, 'Rollback release must not mount createGuestApplication.');
+assert.doesNotMatch(main, /canonicalCandidate/, 'P04-D4 production entry must not name candidate modes; the boot module owns the single injection.');
+assert.doesNotMatch(main, /candidatePorts/, 'P04-D4 production entry must not pass raw candidate ports; the boot module owns the single injection.');
 
 const vercel = JSON.parse(await readFile('vercel.json', 'utf8'));
 assert.deepEqual(Object.keys(vercel), ['headers'], 'Rollback host config must be headers-only.');

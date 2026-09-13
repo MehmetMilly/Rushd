@@ -25,11 +25,11 @@ const KNOWN_PORT_SURFACE = Object.freeze({
     home: Object.freeze(['getSelectedDate', 'getSafeToSpend', 'getDailyPaidTotal', 'getDailyExpectedTotal', 'listSelectedDayExpenses', 'selectDate', 'refresh', 'getStatus']),
     capture: Object.freeze(['submitExpense', 'payExpense', 'markUnpaid', 'autoFillDay', 'getStatus']),
     history: Object.freeze(['listDayExpenses', 'updateExpense', 'deleteExpense', 'deleteSelected', 'markSelectedUnpaid', 'getStatus']),
-    plan: Object.freeze(['listProfiles', 'getActiveProfileId', 'setActiveProfile', 'createProfile', 'previewApply', 'confirmApply', 'getStatus']),
+    plan: Object.freeze(['listProfiles', 'listPlans', 'getActiveProfileId', 'setActiveProfile', 'createProfile', 'previewApply', 'confirmApply', 'getStatus']),
     insights: Object.freeze(['getMonthStatistics', 'getCategoryBreakdown', 'getWeeklySpending', 'refresh', 'getStatus']),
     goals: Object.freeze(['getVaultBalance', 'listGoals', 'addGoal', 'deleteGoal', 'getStatus']),
     portability: Object.freeze(['buildSnapshot', 'restoreSnapshot', 'factoryReset', 'clearLocalPreferences', 'getStatus']),
-    navigation: Object.freeze(['resolveIntent', 'listDestinations', 'getStatus']),
+    navigation: Object.freeze(['resolveIntent', 'listDestinations', 'persistIntent', 'restoreIntent', 'getStatus']),
     lifecycle: Object.freeze(['initialize', 'getSettings', 'getStatus']),
 });
 

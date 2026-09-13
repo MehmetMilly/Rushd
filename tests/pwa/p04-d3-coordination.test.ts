@@ -146,6 +146,9 @@ describe('service-worker activation epoch glue', () => {
     const environment = {
       navigator: {
         serviceWorker: {
+          // A live controller means a genuine update over a previous
+          // binary (D4: a first install must not bump).
+          controller: {},
           register: async () => registration,
         },
       },

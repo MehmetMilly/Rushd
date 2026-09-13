@@ -260,10 +260,12 @@ describe('d3 blocked actions and authority', () => {
     await host.close();
   });
 
-  it('keeps safe-to-spend unknown instead of fabricating a value', async () => {
+  it('projects open-cycle availability instead of fabricating a zero', async () => {
     const { host } = await migratedHost({ migrationId: 'mg-d3-safe-1' });
     expect(host.ok).toBe(true);
-    expect(host.featurePorts.home.getSafeToSpend()).toBeNull();
+    const amount = host.featurePorts.home.getSafeToSpend();
+    expect(amount).not.toBeNull();
+    expect(Number.isFinite(amount)).toBe(true);
     await host.close();
   });
 });

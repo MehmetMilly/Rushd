@@ -34,6 +34,8 @@ export const ownedProductionFiles = Object.freeze([
     'src/application/p04-d/read-models.d.ts',
     'src/application/p04-d/canonical-host.js',
     'src/application/p04-d/canonical-host.d.ts',
+    'src/application/p04-d/production-boot.js',
+    'src/application/p04-d/production-boot.d.ts',
     'src/application/p04-d/index.ts',
     'src/pwa/registration.js',
     'src/pwa/registration.d.ts',

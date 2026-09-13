@@ -1,8 +1,9 @@
-// P04-D2: candidate-only canonical guest host.
+// P04-D2/D4: candidate-only canonical guest host.
 //
 // `prepareCanonicalCandidateHost` assembles the canonical finance authority
 // behind D1's explicit candidate latch while the established legacy shell
-// stays mounted and default production stays legacy-authoritative. It
+// stays mounted. Since the D4 cutover, ordinary production mounts this
+// host through `production-boot.js`. It
 // composes the accepted P04-B/C and P03 interfaces — never reimplementing
 // them:
 //
@@ -44,16 +45,29 @@
 
 import { createCommandGateway, mintOperationId } from './command-gateway.js';
 import {
+  isMonthKeyText,
+  projectAvailabilityAmount,
+  projectBookSettings,
+  projectCommitmentsTotal,
   projectDailyExpectedTotal,
   projectDailyPaidTotal,
   projectDayHistory,
+  projectLatestSettlement,
+  projectMonthCategoryBreakdown,
+  projectMonthPaidTotal,
+  projectMonthWeeklySpending,
+  projectOpenCycleId,
+  projectOpenCycleMonthKey,
+  projectPlanSummaries,
   projectSelectedDayExpenses,
+  projectTrackedPoolTotal,
   minorUnitsToSarMajor,
 } from './read-models.js';
 import { COORDINATION_HEARTBEAT_MS, createTabCoordinator } from './tab-coordination.js';
 import { markCandidatePorts } from './candidate-token.js';
 import { requireCommandContext } from '../commands/index.ts';
-import { makeBookId, makeOperationId } from '../../domain/contracts/identity.ts';
+import { composeCycleId, makeBookId, makeGoalId, makeOperationId, makePlanId } from '../../domain/contracts/identity.ts';
+import { effectiveVersionStatus } from '../../domain/contracts/ledger.ts';
 import { canonicalJson } from '../../domain/contracts/canonical.ts';
 import { parseCivilDate } from '../../domain/primitives/civil-date.ts';
 import { deriveTrackedPool } from '../../domain/allocations/derive.ts';
@@ -102,6 +116,20 @@ export const P04D_D3_PAY_BLOCKED_REASON =
   'P04-D3: pay/reopen/auto-fill has no exact canonical equivalent for a paid actual (correction or reversal only); the action stays visibly blocked and never falls through to v1.';
 export const P04D_D3_BULK_UNPAID_BLOCKED_REASON =
   'P04-D3: bulk mark-unpaid has no exact canonical equivalent and stays visibly blocked; correct or reverse individual expenses instead.';
+export const P04D_D4_PROFILE_BLOCKED_REASON =
+  'P04-D4: template profiles and offdays are a v1-only grouping with no canonical counterpart; plans carry their own schedule and revisions instead.';
+export const P04D_D4_TEMPLATE_DELETE_BLOCKED_REASON =
+  'P04-D4: recurring plans are append-only and have no delete command; detach or revise an occurrence instead of deleting the rule.';
+export const P04D_D4_GOAL_DELETE_BLOCKED_REASON =
+  'P04-D4: goals are append-only and have no delete command; unassign and release the allocation instead of deleting the goal.';
+export const P04D_D4_ALLOWANCE_BLOCKED_REASON =
+  'P04-D4: the monthly allowance migrated into the opening cycle starting funds and no command rewrites it; the figure below is read-only.';
+
+// Local-preference keys shared with the legacy shell. These hold UI chrome
+// only (theme/motion/language/calendar mirrors, onboarding flow status,
+// navigation intent, prompt deferrals) and never finance truth.
+export const P04D_ONBOARDING_STATE_KEY = 'onboardingState';
+export const P04D_NAV_INTENT_KEY = 'rushd_nav_intent';
 
 const MONTH_KEY_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -495,7 +523,11 @@ export async function prepareCanonicalCandidateHost(options = {}) {
       ok: false,
       authority: authorityPort.getState(),
       featurePorts: ports,
-      storageId: state.storageId,
+      // Live binding: import/reset flip the activation pointer after this
+      // object is returned, and observers must see the current namespace.
+      get storageId() {
+        return state.storageId;
+      },
       migration: state.migration,
       coordination,
       openedEpoch,
@@ -573,6 +605,74 @@ export async function prepareCanonicalCandidateHost(options = {}) {
     }
     return null;
   };
+
+  /**
+   * P04-D4 shared writer: run one caller-built canonical command through
+   * the P03 gateway under a lease-refreshed write section, with
+   * retry-stable operation identity. A retry after a lost acknowledgement
+   * replays the journaled receipt instead of duplicating the effect; a
+   * reused identity with different content is refused with no write.
+   * Visible state mutates only after the durable commit, which is then
+   * announced so other tabs invalidate.
+   * @param {{ scope: string, statusCell: { fail(message: string): void }, command: FinanceCommand, operationIdRaw?: unknown }} write
+   * @returns {Promise<{ ok: true, receipt: import('../commands/index.ts').CommandReceipt, replayed?: boolean } | { ok: false, reason: string, detail?: string }>}
+   */
+  async function runCanonicalWrite(write) {
+    const operation = resolveCallerOperationId(write.operationIdRaw, context);
+    if (!operation.ok) {
+      write.statusCell.fail(`canonical ${write.scope} refused: invalid operation identity.`);
+      return { ok: false, reason: 'validation' };
+    }
+    if (!state.bookId) {
+      write.statusCell.fail(P04D_D2_NO_BOOK_REASON);
+      return { ok: false, reason: 'blocked' };
+    }
+    const committed = findCommittedIntent(state.repository, operation.value, write.command);
+    if (committed.status === 'replayed') {
+      await refreshCommitted();
+      coordination.announceCommit({ storageId: state.storageId, operationId: String(operation.value) });
+      return { ok: true, receipt: committed.receipt, replayed: true };
+    }
+    if (committed.status === 'conflict') {
+      write.statusCell.fail(`operation ${String(operation.value)} is already committed with different content; a new intent needs a fresh identity.`);
+      return { ok: false, reason: 'error' };
+    }
+    return withHeldCritical('write', async () => {
+      try {
+        const result = await state.gateway.execute(write.command, { operationId: operation.value });
+        if (!result.ok) {
+          const reason = gatewayFailureReason(result.failure);
+          write.statusCell.fail(result.detail ?? `canonical ${write.scope} failed`);
+          return { ok: false, reason, detail: result.detail };
+        }
+        await refreshCommitted();
+        coordination.announceCommit({ storageId: state.storageId, operationId: String(operation.value) });
+        return { ok: true, receipt: result.receipt };
+      } catch (error) {
+        const reason = error instanceof Error && /epoch/i.test(error.message) ? 'blocked' : 'error';
+        write.statusCell.fail(error instanceof Error ? error.message : String(error));
+        return { ok: false, reason };
+      }
+    });
+  }
+
+  /**
+   * Last day of the month containing `isoDate` (`YYYY-MM-DD`), or null when
+   * the input is not a civil date. Materialization applies through the end
+   * of the effective month, mirroring the legacy apply-from-month range.
+   * @param {string} isoDate
+   * @returns {string | null}
+   */
+  function monthEndOf(isoDate) {
+    const parsed = parseCivilDate(isoDate);
+    if (!parsed.ok) return null;
+    const year = Number(parsed.value.slice(0, 4));
+    const month = Number(parsed.value.slice(5, 7));
+    if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) return null;
+    const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    const tail = String(lastDay).padStart(2, '0');
+    return `${parsed.value.slice(0, 7)}-${tail}`;
+  }
 
   /**
    * Hold a coordination critical section across an async task while
@@ -708,6 +808,388 @@ export async function prepareCanonicalCandidateHost(options = {}) {
     };
   }
 
+  /**
+   * Build a `createRecurringPlan` payload from a legacy-shaped template or
+   * flexible definition, or report the validation issue. Mapping
+   * (documented, no invented fields): id carries as the plan identity, name
+   * verbatim, expected cost as the per-occurrence amount, the first valid
+   * monthly day as the schedule, and a flexible source as a descriptive
+   * link. Monthly budgets, max-uses caps, profiles, offdays, and assignment
+   * rules have no canonical counterpart and are never inferred: a template
+   * without an explicit amount and schedule day is refused instead of
+   * guessed.
+   * @param {unknown} template
+   * @param {unknown} effectiveDateRaw
+   * @returns {{ ok: true, planId: unknown, name: string, amount: { currency: string, minorUnits: number }, scheduleDay: number, effectiveDate: string, flexibleDefinitionId: string | null } | { ok: false, issue: string }}
+   */
+  function buildRecurringPlanCommand(template, effectiveDateRaw) {
+    const record = template && typeof template === 'object' ? template : {};
+    const rawId = typeof record.id === 'string' ? record.id : '';
+    if (!rawId) return { ok: false, issue: 'missing template id' };
+    const planId = makePlanId(rawId);
+    if (!planId.ok) return { ok: false, issue: 'invalid template id' };
+    const name = toText(record.name).trim() || rawId;
+    const rawAmount = Number.isFinite(record.expectedCost)
+      ? record.expectedCost
+      : (Number.isFinite(record.defaultAmount) ? record.defaultAmount : NaN);
+    if (!Number.isFinite(rawAmount) || rawAmount <= 0) {
+      return { ok: false, issue: 'template needs an explicit positive amount' };
+    }
+    const converted = convertUntaggedSarMajor(rawAmount, {
+      database: 'MicroSaveOS_DB',
+      databaseVersion: 1,
+      store: 'templates',
+      recordKey: 'candidate-plan',
+      field: 'expectedCost',
+    });
+    if (!converted.ok) return { ok: false, issue: 'invalid template amount' };
+    const days = Array.isArray(record.days) ? record.days : [];
+    const scheduleDay = days.find((day) => Number.isInteger(day) && day >= 1 && day <= 31);
+    if (scheduleDay === undefined) return { ok: false, issue: 'template needs an explicit monthly day' };
+    const dateText = toText(effectiveDateRaw) || state.selectedDate;
+    const localDate = parseCivilDate(dateText);
+    if (!localDate.ok) return { ok: false, issue: 'invalid effective date' };
+    const flexibleDefinitionId = record.source === 'flexible' && rawId
+      ? rawId
+      : (typeof record.flexibleDefinitionId === 'string' ? record.flexibleDefinitionId : null);
+    return {
+      ok: true,
+      planId: planId.value,
+      name,
+      amount: converted.money,
+      scheduleDay,
+      effectiveDate: localDate.value,
+      flexibleDefinitionId,
+    };
+  }
+
+  /**
+   * @param {string} rangeStart
+   * @param {string} reason
+   * @returns {{ rangeStart: string, rangeEnd: string, createCount: number, updateCount: number, deleteCount: number, totalChanges: number, blocked: boolean, blockedReason: string }}
+   */
+  function emptyApplyPreview(rangeStart, reason) {    return {
+      rangeStart,
+      rangeEnd: '',
+      createCount: 0,
+      updateCount: 0,
+      deleteCount: 0,
+      totalChanges: 0,
+      blocked: true,
+      blockedReason: reason,
+    };
+  }
+
+  /**
+   * Month-end settlement through the append-only cycle commands: close the
+   * open cycle, then dispose its remainder. `vault` funds the tracked pool,
+   * `budget` carries into the next cycle, `noSurplus` leaves the remainder
+   * independent. The whole close+dispose runs inside one lease-refreshed
+   * write section; audit history (settlements, carry actions) is preserved.
+   * Retry-safe: an already-closed-and-disposed month returns its settlement
+   * instead of moving money twice, and a close-then-false retry disposes
+   * the existing settlement instead of failing.
+   * @param {string} scope
+   * @param {'vault' | 'budget' | 'noSurplus'} decision
+   * @param {unknown} summary
+   * @param {unknown} referenceDate
+   * @returns {Promise<unknown>}
+   */
+  async function runMonthEndSettlement(scope, decision, summary, referenceDate) {
+    const blocked = requireWritable(scope);
+    if (blocked) {
+      goalsStatus.fail(`P04-D writes blocked for '${scope}': the authority is not writable.`);
+      return null;
+    }
+    if (!state.bookId) {
+      goalsStatus.fail(P04D_D2_NO_BOOK_REASON);
+      return null;
+    }
+    const record = summary && typeof summary === 'object' ? summary : {};
+    const previousMonthKey = typeof record.previousMonthKey === 'string' ? record.previousMonthKey : '';
+    if (!isMonthKeyText(previousMonthKey)) {
+      goalsStatus.fail(`canonical settlement refused: invalid previous month.`);
+      return null;
+    }
+    const expectedCycle = composeCycleId(state.bookId, `${previousMonthKey}-01`);
+    if (!expectedCycle.ok) {
+      goalsStatus.fail('canonical settlement refused: invalid cycle identity.');
+      return null;
+    }
+    return withHeldCritical('write', async () => {
+      const settled = await settleWithCommands(scope, decision, previousMonthKey, expectedCycle.value);
+      await refreshCommitted();
+      if (settled.ok) {
+        coordination.announceCommit({ storageId: state.storageId });
+        return settled.settlement;
+      }
+      goalsStatus.fail(settled.detail);
+      return null;
+    }).catch((error) => {
+      goalsStatus.fail(error instanceof Error ? error.message : String(error));
+      return null;
+    });
+  }
+
+  /**
+   * First day of the month after `monthKey` (`YYYY-MM`), or null when the
+   * input is not a month key.
+   * @param {string} monthKey
+   * @returns {string | null}
+   */
+  function nextStartFor(monthKey) {
+    if (!isMonthKeyText(monthKey)) return null;
+    const year = Number(monthKey.slice(0, 4));
+    let nextYear = year;
+    let nextMonth = Number(monthKey.slice(5, 7)) + 1;
+    if (nextMonth === 13) {
+      nextYear += 1;
+      nextMonth = 1;
+    }
+    return `${String(nextYear).padStart(4, '0')}-${String(nextMonth).padStart(2, '0')}-01`;
+  }
+
+  /**
+   * Ensure an open cycle exists for a funding/carry disposition, opening
+   * the cycle starting `startDate` with zero starting funds when none is
+   * open. An already-open cycle is reused untouched.
+   * @param {string} scope
+   * @param {string | null} startDate
+   * @returns {Promise<{ ok: true } | { ok: false, detail: string }>}
+   */
+  async function ensureOpenCycleForDisposition(scope, startDate) {
+    if (projectOpenCycleId(currentBook())) return { ok: true };
+    if (!startDate) {
+      return { ok: false, detail: `canonical ${scope} refused: no open cycle and no next cycle to open` };
+    }
+    const book = currentBook();
+    const currency = book?.book?.currency ?? 'SAR';
+    /** @type {FinanceCommand} */
+    const open = {
+      kind: 'openCycle',
+      bookId: state.bookId,
+      startingFunds: { currency, minorUnits: 0 },
+      startDate,
+    };
+    let result;
+    try {
+      result = await state.gateway.execute(open, { operationId: mintOperationId(context) });
+    } catch (error) {
+      return { ok: false, detail: error instanceof Error ? error.message : String(error) };
+    }
+    if (result.ok) {
+      await refreshCommitted();
+      return { ok: true };
+    }
+    // Another tab may have opened the cycle first: re-read before failing.
+    await refreshCommitted();
+    if (projectOpenCycleId(currentBook())) return { ok: true };
+    return { ok: false, detail: result.detail ?? `canonical ${scope} could not open the next cycle` };
+  }
+
+  /**
+   * @param {string} scope
+   * @param {'vault' | 'budget' | 'noSurplus'} decision
+   * @param {string} previousMonthKey
+   * @param {unknown} expectedCycleId
+   * @returns {Promise<{ ok: true, settlement: unknown } | { ok: false, detail: string }>}
+   */
+  async function settleWithCommands(scope, decision, previousMonthKey, expectedCycleId) {
+    const book = currentBook();
+    const existing = book && Array.isArray(book.settlements)
+      ? book.settlements.filter((settlement) => String(settlement.cycleId) === String(expectedCycleId) && settlement.reversed !== true)
+      : [];
+    const latest = existing.length > 0 ? existing[existing.length - 1] : null;
+    const consumed = latest && book
+      ? book.carryActions.some((action) => String(action.settlementId) === String(latest.settlementId))
+      : false;
+    if (latest && consumed) {
+      // Idempotent success: this month already closed and disposed.
+      return { ok: true, settlement: latest };
+    }
+    let settlement = latest;
+    if (!settlement) {
+      /** @type {FinanceCommand} */
+      const close = {
+        kind: 'closeCycle',
+        bookId: state.bookId,
+        cycleId: expectedCycleId,
+        note: `month-end ${previousMonthKey} to ${decision}`,
+      };
+      let closed;
+      try {
+        closed = await state.gateway.execute(close, { operationId: mintOperationId(context) });
+      } catch (error) {
+        return { ok: false, detail: error instanceof Error ? error.message : String(error) };
+      }
+      if (!closed.ok) {
+        // Close-then-false retry: the close may have committed while its
+        // acknowledgement was lost. Re-read before failing: an existing
+        // settlement for the named cycle continues below instead of
+        // failing the retry.
+        await refreshCommitted();
+        const reread = currentBook();
+        const found = reread && Array.isArray(reread.settlements)
+          ? reread.settlements.filter((entry) => String(entry.cycleId) === String(expectedCycleId) && entry.reversed !== true)
+          : [];
+        if (found.length === 0) {
+          return { ok: false, detail: closed.detail ?? `canonical ${scope} close failed` };
+        }
+        settlement = found[found.length - 1];
+        const alreadyConsumed = reread.carryActions.some(
+          (action) => String(action.settlementId) === String(settlement.settlementId),
+        );
+        if (alreadyConsumed) return { ok: true, settlement };
+      } else {
+        const effect = closed.receipt.effects.find((entry) => entry.kind === 'cycleClosed');
+        if (!effect || !('settlementId' in effect)) {
+          return { ok: false, detail: `canonical ${scope} close produced no settlement` };
+        }
+        const afterClose = currentBook();
+        settlement = afterClose && Array.isArray(afterClose.settlements)
+          ? (afterClose.settlements.find((entry) => String(entry.settlementId) === String(effect.settlementId)) ?? null)
+          : null;
+        if (!settlement) {
+          return { ok: false, detail: `canonical ${scope} settlement is not readable after close` };
+        }
+      }
+    }
+    const availability = settlement.availability ?? null;
+    const minorUnits = availability && typeof availability.minorUnits === 'number' ? availability.minorUnits : NaN;
+    if (decision !== 'noSurplus' && (!Number.isSafeInteger(minorUnits) || minorUnits <= 0)) {
+      return { ok: false, detail: `canonical ${scope} refused: no positive remainder to move` };
+    }
+    /** @type {{ kind: string, amount?: unknown, destinationCycleId?: unknown }} */
+    let disposition = { kind: 'leaveIndependent' };
+    if (decision !== 'noSurplus') {
+      // Funding and carry-in land on an existing open cycle. When the
+      // closed month was the last open one, open the next cycle first with
+      // explicitly zero starting funds: no new allowance is invented (the
+      // allowance is read-only migrated history), and the remainder
+      // movement itself populates the new cycle.
+      await refreshCommitted();
+      const ensured = await ensureOpenCycleForDisposition(scope, nextStartFor(previousMonthKey));
+      if (!ensured.ok) return ensured;
+      const amount = { currency: availability.currency, minorUnits };
+      if (decision === 'vault') {
+        disposition = { kind: 'fundTracked', amount };
+      } else {
+        const openId = projectOpenCycleId(currentBook());
+        if (!openId) {
+          return { ok: false, detail: `canonical ${scope} refused: no open cycle to carry into` };
+        }
+        disposition = { kind: 'carryIn', amount, destinationCycleId: openId };
+      }
+    }
+    /** @type {FinanceCommand} */
+    const dispose = {
+      kind: 'disposeCycleRemainder',
+      bookId: state.bookId,
+      settlementId: settlement.settlementId,
+      disposition,
+      note: `month-end ${previousMonthKey} to ${decision}`,
+    };
+    let disposed;
+    try {
+      disposed = await state.gateway.execute(dispose, { operationId: mintOperationId(context) });
+    } catch (error) {
+      return { ok: false, detail: error instanceof Error ? error.message : String(error) };
+    }
+    if (!disposed.ok) {
+      return { ok: false, detail: disposed.detail ?? `canonical ${scope} dispose failed` };
+    }
+    // A settle that leaves no open cycle would brick future recording
+    // (capture needs a covering open cycle). Vault/budget already ensured
+    // one above; a no-surplus close opens the next month with zero
+    // starting funds so the book stays writable without inventing an
+    // allowance.
+    await refreshCommitted();
+    if (!projectOpenCycleId(currentBook())) {
+      const nextStart = nextStartFor(previousMonthKey);
+      const ensured = await ensureOpenCycleForDisposition(scope, nextStart);
+      if (!ensured.ok) {
+        goalsStatus.fail(`settled but no open cycle: ${ensured.detail}.`);
+      }
+    }
+    return { ok: true, settlement };
+  }
+
+  /**
+   * Advance a provably zero-fact book to `monthStart` (`YYYY-MM-01`):
+   * close the stale open cycle, dispose its (empty) remainder as
+   * independent, and open the target month with zero starting funds.
+   * Callers must verify zero-fact first; this helper moves no user facts
+   * by construction (there are none) and never invents an allowance.
+   * @param {string} monthStart
+   * @returns {Promise<{ ok: true } | { ok: false, detail: string }>}
+   */
+  async function advanceEmptyBookToMonth(monthStart) {
+    const run = async (command) => {
+      try {
+        return await state.gateway.execute(command, { operationId: mintOperationId(context) });
+      } catch (error) {
+        return { ok: false, failure: null, detail: error instanceof Error ? error.message : String(error) };
+      }
+    };
+    const parsed = parseCivilDate(monthStart);
+    if (!parsed.ok) return { ok: false, detail: 'invalid target month' };
+    const book = currentBook();
+    const open = book && Array.isArray(book.cycles)
+      ? book.cycles.filter((cycle) => {
+        try {
+          return effectiveVersionStatus(book, cycle) === 'open';
+        } catch {
+          return false;
+        }
+      })
+      : [];
+    // Close every stale open version so the single-open-cycle invariant
+    // holds before opening the target month.
+    for (const version of open) {
+      /** @type {FinanceCommand} */
+      const close = {
+        kind: 'closeCycle',
+        bookId: state.bookId,
+        cycleId: version.cycleId,
+        note: 'p04-d4: advance zero-fact book to the current month',
+      };
+      const closed = await run(close);
+      if (!closed.ok) {
+        return { ok: false, detail: closed.detail ?? 'closeCycle refused' };
+      }
+      const effect = closed.receipt?.effects?.find?.((entry) => entry.kind === 'cycleClosed');
+      const settlementId = effect && 'settlementId' in effect ? effect.settlementId : null;
+      if (!settlementId) return { ok: false, detail: 'close produced no settlement' };
+      /** @type {FinanceCommand} */
+      const dispose = {
+        kind: 'disposeCycleRemainder',
+        bookId: state.bookId,
+        settlementId,
+        disposition: { kind: 'leaveIndependent' },
+        note: 'p04-d4: advance zero-fact book to the current month',
+      };
+      const disposed = await run(dispose);
+      if (!disposed.ok) {
+        return { ok: false, detail: disposed.detail ?? 'disposeCycleRemainder refused' };
+      }
+    }
+    const currency = currentBook()?.book?.currency ?? 'SAR';
+    /** @type {FinanceCommand} */
+    const openNext = {
+      kind: 'openCycle',
+      bookId: state.bookId,
+      startingFunds: { currency, minorUnits: 0 },
+      startDate: parsed.value,
+    };
+    const opened = await run(openNext);
+    if (!opened.ok) {
+      return { ok: false, detail: opened.detail ?? 'openCycle refused' };
+    }
+    await refreshCommitted();
+    coordination.announceCommit({ storageId: state.storageId });
+    return { ok: true };
+  }
+
   /** @type {ShellFeaturePorts} */
   const ports = {
     authority: authorityPort,
@@ -717,9 +1199,12 @@ export async function prepareCanonicalCandidateHost(options = {}) {
         return state.selectedDate;
       },
       getSafeToSpend() {
-        // D3 owns the canonical availability projection; unknown is
-        // truthful, a zero would be a fabricated fact.
-        return null;
+        // D4: open-cycle availability from the domain derive. Unknown
+        // stays null (no book / no open cycle); a computed zero is real.
+        return projectAvailabilityAmount(currentBook(), {
+          asOfInstantMs: context.clock.nowMs(),
+          calculationVersion: context.calculationVersion,
+        });
       },
       getDailyPaidTotal() {
         return projectDailyPaidTotal(currentBook(), state.selectedDate);
@@ -951,54 +1436,328 @@ export async function prepareCanonicalCandidateHost(options = {}) {
     plan: {
       name: 'plan',
       listProfiles() {
+        // D4: template profiles are a v1-only grouping with no canonical
+        // counterpart. The empty list is truthful, never a guessed mapping.
         return [];
+      },
+      listPlans() {
+        return projectPlanSummaries(currentBook());
       },
       getActiveProfileId() {
         return '';
       },
       async setActiveProfile() {
-        planStatus.fail(P04D_D2_D4_OWNED_REASON);
+        planStatus.fail(P04D_D4_PROFILE_BLOCKED_REASON);
+        throw new Error(P04D_D4_PROFILE_BLOCKED_REASON);
       },
       async createProfile() {
-        planStatus.fail(P04D_D2_D4_OWNED_REASON);
-        return null;
+        planStatus.fail(P04D_D4_PROFILE_BLOCKED_REASON);
+        throw new Error(P04D_D4_PROFILE_BLOCKED_REASON);
       },
       async setProfileOffdays() {
-        planStatus.fail(P04D_D2_D4_OWNED_REASON);
+        planStatus.fail(P04D_D4_PROFILE_BLOCKED_REASON);
+        throw new Error(P04D_D4_PROFILE_BLOCKED_REASON);
       },
-      async saveTemplate() {
-        planStatus.fail(P04D_D2_D4_OWNED_REASON);
+      async saveTemplate(template, options = {}) {
+        const blocked = requireWritable('plan.saveTemplate');
+        if (blocked) {
+          planStatus.fail(`P04-D writes blocked for 'plan.saveTemplate': the authority is not writable.`);
+          throw new Error(`P04-D writes blocked for 'plan.saveTemplate': the authority is not writable.`);
+        }
+        const built = buildRecurringPlanCommand(template, options?.effectiveDate);
+        if (!built.ok) {
+          planStatus.fail(`canonical plan refused: ${built.issue}.`);
+          throw new Error(`canonical plan refused: ${built.issue}.`);
+        }
+        const book = currentBook();
+        const exists = !!book && Array.isArray(book.plans)
+          && book.plans.some((plan) => String(plan.planId) === String(built.planId));
+        /** @type {FinanceCommand} */
+        const command = exists
+          ? {
+            kind: 'reviseRecurringPlan',
+            bookId: state.bookId,
+            planId: built.planId,
+            effectiveDate: built.effectiveDate,
+            amount: built.amount,
+            scheduleDay: built.scheduleDay,
+            note: built.name,
+          }
+          : {
+            kind: 'createRecurringPlan',
+            bookId: state.bookId,
+            planId: built.planId,
+            name: built.name,
+            amount: built.amount,
+            scheduleDay: built.scheduleDay,
+            effectiveDate: built.effectiveDate,
+            flexibleDefinitionId: built.flexibleDefinitionId,
+          };
+        const result = await runCanonicalWrite({
+          scope: 'plan.saveTemplate',
+          statusCell: planStatus,
+          command,
+          operationIdRaw: options?.operationId,
+        });
+        if (!result.ok) {
+          throw new Error(result.detail ?? `canonical plan save failed (${result.reason}).`);
+        }
       },
       async deleteTemplate() {
-        planStatus.fail(P04D_D2_D4_OWNED_REASON);
+        // D4: recurring plans are append-only; no delete command exists.
+        // Detach or revise an occurrence instead of deleting the rule.
+        planStatus.fail(P04D_D4_TEMPLATE_DELETE_BLOCKED_REASON);
+        throw new Error(P04D_D4_TEMPLATE_DELETE_BLOCKED_REASON);
       },
-      async saveFlexibleDefinition() {
-        planStatus.fail(P04D_D2_D4_OWNED_REASON);
+      async saveFlexibleDefinition(definition, options = {}) {
+        const blocked = requireWritable('plan.saveFlexibleDefinition');
+        if (blocked) {
+          planStatus.fail(`P04-D writes blocked for 'plan.saveFlexibleDefinition': the authority is not writable.`);
+          throw new Error(`P04-D writes blocked for 'plan.saveFlexibleDefinition': the authority is not writable.`);
+        }
+        const built = buildRecurringPlanCommand(definition, options?.effectiveDate);
+        if (!built.ok) {
+          planStatus.fail(`canonical flexible plan refused: ${built.issue}.`);
+          throw new Error(`canonical flexible plan refused: ${built.issue}.`);
+        }
+        const record = definition && typeof definition === 'object' ? definition : {};
+        const flexibleLink = typeof record.id === 'string' && record.id
+          ? record.id
+          : (typeof record.flexibleDefinitionId === 'string' ? record.flexibleDefinitionId : null);
+        const book = currentBook();
+        // D4 correction: revise when the rule already exists. Always
+        // creating would duplicate the plan on every re-save (a hidden
+        // unsafe update path); revise keeps the existing flexible link.
+        const exists = !!book && Array.isArray(book.plans)
+          && book.plans.some((plan) => String(plan.planId) === String(built.planId));
+        /** @type {FinanceCommand} */
+        const command = exists
+          ? {
+            kind: 'reviseRecurringPlan',
+            bookId: state.bookId,
+            planId: built.planId,
+            effectiveDate: built.effectiveDate,
+            amount: built.amount,
+            scheduleDay: built.scheduleDay,
+            note: built.name,
+          }
+          : {
+            kind: 'createRecurringPlan',
+            bookId: state.bookId,
+            planId: built.planId,
+            name: built.name,
+            amount: built.amount,
+            scheduleDay: built.scheduleDay,
+            effectiveDate: built.effectiveDate,
+            flexibleDefinitionId: flexibleLink,
+          };
+        const result = await runCanonicalWrite({
+          scope: 'plan.saveFlexibleDefinition',
+          statusCell: planStatus,
+          command,
+          operationIdRaw: options?.operationId,
+        });
+        if (!result.ok) {
+          throw new Error(result.detail ?? `canonical flexible plan save failed (${result.reason}).`);
+        }
       },
-      async previewApply() {
+      async previewApply(effectiveDate, profileId) {
+        void profileId;
+        // D4: profiles do not exist canonically; the effective month is
+        // materialized for every recurring plan instead.
+        const throughDate = monthEndOf(toText(effectiveDate));
+        if (!throughDate || !state.bookId) {
+          return emptyApplyPreview(toText(effectiveDate), P04D_D2_D4_OWNED_REASON);
+        }
+        const book = currentBook();
+        if (!book || !Array.isArray(book.plans)) {
+          return emptyApplyPreview(toText(effectiveDate), P04D_D2_D4_OWNED_REASON);
+        }
+        let createCount = 0;
+        for (const plan of book.plans) {
+          /** @type {FinanceCommand} */
+          const command = {
+            kind: 'materializePlanOccurrences',
+            bookId: state.bookId,
+            planId: plan.planId,
+            throughDate,
+          };
+          let previewed;
+          try {
+            previewed = state.gateway.preview(command);
+          } catch (error) {
+            return emptyApplyPreview(
+              toText(effectiveDate),
+              error instanceof Error ? error.message : String(error),
+            );
+          }
+          if (!previewed.ok) {
+            return emptyApplyPreview(toText(effectiveDate), state.gateway.describeFailure(previewed.failure));
+          }
+          for (const effect of previewed.preview.effects) {
+            if (effect.kind === 'planOccurrencesMaterialized' && Array.isArray(effect.occurrenceIds)) {
+              createCount += effect.occurrenceIds.length;
+            }
+          }
+        }
         return {
-          rangeStart: '',
-          rangeEnd: '',
-          createCount: 0,
+          rangeStart: toText(effectiveDate),
+          rangeEnd: throughDate,
+          createCount,
           updateCount: 0,
           deleteCount: 0,
-          totalChanges: 0,
-          blocked: true,
-          blockedReason: P04D_D2_D4_OWNED_REASON,
+          totalChanges: createCount,
+          blocked: false,
         };
       },
-      async confirmApply() {
-        planStatus.fail(P04D_D2_D4_OWNED_REASON);
-        return {
-          rangeStart: '',
-          rangeEnd: '',
-          createCount: 0,
-          updateCount: 0,
-          deleteCount: 0,
-          totalChanges: 0,
-          blocked: true,
-          blockedReason: P04D_D2_D4_OWNED_REASON,
-        };
+      async confirmApply(effectiveDate, profileId, options = {}) {
+        void profileId;
+        const blocked = requireWritable('plan.confirmApply');
+        if (blocked) {
+          return { ...emptyApplyPreview(toText(effectiveDate), 'P04-D writes are blocked: the authority is not writable.'), blocked: true };
+        }
+        const throughDate = monthEndOf(toText(effectiveDate));
+        if (!throughDate || !state.bookId) {
+          return { ...emptyApplyPreview(toText(effectiveDate), 'canonical apply refused: invalid effective date.'), blocked: true };
+        }
+        const book = currentBook();
+        if (!book || !Array.isArray(book.plans)) {
+          return { ...emptyApplyPreview(toText(effectiveDate), 'canonical apply refused: no plans exist.'), blocked: true };
+        }
+        // D4 correction: all-or-blocked from the UI perspective. Phase 1
+        // previews every plan without writing; any preview failure
+        // returns blocked before a single commit. Phase 2 executes
+        // per-plan with the caller's stable identities (a retry replays
+        // already-committed plans instead of duplicating them). The
+        // commit announcement — and therefore any UI success — happens
+        // only when every plan applied. Atomic/idempotent
+        // materialization (deterministic occurrence IDs) means a retry
+        // after a partial failure converges instead of recreating
+        // managed occurrences; paid/detached occurrences are never
+        // recreated by the command.
+        return withHeldCritical('write', async () => {
+          const prepared = [];
+          for (const plan of book.plans) {
+            /** @type {FinanceCommand} */
+            const command = {
+              kind: 'materializePlanOccurrences',
+              bookId: state.bookId,
+              planId: plan.planId,
+              throughDate,
+            };
+            const operation = resolveCallerOperationId(options?.operationIds?.[String(plan.planId)], context);
+            if (!operation.ok) {
+              const detail = `canonical apply refused before any commit: invalid operation identity for ${String(plan.planId)}.`;
+              planStatus.fail(detail);
+              return {
+                rangeStart: toText(effectiveDate),
+                rangeEnd: throughDate,
+                createCount: 0,
+                updateCount: 0,
+                deleteCount: 0,
+                totalChanges: 0,
+                blocked: true,
+                blockedReason: detail,
+              };
+            }
+            let previewed;
+            try {
+              previewed = state.gateway.preview(command);
+            } catch (error) {
+              const detail = `canonical apply refused before any commit for ${String(plan.planId)}: ${error instanceof Error ? error.message : String(error)}.`;
+              planStatus.fail(detail);
+              return {
+                rangeStart: toText(effectiveDate),
+                rangeEnd: throughDate,
+                createCount: 0,
+                updateCount: 0,
+                deleteCount: 0,
+                totalChanges: 0,
+                blocked: true,
+                blockedReason: detail,
+              };
+            }
+            if (!previewed.ok) {
+              const detail = `canonical apply refused before any commit for ${String(plan.planId)}: ${state.gateway.describeFailure(previewed.failure)}.`;
+              planStatus.fail(detail);
+              return {
+                rangeStart: toText(effectiveDate),
+                rangeEnd: throughDate,
+                createCount: 0,
+                updateCount: 0,
+                deleteCount: 0,
+                totalChanges: 0,
+                blocked: true,
+                blockedReason: detail,
+              };
+            }
+            prepared.push({ plan, command, operationId: operation.value });
+          }
+          let createCount = 0;
+          const failures = [];
+          for (const { plan, command, operationId } of prepared) {
+            const committed = findCommittedIntent(state.repository, operationId, command);
+            if (committed.status === 'replayed') {
+              const replayed = committed.receipt?.effects?.find((effect) => effect.kind === 'planOccurrencesMaterialized');
+              if (replayed && 'occurrenceIds' in replayed && Array.isArray(replayed.occurrenceIds)) {
+                createCount += replayed.occurrenceIds.length;
+              }
+              continue;
+            }
+            if (committed.status === 'conflict') {
+              failures.push(`${String(plan.planId)}: operation identity already committed with different content`);
+              continue;
+            }
+            let result;
+            try {
+              result = await state.gateway.execute(command, { operationId });
+            } catch (error) {
+              failures.push(`${String(plan.planId)}: ${error instanceof Error ? error.message : String(error)}`);
+              continue;
+            }
+            if (!result.ok) {
+              failures.push(`${String(plan.planId)}: ${result.detail ?? 'materialize failed'}`);
+              continue;
+            }
+            const effect = result.receipt.effects.find((entry) => entry.kind === 'planOccurrencesMaterialized');
+            if (effect && 'occurrenceIds' in effect && Array.isArray(effect.occurrenceIds)) {
+              createCount += effect.occurrenceIds.length;
+            }
+          }
+          await refreshCommitted();
+          if (failures.length > 0) {
+            // No commit announcement here: other tabs must not treat a
+            // partial apply as success, and the UI keeps the modal open
+            // with the intent (and its per-plan identities) retained for
+            // an idempotent retry.
+            const detail = `canonical apply partially failed: ${failures.join('; ')}. No success was announced; retry with the same per-plan identities to converge.`;
+            planStatus.fail(detail);
+            return {
+              rangeStart: toText(effectiveDate),
+              rangeEnd: throughDate,
+              createCount,
+              updateCount: 0,
+              deleteCount: 0,
+              totalChanges: createCount,
+              blocked: true,
+              blockedReason: detail,
+            };
+          }
+          coordination.announceCommit({ storageId: state.storageId });
+          return {
+            rangeStart: toText(effectiveDate),
+            rangeEnd: throughDate,
+            createCount,
+            updateCount: 0,
+            deleteCount: 0,
+            totalChanges: createCount,
+            blocked: false,
+          };
+        }).catch((error) => {
+          const detail = error instanceof Error ? error.message : String(error);
+          planStatus.fail(detail);
+          return { ...emptyApplyPreview(toText(effectiveDate), detail), blocked: true };
+        });
       },
       getStatus() {
         return planStatus.get();
@@ -1006,35 +1765,44 @@ export async function prepareCanonicalCandidateHost(options = {}) {
     },
     insights: {
       name: 'insights',
-      getMonthStatistics() {
-        const monthKey = state.selectedDate.slice(0, 7);
-        const paidSpent = projectDailyPaidTotal(currentBook(), state.selectedDate);
+      getMonthStatistics(monthKey) {
+        // D4: month totals derive from committed canonical facts. The
+        // monthly budget has no canonical fact (starting funds are not a
+        // budget), so it stays unknown — never zero. Open-cycle
+        // safe-to-spend is canonical availability; other months stay
+        // unknown rather than borrowing today's pool. Commitments and the
+        // tracked pool travel as explicit extras.
+        const requested = toText(monthKey);
+        const resolved = isMonthKeyText(requested) ? requested : state.selectedDate.slice(0, 7);
+        const key = isMonthKeyText(resolved) ? resolved : '';
+        const book = currentBook();
+        const availability = projectAvailabilityAmount(book, {
+          asOfInstantMs: context.clock.nowMs(),
+          calculationVersion: context.calculationVersion,
+        });
+        const openMonth = projectOpenCycleMonthKey(book);
+        const safeToSpend = key && openMonth && key === openMonth ? availability : null;
         return {
-          monthKey: MONTH_KEY_PATTERN.test(monthKey) ? monthKey : '',
+          monthKey: key,
           budgetKnown: false,
           budget: null,
-          paidSpent,
+          paidSpent: key ? projectMonthPaidTotal(book, key) : 0,
           unpaidEssential: 0,
-          safeToSpend: null,
-          projectedBalance: null,
+          safeToSpend,
+          projectedBalance: safeToSpend,
+          commitments: projectCommitmentsTotal(book),
+          trackedPoolAvailable: projectTrackedPoolTotal(book),
         };
       },
       getCategoryBreakdown() {
-        const rows = projectSelectedDayExpenses(currentBook(), state.selectedDate);
-        const totals = new Map();
-        for (const row of rows) {
-          totals.set(row.category, (totals.get(row.category) ?? 0) + row.actualPaid);
-        }
-        return [...totals.entries()].map(([category, amount]) => ({
-          category,
-          amount,
-          count: rows.filter((row) => row.category === category).length,
-        }));
+        const monthKey = state.selectedDate.slice(0, 7);
+        if (!isMonthKeyText(monthKey)) return [];
+        return projectMonthCategoryBreakdown(currentBook(), monthKey);
       },
       getWeeklySpending() {
-        const day = Number(state.selectedDate.slice(8, 10));
-        const week = Number.isFinite(day) && day > 0 ? Math.ceil(day / 7) : 0;
-        return [{ week, amount: projectDailyPaidTotal(currentBook(), state.selectedDate) }];
+        const monthKey = state.selectedDate.slice(0, 7);
+        if (!isMonthKeyText(monthKey)) return [];
+        return projectMonthWeeklySpending(currentBook(), monthKey);
       },
       async refresh() {
         await refreshCommitted();
@@ -1068,25 +1836,116 @@ export async function prepareCanonicalCandidateHost(options = {}) {
           return [];
         }
       },
-      async addGoal() {
-        goalsStatus.fail(P04D_D2_D4_OWNED_REASON);
-        return null;
+      async addGoal(goal, options = {}) {
+        const blocked = requireWritable('goals.addGoal');
+        if (blocked) {
+          goalsStatus.fail(`P04-D writes blocked for 'goals.addGoal': the authority is not writable.`);
+          return null;
+        }
+        const name = toText(goal?.name).trim();
+        if (!name) {
+          goalsStatus.fail('canonical goal refused: missing goal name.');
+          return null;
+        }
+        const rawTarget = Number(goal?.targetAmount);
+        if (!Number.isFinite(rawTarget) || rawTarget <= 0) {
+          goalsStatus.fail('canonical goal refused: the target needs an explicit positive amount.');
+          return null;
+        }
+        const converted = convertUntaggedSarMajor(rawTarget, {
+          database: 'MicroSaveOS_DB',
+          databaseVersion: 1,
+          store: 'settings',
+          recordKey: 'candidate-goal',
+          field: 'targetAmount',
+        });
+        if (!converted.ok) {
+          goalsStatus.fail('canonical goal refused: invalid target amount.');
+          return null;
+        }
+        const rawGoalId = typeof options?.goalId === 'string' && options.goalId
+          ? options.goalId
+          : (typeof options?.operationId === 'string' && options.operationId
+            // Retry-stable identity: the goal id derives from the intent's
+            // operation id, so a retry after a lost acknowledgement replays
+            // the same command instead of conflicting on a fresh goal id.
+            ? `goal-${options.operationId}`.slice(0, 100)
+            : context.ids.newId('goal'));
+        const goalId = makeGoalId(rawGoalId);
+        if (!goalId.ok) {
+          goalsStatus.fail('canonical goal refused: invalid goal identity.');
+          return null;
+        }
+        /** @type {FinanceCommand} */
+        const command = {
+          kind: 'createGoal',
+          bookId: state.bookId,
+          goalId: goalId.value,
+          name,
+          targetAmount: converted.money,
+        };
+        const result = await runCanonicalWrite({
+          scope: 'goals.addGoal',
+          statusCell: goalsStatus,
+          command,
+          operationIdRaw: options?.operationId,
+        });
+        if (!result.ok) return null;
+        // A user-provided opening allocation is the user's own fact, not an
+        // inferred migration: assign it explicitly after the goal exists. A
+        // failed assignment keeps the created goal and records the status;
+        // append-only facts cannot be un-appended.
+        const rawAllocated = Number(goal?.allocatedAmount ?? 0);
+        if (Number.isFinite(rawAllocated) && rawAllocated > 0) {
+          const assigned = convertUntaggedSarMajor(rawAllocated, {
+            database: 'MicroSaveOS_DB',
+            databaseVersion: 1,
+            store: 'settings',
+            recordKey: 'candidate-goal',
+            field: 'allocatedAmount',
+          });
+          if (assigned.ok) {
+            /** @type {FinanceCommand} */
+            const assign = {
+              kind: 'assignToGoal',
+              bookId: state.bookId,
+              goalId: goalId.value,
+              amount: assigned.money,
+              note: name,
+            };
+            // Retry-stable like the creation above: the assignment identity
+            // derives from the intent's operation id, so a retry after a
+            // lost acknowledgement replays instead of assigning twice.
+            const assignOperationId = typeof options?.operationId === 'string' && options.operationId
+              ? `${options.operationId}:assign`.slice(0, 100)
+              : undefined;
+            const assignedResult = await runCanonicalWrite({
+              scope: 'goals.addGoal.assign',
+              statusCell: goalsStatus,
+              command: assign,
+              operationIdRaw: assignOperationId,
+            });
+            if (!assignedResult.ok) {
+              goalsStatus.fail(`goal created without its opening allocation: ${assignedResult.reason}.`);
+            }
+          }
+        }
+        return { id: String(goalId.value) };
       },
       async deleteGoal() {
-        goalsStatus.fail(P04D_D2_D4_OWNED_REASON);
+        // D4: goals are append-only; no delete command exists. Unassign and
+        // release the allocation instead of deleting the goal.
+        goalsStatus.fail(P04D_D4_GOAL_DELETE_BLOCKED_REASON);
         return false;
       },
-      async settleToVault() {
-        goalsStatus.fail(P04D_D2_D4_OWNED_REASON);
-        return null;
+      async settleToVault(summary, referenceDate) {
+        return runMonthEndSettlement('goals.settleToVault', 'vault', summary, referenceDate);
       },
-      async settleToBudget() {
-        goalsStatus.fail(P04D_D2_D4_OWNED_REASON);
-        return null;
+      async settleToBudget(summary, referenceDate) {
+        return runMonthEndSettlement('goals.settleToBudget', 'budget', summary, referenceDate);
       },
-      async settleNoSurplus() {
-        goalsStatus.fail(P04D_D2_D4_OWNED_REASON);
-        return null;
+      async settleNoSurplus(summary, referenceDate) {
+        return runMonthEndSettlement('goals.settleNoSurplus', 'noSurplus', summary, referenceDate);
       },
       getStatus() {
         return goalsStatus.get();
@@ -1112,10 +1971,15 @@ export async function prepareCanonicalCandidateHost(options = {}) {
           // The storage adapter owns document preview: the durable adapter
           // runs the P04-C portable validation, while test adapters preview
           // their own document shape. Either way the host never invents data.
+          // Note the shapes differ: P04-C previews carry no `ok` marker on
+          // success (only `{ ok: false, ... }` on failure), so success is
+          // anything that is not an explicit failure.
           const preview = typeof storage.previewImport === 'function'
             ? await storage.previewImport(snapshot)
             : await previewPortableImport(snapshot);
-          if (!preview.ok) return { ok: false, reason: preview.reason };
+          if (preview && typeof preview === 'object' && 'ok' in preview && preview.ok === false) {
+            return { ok: false, reason: preview.reason ?? 'error' };
+          }
           const result = await storage.importReplacement(importId, snapshot, confirmation);
           if (!result.ok) {
             portabilityStatus.fail(result.detail ?? result.reason ?? 'canonical import failed');
@@ -1145,8 +2009,15 @@ export async function prepareCanonicalCandidateHost(options = {}) {
           : (typeof asRecord.onBlocked === 'function' ? asRecord.onBlocked : null);
         const blocked = requireWritable('portability.factoryReset');
         if (blocked) {
-          if (notifyBlocked) notifyBlocked();
-          return;
+          // Legacy-compatible shape: a bare callback means "notify when
+          // blocked". Without one, refuse loudly instead of a silent
+          // no-op: a blocked reset must never look like success.
+          if (notifyBlocked) {
+            notifyBlocked();
+            return;
+          }
+          portabilityStatus.fail(`P04-D writes blocked for 'portability.factoryReset': the authority is not writable.`);
+          throw new Error(`P04-D writes blocked for 'portability.factoryReset': the authority is not writable.`);
         }
         const resetId = toText(asRecord.resetId);
         const confirmation = toText(asRecord.confirmation);
@@ -1166,10 +2037,15 @@ export async function prepareCanonicalCandidateHost(options = {}) {
         authorityPort.assertWritable('portability.clearLocalPreferences');
         const store = environment?.localStorage;
         if (!store || typeof store.length !== 'number' || typeof store.key !== 'function') return;
+        // D4 correction: the persisted device id (`rushd_device_id`,
+        // owned by production-boot as pure storage namespacing) is NOT a
+        // UI preference and must survive clearing. Wiping it would orphan
+        // the guest scope: the export-first safety backup is device-bound,
+        // and re-import rejects a mismatched device id.
         const doomed = [];
         for (let index = 0; index < (store.length ?? 0); index += 1) {
           const key = store.key.call(store, index);
-          if (key && (key.startsWith('rushd_') || key.startsWith('microsave_') || key === 'onboardingState')) {
+          if (key && key !== 'rushd_device_id' && (key.startsWith('rushd_') || key.startsWith('microsave_') || key === 'onboardingState')) {
             doomed.push(key);
           }
         }
@@ -1183,14 +2059,49 @@ export async function prepareCanonicalCandidateHost(options = {}) {
     },
     navigation: {
       name: 'navigation',
-      resolveIntent(view) {
+      resolveIntent(view, date) {
         const destinations = ['dashboard', 'statistics', 'vault', 'plans', 'settings'];
         const target = destinations.includes(view) ? view : null;
         if (!target) return null;
-        return { view: target };
+        const intent = { view: target };
+        if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) intent.date = date;
+        return intent;
       },
       listDestinations() {
         return ['dashboard', 'statistics', 'vault', 'plans', 'settings'];
+      },
+      persistIntent(intent) {
+        // UI route/date chrome only; persists even while finance writes
+        // are blocked so offline destination recovery keeps working.
+        try {
+          const record = intent && typeof intent === 'object' ? intent : {};
+          const destinations = ['dashboard', 'statistics', 'vault', 'plans', 'settings'];
+          if (!destinations.includes(record.view)) return;
+          const payload = { view: record.view };
+          if (typeof record.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(record.date)) {
+            payload.date = record.date;
+          }
+          writePreference(environment, P04D_NAV_INTENT_KEY, JSON.stringify(payload));
+        } catch {
+          /* intent persistence is best-effort chrome */
+        }
+      },
+      restoreIntent() {
+        try {
+          const raw = readPreference(environment, P04D_NAV_INTENT_KEY, '');
+          if (!raw) return null;
+          const parsed = JSON.parse(raw);
+          if (!parsed || typeof parsed !== 'object') return null;
+          const destinations = ['dashboard', 'statistics', 'vault', 'plans', 'settings'];
+          if (!destinations.includes(parsed.view)) return null;
+          const intent = { view: parsed.view };
+          if (typeof parsed.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date)) {
+            intent.date = parsed.date;
+          }
+          return intent;
+        } catch {
+          return null;
+        }
       },
       getStatus() {
         return navigationStatus.get();
@@ -1202,19 +2113,44 @@ export async function prepareCanonicalCandidateHost(options = {}) {
         await refreshCommitted();
       },
       getSettings() {
-        // D4 owns the canonical settings projection; boot mirrors stay
-        // readable so the established shell never sees a fabricated fact.
+        // D4: book settings project from committed canonical state. The
+        // base allowance shows the migrated opening-cycle starting funds
+        // (read-only truth); there is no command that rewrites it, and the
+        // buffer below is an explicit reserve, never a budget.
+        const book = currentBook();
+        const projected = projectBookSettings(book, state.selectedDate);
+        let allowance = 0;
+        try {
+          const openCycleId = projectOpenCycleId(book);
+          if (openCycleId && book && Array.isArray(book.cycles)) {
+            const versions = book.cycles.filter((cycle) => String(cycle.cycleId) === String(openCycleId));
+            const version = versions.length > 0 ? versions[versions.length - 1] : null;
+            if (version && version.startingFunds && typeof version.startingFunds.minorUnits === 'number') {
+              allowance = minorUnitsToSarMajor(version.startingFunds.minorUnits);
+            }
+          }
+        } catch {
+          /* allowance stays at its empty-state default */
+        }
         return {
-          baseAllowance: 0,
-          theme: 'dark',
-          motionLevel: 'auto',
-          language: readPreference(environment, 'rushd_lang', 'ar'),
-          calendarType: readPreference(environment, 'rushd_calendar', 'gregorian'),
+          baseAllowance: allowance,
+          theme: readPreference(environment, 'rushd_theme', 'dark') === 'light' ? 'light' : 'dark',
+          motionLevel: readPreference(environment, 'rushd_motion', 'auto') || 'auto',
+          language: readPreference(environment, 'rushd_lang', 'ar') || 'ar',
+          calendarType: readPreference(environment, 'rushd_calendar', 'gregorian') || 'gregorian',
           activeTemplateProfileId: '',
+          timeZone: projected?.timeZone ?? 'Asia/Riyadh',
+          cycleAnchorKind: projected?.cycleAnchorKind ?? 'firstOfMonth',
+          bufferAmount: projected?.bufferAmount ?? null,
+          currency: projected?.currency ?? 'SAR',
+          openCycleId: projectOpenCycleId(book),
         };
       },
       async saveBaseAllowance() {
-        lifecycleStatus.fail(P04D_D2_D4_OWNED_REASON);
+        // D4: the allowance migrated into opening-cycle starting funds and
+        // no canonical command rewrites it. The read-only figure above is
+        // the truth; this write stays visibly blocked, never a v1 write.
+        lifecycleStatus.fail(P04D_D4_ALLOWANCE_BLOCKED_REASON);
         return false;
       },
       async setTheme(theme) {
@@ -1234,11 +2170,33 @@ export async function prepareCanonicalCandidateHost(options = {}) {
         writePreference(environment, 'rushd_calendar', calendarType);
       },
       getOnboardingState() {
-        return null;
+        // D4: onboarding is a local setup flow with no canonical finance
+        // fact; its status stays a validated local preference.
+        try {
+          const raw = readPreference(environment, P04D_ONBOARDING_STATE_KEY, '');
+          if (!raw) return null;
+          const parsed = JSON.parse(raw);
+          if (!parsed || typeof parsed !== 'object') return null;
+          const status = typeof parsed.status === 'string' ? parsed.status : '';
+          if (status !== 'skipped' && status !== 'completed') return null;
+          return {
+            status,
+            updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : '',
+            source: typeof parsed.source === 'string' ? parsed.source : '',
+          };
+        } catch {
+          return null;
+        }
       },
-      async persistOnboardingState() {
-        lifecycleStatus.fail(P04D_D2_D4_OWNED_REASON);
-        return { status: '', updatedAt: '', source: '' };
+      async persistOnboardingState(status, source = '') {
+        authorityPort.assertWritable('lifecycle.persistOnboardingState');
+        const next = {
+          status: typeof status === 'string' ? status : '',
+          updatedAt: new Date().toISOString(),
+          source: typeof source === 'string' ? source : '',
+        };
+        writePreference(environment, P04D_ONBOARDING_STATE_KEY, JSON.stringify(next));
+        return next;
       },
       getMonthStartDeferral() {
         return readDeferral(environment, 'rushd_month_start_prompt_deferred', 'monthKey');
@@ -1322,6 +2280,55 @@ export async function prepareCanonicalCandidateHost(options = {}) {
 
   // Bind canonical ports only after ready. Reads serve committed state;
   // writers flow through the gateway from here on.
+  //
+  // D4 boot rule: recording requires an open cycle covering the selected
+  // date, and the domain holds a single open cycle. When the open cycle
+  // is stale (fresh install whose migration only opened the fallback
+  // month, or a new month since), boot advances it ONLY when that is
+  // provably a no-op: the book holds no entries, obligations, or
+  // allocations, so close + leaveIndependent + open-current (zero
+  // starting funds, no allowance invented) moves nothing. A book WITH
+  // facts keeps its open cycle and its explicit month-end choice: the
+  // stale months stay truthfully per-date refused until the user settles
+  // through the goals port. Boot never fails on this step.
+  try {
+    if (state.gateway && state.bookId) {
+      await withHeldCritical('write', async () => {
+        // findOpenCycle tie-breaks to the earliest open version, so scan
+        // every version: today is covered when any open version's window
+        // contains it.
+        const coversToday = (candidate) => {
+          const book = currentBook();
+          if (!book || !Array.isArray(book.cycles)) return false;
+          return book.cycles.some((cycle) => {
+            if (effectiveVersionStatus(book, cycle) !== 'open') return false;
+            return typeof cycle.startDate === 'string'
+              && typeof cycle.endDateExclusive === 'string'
+              && cycle.startDate <= candidate
+              && candidate < cycle.endDateExclusive;
+          });
+        };
+        if (coversToday(state.selectedDate)) return;
+        const book = currentBook();
+        const zeroFact = !!book
+          && book.entries.length === 0
+          && book.obligations.length === 0
+          && book.allocationRecords.length === 0;
+        if (!zeroFact) {
+          lifecycleStatus.fail(
+            'current cycle is not open: the open month is stale and holds facts, so month-end stays an explicit user decision.',
+          );
+          return;
+        }
+        const advanced = await advanceEmptyBookToMonth(state.selectedDate.slice(0, 7) + '-01');
+        if (!advanced.ok) {
+          lifecycleStatus.fail(`current cycle is not open: ${advanced.detail}.`);
+        }
+      });
+    }
+  } catch (error) {
+    lifecycleStatus.fail(error instanceof Error ? error.message : String(error));
+  }
   setAuthority({ kind: 'canonicalReady', writable: true, storageId: state.storageId });
   if (!state.bookId) {
     captureStatus.fail(P04D_D2_NO_BOOK_REASON);
@@ -1331,7 +2338,11 @@ export async function prepareCanonicalCandidateHost(options = {}) {
     ok: true,
     authority: authorityPort.getState(),
     featurePorts: frozenPorts,
-    storageId: state.storageId,
+    // Live binding: import/reset flip the activation pointer after this
+    // object is returned, and observers must see the current namespace.
+    get storageId() {
+      return state.storageId;
+    },
     migration: state.migration,
     coordination,
     openedEpoch,

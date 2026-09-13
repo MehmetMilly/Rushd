@@ -74,8 +74,13 @@ async function selectValue(sql: string): Promise<unknown> {
 
 async function loadEngine(sqliteAssetBase: string): Promise<void> {
   if (sqlite3 !== null) return;
-  const factoryMod = (await import(`${sqliteAssetBase}/dist/wa-sqlite.mjs`)) as { default: () => Promise<unknown> };
-  const apiMod = (await import(`${sqliteAssetBase}/src/sqlite-api.js`)) as { Factory: (module: unknown) => SqliteApi };
+  // P04-D4: engine files resolve at runtime from the production `/pkg`
+  // closure (or an explicit test asset base). `/* @vite-ignore */` keeps
+  // these imports native: Vite must not rewrite them through its preload
+  // helper, which touches `window`/`document` and cannot run in a
+  // DedicatedWorker.
+  const factoryMod = (await import(/* @vite-ignore */ `${sqliteAssetBase}/dist/wa-sqlite.mjs`)) as { default: () => Promise<unknown> };
+  const apiMod = (await import(/* @vite-ignore */ `${sqliteAssetBase}/src/sqlite-api.js`)) as { Factory: (module: unknown) => SqliteApi };
   sqliteModule = await factoryMod.default();
   sqlite3 = apiMod.Factory(sqliteModule);
 }
@@ -123,7 +128,7 @@ async function openDatabase(params: OpenParams): Promise<{ sqliteVersion: string
     await resetNamespaceFiles(params.namespace);
   }
 
-  const vfsMod = (await import(`${params.sqliteAssetBase}/src/examples/OPFSCoopSyncVFS.js`)) as {
+  const vfsMod = (await import(/* @vite-ignore */ `${params.sqliteAssetBase}/src/examples/OPFSCoopSyncVFS.js`)) as {
     OPFSCoopSyncVFS: { create: (name: string, module: unknown) => Promise<{ close?: () => Promise<void> | void }> };
   };
   vfs = await vfsMod.OPFSCoopSyncVFS.create(params.namespace, sqliteModule);

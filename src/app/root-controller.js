@@ -54,6 +54,20 @@ export function installRootController(app, dataRuntime, environment = globalThis
                 return arabic ? 'إلغاء الدفع الجماعي غير متاح؛ اعكس المصاريف واحدًا واحدًا.' : 'Bulk mark-unpaid is unavailable; reverse expenses individually.';
             case 'partial':
                 return arabic ? 'تعذّر عكس بعض المصاريف؛ الباقي ظاهر في القائمة ويمكن إعادة المحاولة.' : 'Some expenses could not be reversed; the rest are still listed and can be retried.';
+            case 'profile':
+                return arabic ? 'ملفات القوالب والإجازات غير متاحة هنا؛ الخطط المتكررة تحمل جدولها الخاص.' : 'Template profiles and offdays are unavailable here; recurring plans carry their own schedule.';
+            case 'templateDelete':
+                return arabic ? 'لا يمكن حذف القواعد المتكررة؛ عدّل حدثًا أو افصله بدلًا من ذلك.' : 'Recurring rules cannot be deleted; revise or detach an occurrence instead.';
+            case 'goalDelete':
+                return arabic ? 'لا يمكن حذف الأهداف؛ ألغِ التخصيص وحرّر المبلغ بدلًا من ذلك.' : 'Goals cannot be deleted; unassign and release the allocation instead.';
+            case 'allowance':
+                return arabic ? 'الميزانية الشهرية سجل تاريخي للقراءة فقط بعد الترحيل؛ لا يمكن تعديلها.' : 'The monthly allowance is read-only migrated history; it cannot be rewritten.';
+            case 'onboarding':
+                return arabic ? 'الإعداد الأولي مكتمل بعد الترحيل؛ لا حاجة لإعادة الإعداد.' : 'Setup is complete after migration; no need to set up again.';
+            case 'monthEnd':
+                return arabic ? 'إغلاق الشهر غير متاح تلقائيًا هنا؛ أغلق الدورة صراحة من الأهداف.' : 'Automatic month-end close is unavailable here; close the cycle explicitly from Goals.';
+            case 'authority':
+                return arabic ? 'الكتابة محظورة حاليًا؛ أعد التحميل وحاول مجددًا.' : 'Writes are currently blocked; reload and try again.';
             default:
                 return arabic ? 'وضع المراجعة غير جاهز بعد؛ العرض فقط حاليًا.' : 'Review mode is not ready yet; view-only for now.';
         }
@@ -68,7 +82,7 @@ export function installRootController(app, dataRuntime, environment = globalThis
     // reused for different payloads). Slots are plain closure state, never
     // finance truth: success paths always resync committed state before
     // the next intent can start.
-    const p04dIntentStore = { add: null, edit: null, confirm: null };
+    const p04dIntentStore = { add: null, edit: null, confirm: null, plan: null, goal: null, import: null, reset: null };
     const p04dMintIntentId = () => {
         let uuid = null;
         try {
@@ -145,15 +159,135 @@ export function installRootController(app, dataRuntime, environment = globalThis
         } catch {
             /* keep the current date on read failure */
         }
-        // Safe-to-spend has no canonical projection yet (`getSafeToSpend`
-        // reads unknown). `Store.safeToSpend` is a getter over the viewed
-        // statistics, so the viewed month is marked unknown and the hero
-        // shows its truthful unavailable state instead of a fabricated
-        // number. Month-level Insights stay D4-owned.
+        // D4: Home safe-to-spend is canonical availability. The monthly
+        // budget still has no canonical fact, so `budgetKnown` stays false
+        // and `Store.safeToSpend` remains unknown. The hero reads
+        // `p04dSafeToSpend` instead of inventing a budget.
+        try {
+            const amount = ports.home.getSafeToSpend();
+            vm.p04dSafeToSpend = amount === null || amount === undefined || !Number.isFinite(Number(amount))
+                ? null
+                : Number(amount);
+        } catch {
+            vm.p04dSafeToSpend = null;
+        }
         try {
             if (vm.store.statistics) vm.store.statistics.budgetKnown = false;
         } catch {
             /* the hero keeps its last state on mirror failure */
+        }
+    };
+    // P04-D4: canonical mirrors for the remaining ports. Each assigns only
+    // in-memory view fields the established template already binds; none
+    // reads or writes v1 finance persistence. Legacy-shaped display rows
+    // carry committed canonical facts (amounts, notes, dates) with no
+    // invented fields.
+    const syncP04DCandidatePlan = async (vm) => {
+        const ports = p04dCandidatePorts;
+        if (!ports) return;
+        try {
+            const summaries = ports.plan.listPlans();
+            // D4 correction: mirror only committed plan fields. Canonical
+            // recurring plans are monthly rules by construction, so
+            // `recurrence: 'monthly'` restates the model, not an invented
+            // assignment. `applicability` (a daily-schedule workday/offday
+            // notion) is omitted — never labeled `everyday`. A missing
+            // schedule day yields no days rather than a defaulted day 1.
+            vm.store.templates = (Array.isArray(summaries) ? summaries : []).map((summary) => ({
+                id: summary.planId,
+                name: summary.name,
+                expectedCost: summary.amount,
+                defaultAmount: summary.amount,
+                days: summary.scheduleDay != null ? [summary.scheduleDay] : [],
+                source: summary.flexibleDefinitionId ? 'flexible' : 'template',
+                recurrence: 'monthly',
+                profileId: '',
+            }));
+        } catch {
+            /* the Plan view keeps its last committed rows on mirror failure */
+        }
+        try {
+            vm.store.settings.templateProfiles = [];
+            vm.store.settings.activeTemplateProfileId = '';
+        } catch {
+            /* profile chrome keeps its last state; profiles stay empty by design */
+        }
+    };
+    const syncP04DCandidateInsights = async (vm) => {
+        const ports = p04dCandidatePorts;
+        if (!ports) return;
+        try {
+            if (typeof ports.insights.refresh === 'function') await ports.insights.refresh();
+        } catch {
+            /* a failed refresh keeps the last committed month */
+        }
+        try {
+            const stats = ports.insights.getMonthStatistics();
+            if (stats && vm.store.statistics) {
+                vm.store.statistics.monthKey = stats.monthKey || vm.store.statistics.monthKey;
+                vm.store.statistics.budgetKnown = false;
+                vm.store.statistics.budget = null;
+                vm.store.statistics.paidSpent = stats.paidSpent || 0;
+                vm.store.statistics.unpaidEssential = stats.unpaidEssential || 0;
+                vm.store.statistics.safeToSpend = stats.safeToSpend === null || stats.safeToSpend === undefined
+                    ? null
+                    : stats.safeToSpend;
+                vm.store.statistics.projectedBalance = stats.projectedBalance === null || stats.projectedBalance === undefined
+                    ? null
+                    : stats.projectedBalance;
+                vm.store.statistics.categoryBreakdown = ports.insights.getCategoryBreakdown();
+                vm.store.statistics.weeklySpending = ports.insights.getWeeklySpending();
+            }
+        } catch {
+            /* the Insights view keeps its last committed month on failure */
+        }
+        try {
+            const goals = ports.goals;
+            if (vm.store.settings && vm.store.settings.vault) {
+                vm.store.settings.vault.balance = goals.getVaultBalance();
+                vm.store.settings.vault.goals = goals.listGoals();
+            }
+        } catch {
+            /* the vault view keeps its last committed state on failure */
+        }
+    };
+    const syncP04DCandidateGoals = async (vm) => {
+        const ports = p04dCandidatePorts;
+        if (!ports) return;
+        try {
+            if (vm.store.settings && vm.store.settings.vault) {
+                vm.store.settings.vault.balance = ports.goals.getVaultBalance();
+                vm.store.settings.vault.goals = ports.goals.listGoals();
+            }
+        } catch {
+            /* the vault view keeps its last committed state on failure */
+        }
+    };
+    const syncP04DCandidateSettings = async (vm) => {
+        const ports = p04dCandidatePorts;
+        if (!ports) return;
+        try {
+            const settings = ports.lifecycle.getSettings();
+            if (settings && vm.store.settings) {
+                vm.store.settings.baseAllowance = settings.baseAllowance;
+                vm.store.settings.theme = settings.theme;
+                vm.store.settings.motionLevel = settings.motionLevel;
+            }
+        } catch {
+            /* settings chrome keeps its last state on mirror failure */
+        }
+    };
+    // P04-D4: persist the visible route/date intent through the navigation
+    // port (UI chrome only, never finance truth) so refresh, installed
+    // offline launch, and update recovery restore the destination.
+    const p04dPersistNavIntent = (vm) => {
+        try {
+            const ports = p04dCandidatePorts;
+            if (!ports || typeof ports.navigation.persistIntent !== 'function') return;
+            const resolved = ports.navigation.resolveIntent(vm.currentView, vm.store.currentDate);
+            if (resolved) ports.navigation.persistIntent(resolved);
+        } catch {
+            /* navigation persistence is best-effort chrome */
         }
     };
     if (injectedPorts && app && app.config && app.config.globalProperties) {
@@ -296,6 +430,9 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     // Selection Mode
                     selectionMode: false,
                     selectedExpenseIds: [],
+                    // D4: canonical availability for the Home hero. Independent
+                    // of `budgetKnown` because starting funds are not a budget.
+                    p04dSafeToSpend: null,
 
                     _toastTimer: null
                 }
@@ -606,6 +743,8 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     // P1-05: the divide-by-four weekly pace was not trustworthy and is
                     // disabled. Deterministic pacing belongs to the Insights phase,
                     // so Rushd only shows the monthly amount it can actually compute.
+                    // D4: canonical availability is independent of budgetKnown.
+                    if (p04dIsCandidate()) return this.p04dSafeToSpend;
                     return this.store.safeToSpend;
                 },
                 // P04-D3 candidate affordances: false in legacy mode, so the
@@ -661,8 +800,30 @@ export function installRootController(app, dataRuntime, environment = globalThis
                         this.exitSelectionMode();
                     }
                     this.currentView = targetView;
+                    // P04-D4: the visible route intent persists through the
+                    // navigation port (UI chrome only) so refresh and
+                    // offline recovery restore the destination.
+                    if (p04dIsCandidate()) p04dPersistNavIntent(this);
                 },
                 async persistOnboardingState(status, source = '') {
+                    // P04-D4: onboarding status is local flow state and
+                    // persists through the lifecycle port in candidate mode,
+                    // never the v1 settings store.
+                    if (p04dIsCandidate()) {
+                        // D4 correction: on port failure the prior flow
+                        // state stands — never assign or return a fabricated
+                        // success record.
+                        const previous = this.onboardingState ?? null;
+                        try {
+                            const next = await p04dCandidatePorts.lifecycle.persistOnboardingState(status, source);
+                            this.onboardingState = next;
+                            return next;
+                        } catch {
+                            this.showToast(p04dBlockedCopy(this.lang, 'authority'));
+                            this.onboardingState = previous;
+                            return previous;
+                        }
+                    }
                     const nextState = {
                         status,
                         updatedAt: new Date().toISOString(),
@@ -673,6 +834,22 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     return nextState;
                 },
                 async resolveOnboardingStatus() {
+                    // P04-D4: migration implies setup is done; the port's
+                    // local flow status answers when present, otherwise the
+                    // migrated book counts as completed. Never reads v1.
+                    if (p04dIsCandidate()) {
+                        try {
+                            const stored = p04dCandidatePorts.lifecycle.getOnboardingState();
+                            if (stored) {
+                                this.onboardingState = stored;
+                                return stored.status;
+                            }
+                        } catch {
+                            /* a failed read counts as completed below */
+                        }
+                        this.onboardingState = { status: 'completed', updatedAt: '', source: 'migration' };
+                        return 'completed';
+                    }
                     const storedState = normalizeOnboardingStateRecord(await DB.getSetting(ONBOARDING_STATE_KEY, null));
                     if (storedState) {
                         this.onboardingState = storedState;
@@ -696,6 +873,13 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     return 'pending';
                 },
                 openOnboardingModal(options = {}) {
+                    // P04-D4: the setup modal stages v1 profiles, templates,
+                    // and plan applications; it never opens in candidate
+                    // mode (see reopenOnboardingFromSettings).
+                    if (p04dIsCandidate()) {
+                        this.showToast(p04dBlockedCopy(this.lang, 'onboarding'));
+                        return;
+                    }
                     const today = this.core.Date.getTodayISO();
                     const effectiveDate = typeof options?.effectiveDate === 'string' && getMonthKey(options.effectiveDate) === getMonthKey(today)
                         ? options.effectiveDate
@@ -725,6 +909,12 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     this.onboardingModal.monthlyItems = templateItems.monthlyItems;
                 },
                 async handleOnboardingModalVisibilityChange(nextValue) {
+                    // P04-D4: onboarding never opens in candidate mode (see
+                    // initApp); a close here never writes v1 state.
+                    if (p04dIsCandidate()) {
+                        this.onboardingModal.open = false;
+                        return;
+                    }
                     if (nextValue) {
                         this.onboardingModal.open = true;
                         return;
@@ -839,7 +1029,13 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     if (!itemsKey) return;
                     this.onboardingModal[itemsKey] = this.onboardingModal[itemsKey].filter(item => item.id !== itemId);
                 },
-                async resolveOnboardingTargetProfileId() {
+                async                 resolveOnboardingTargetProfileId() {
+                    // P04-D4: onboarding profiles have no canonical
+                    // counterpart; see finishOnboarding.
+                    if (p04dIsCandidate()) {
+                        this.showToast(p04dBlockedCopy(this.lang, 'onboarding'));
+                        return '';
+                    }
                     if (this.onboardingModal.planMode === 'new') {
                         const name = this.onboardingNewProfileNameNormalized;
                         if (!name) {
@@ -877,7 +1073,14 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     await DB.setSetting('templateProfiles', this.store.settings.templateProfiles);
                     return targetProfileId;
                 },
-                async persistOnboardingTemplateItems(profileId) {
+                async                 persistOnboardingTemplateItems(profileId) {
+                    // P04-D4: onboarding plan staging writes v1 templates;
+                    // without a canonical profile counterpart this stays
+                    // visibly blocked instead of writing v1.
+                    if (p04dIsCandidate()) {
+                        this.showToast(p04dBlockedCopy(this.lang, 'onboarding'));
+                        return;
+                    }
                     const existingScopedTemplates = this.store.templates
                         .filter(template => !isFlexibleDefinitionRecord(template) && isDefinitionInProfile(template, profileId))
                         .map(template => normalizeDefinitionRecord(template))
@@ -924,6 +1127,15 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     this.onboardingModal.open = false;
                 },
                 async finishOnboarding() {
+                    // P04-D4: onboarding setup (budget, profiles, templates,
+                    // plan application) has no canonical path: profiles have
+                    // no counterpart and the allowance is read-only history.
+                    // The migrated book needs no setup, so this stays
+                    // visibly blocked instead of writing v1.
+                    if (p04dIsCandidate()) {
+                        this.showToast(p04dBlockedCopy(this.lang, 'onboarding'));
+                        return;
+                    }
                     if (!this.onboardingCanFinish) return;
                     // P1-06 review fix: a monthly item without a valid day (including
                     // a legacy template kept in the plan) blocks setup before ANY
@@ -958,6 +1170,13 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     }
                 },
                 reopenOnboardingFromSettings() {
+                    // P04-D4: setup is complete after migration; reopening
+                    // onboarding would stage v1 profiles and templates, so it
+                    // stays visibly blocked in candidate mode.
+                    if (p04dIsCandidate()) {
+                        this.showToast(p04dBlockedCopy(this.lang, 'onboarding'));
+                        return;
+                    }
                     this.openOnboardingModal({
                         source: 'settings',
                         effectiveDate: this.core.Date.getTodayISO(),
@@ -971,14 +1190,42 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     // mounted on committed canonical state. Onboarding and
                     // month-end v1 flows stay out; theme/motion/date chrome
                     // behaves exactly as in legacy.
+                    // P04-D4: settings chrome and the route/date intent come
+                    // from canonical ports; Plan/Insights/Goals mirrors keep
+                    // the populated destinations useful.
                     if (p04dIsCandidate()) {
                         this.applyLangDirection();
-                        this.applyTheme(this.store.settings.theme);
-                        this.applyMotionProfile(this.store.settings.motionLevel);
+                        try {
+                            await p04dCandidatePorts.lifecycle.initialize();
+                        } catch {
+                            /* the shell mounts on the last committed state */
+                        }
+                        await syncP04DCandidateSettings(this);
+                        this.applyTheme(this.store.settings.theme, false);
+                        this.applyMotionProfile(this.store.settings.motionLevel, false);
                         const candidateToday = this.core.Date.getTodayISO();
                         const candidateLocale = this.t._locale;
                         this.dateWindow = this.core.Date.generateWindow(candidateToday, 60, 60, candidateLocale, this.calendarType);
+                        try {
+                            const restored = p04dCandidatePorts.navigation.restoreIntent();
+                            if (restored && restored.view) {
+                                if (restored.date) {
+                                    try {
+                                        await p04dCandidatePorts.home.selectDate(restored.date);
+                                    } catch {
+                                        /* the current day stays on read failure */
+                                    }
+                                }
+                                this.navigateTo(restored.view);
+                            }
+                        } catch {
+                            /* the default destination stays on restore failure */
+                        }
                         await syncP04DCandidateHome(this);
+                        await syncP04DCandidatePlan(this);
+                        await syncP04DCandidateInsights(this);
+                        await syncP04DCandidateGoals(this);
+                        p04dPersistNavIntent(this);
                         this.$nextTick(() => this.centerDateScroller(this.store.currentDate, 'instant'));
                         return;
                     }
@@ -1036,6 +1283,7 @@ export function installRootController(app, dataRuntime, environment = globalThis
                         }
                         await syncP04DCandidateHome(this);
                         this.centerDateScroller(this.store.currentDate);
+                        p04dPersistNavIntent(this);
                         return;
                     }
                     if (this.selectionMode) this.exitSelectionMode();
@@ -1097,6 +1345,15 @@ export function installRootController(app, dataRuntime, environment = globalThis
                 },
 
                 getMonthStartPromptDeferral() {
+                    // P04-D4: deferral reads come from the lifecycle port in
+                    // candidate mode, never raw storage.
+                    if (p04dIsCandidate()) {
+                        try {
+                            return p04dCandidatePorts.lifecycle.getMonthStartDeferral();
+                        } catch {
+                            return null;
+                        }
+                    }
                     try {
                         const parsed = JSON.parse(localStorage.getItem(MONTH_START_PROMPT_DEFER_KEY) || 'null');
                         if (!parsed || typeof parsed !== 'object') return null;
@@ -1109,14 +1366,39 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     }
                 },
                 clearMonthStartPromptDeferral() {
+                    // P04-D4: deferral removal routes through the lifecycle
+                    // port in candidate mode, never raw storage.
+                    if (p04dIsCandidate()) {
+                        try {
+                            p04dCandidatePorts.lifecycle.clearMonthStartDeferral();
+                        } catch {
+                            /* deferral removal is best-effort chrome */
+                        }
+                        return;
+                    }
                     localStorage.removeItem(MONTH_START_PROMPT_DEFER_KEY);
                 },
                 deferMonthStartPrompt(referenceDate = this.core.Date.getTodayISO()) {
+                    // P04-D4: deferral writes route through the lifecycle
+                    // port in candidate mode, never raw storage.
+                    if (p04dIsCandidate()) {
+                        try {
+                            p04dCandidatePorts.lifecycle.deferMonthStartPrompt(referenceDate);
+                        } catch {
+                            /* deferral persistence is best-effort chrome */
+                        }
+                        return;
+                    }
                     const monthKey = this.applyTemplatesModal.promptMonthKey || getMonthKey(referenceDate);
                     if (!monthKey || !referenceDate) return;
                     localStorage.setItem(MONTH_START_PROMPT_DEFER_KEY, JSON.stringify({ monthKey, dateStr: referenceDate }));
                 },
                 shouldShowMonthStartPrompt(referenceDate = this.core.Date.getTodayISO()) {
+                    // P04-D4: the month-start apply prompt is a v1 plan flow
+                    // (profiles, assignments). Canonical materialization runs
+                    // explicitly from Plans, so the auto-prompt stays off and
+                    // never reads v1 in candidate mode.
+                    if (p04dIsCandidate()) return false;
                     if (this.onboardingState?.status && this.onboardingState.status !== 'completed') return false;
                     const monthKey = getMonthKey(referenceDate);
                     if (!monthKey) return false;
@@ -1130,6 +1412,9 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     return !(deferral.monthKey === monthKey && deferral.dateStr === referenceDate);
                 },
                 maybeOpenMonthStartPrompt(referenceDate = this.core.Date.getTodayISO()) {
+                    // P04-D4: see shouldShowMonthStartPrompt; the v1 prompt
+                    // never opens in candidate mode.
+                    if (p04dIsCandidate()) return;
                     if (!this.shouldShowMonthStartPrompt(referenceDate)) return;
                     this.openApplyTemplatesModal({
                         mode: 'monthStart',
@@ -1139,6 +1424,15 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     });
                 },
                 getMonthEndPromptDeferral() {
+                    // P04-D4: deferral reads come from the lifecycle port in
+                    // candidate mode, never raw storage.
+                    if (p04dIsCandidate()) {
+                        try {
+                            return p04dCandidatePorts.lifecycle.getMonthEndDeferral();
+                        } catch {
+                            return null;
+                        }
+                    }
                     try {
                         const parsed = JSON.parse(localStorage.getItem(MONTH_END_PROMPT_DEFER_KEY) || 'null');
                         if (!parsed || typeof parsed !== 'object') return null;
@@ -1151,9 +1445,29 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     }
                 },
                 clearMonthEndPromptDeferral() {
+                    // P04-D4: deferral removal routes through the lifecycle
+                    // port in candidate mode, never raw storage.
+                    if (p04dIsCandidate()) {
+                        try {
+                            p04dCandidatePorts.lifecycle.clearMonthEndDeferral();
+                        } catch {
+                            /* deferral removal is best-effort chrome */
+                        }
+                        return;
+                    }
                     localStorage.removeItem(MONTH_END_PROMPT_DEFER_KEY);
                 },
                 deferMonthEndPrompt(previousMonthKey, referenceDate = this.core.Date.getTodayISO()) {
+                    // P04-D4: deferral writes route through the lifecycle
+                    // port in candidate mode, never raw storage.
+                    if (p04dIsCandidate()) {
+                        try {
+                            p04dCandidatePorts.lifecycle.deferMonthEndPrompt(previousMonthKey, referenceDate);
+                        } catch {
+                            /* deferral persistence is best-effort chrome */
+                        }
+                        return;
+                    }
                     if (!MONTH_KEY_PATTERN.test(previousMonthKey || '') || !referenceDate) return;
                     localStorage.setItem(MONTH_END_PROMPT_DEFER_KEY, JSON.stringify({ previousMonthKey, dateStr: referenceDate }));
                 },
@@ -1197,6 +1511,12 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     this.monthEndModal.summary = summary;
                 },
                 handleMonthEndModalVisibilityChange(nextValue) {
+                    // P04-D4: closing the modal in candidate mode never arms
+                    // a v1 deferral outside the port.
+                    if (p04dIsCandidate() && !nextValue) {
+                        this.monthEndModal.open = false;
+                        return;
+                    }
                     if (nextValue) {
                         this.monthEndModal.open = true;
                         return;
@@ -1204,6 +1524,11 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     this.decideMonthEndPromptLater();
                 },
                 async maybeHandleMonthEndDecision(referenceDate = this.core.Date.getTodayISO()) {
+                    // P04-D4: automatic month-end settlement is a v1 flow
+                    // (v1 summaries, v1 settlement records). Canonical cycles
+                    // close explicitly through the goals port, so the auto
+                    // prompt stays off and never reads v1 in candidate mode.
+                    if (p04dIsCandidate()) return false;
                     if (this.onboardingState?.status && this.onboardingState.status !== 'completed') return false;
                     const previousMonthKey = getPreviousMonthKey(referenceDate);
                     if (!MONTH_KEY_PATTERN.test(previousMonthKey || '')) return false;
@@ -1236,13 +1561,62 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     return true;
                 },
                 decideMonthEndPromptLater() {
+                    // P04-D4: routes through the port-owned deferral.
+                    if (p04dIsCandidate()) {
+                        const previousMonthKey = this.monthEndModal.summary?.previousMonthKey || getPreviousMonthKey(this.core.Date.getTodayISO());
+                        this.deferMonthEndPrompt(previousMonthKey, this.core.Date.getTodayISO());
+                        this.monthEndModal.open = false;
+                        this.monthEndModal.isLoading = false;
+                        this.monthEndModal.summary = null;
+                        return;
+                    }
                     const previousMonthKey = this.monthEndModal.summary?.previousMonthKey || getPreviousMonthKey(this.core.Date.getTodayISO());
                     this.deferMonthEndPrompt(previousMonthKey, this.core.Date.getTodayISO());
                     this.monthEndModal.open = false;
                     this.monthEndModal.isLoading = false;
                     this.monthEndModal.summary = null;
                 },
+                // P04-D4: canonical month-end settlement helper. The host
+                // close+dispose runs in one write section and is retry-safe
+                // (an already-settled month returns its settlement instead
+                // of moving money twice); the modal stays loading across
+                // the commit so success surfaces only after it is durable.
+                async settleMonthEndViaPorts(decision) {
+                    if (!this.monthEndHasPositiveSurplus || !this.monthEndModal.summary) return;
+                    if (!p04dIsWritable()) {
+                        this.showToast(p04dBlockedCopy(this.lang, 'authority'));
+                        return;
+                    }
+                    this.monthEndModal.isLoading = true;
+                    try {
+                        const ports = p04dCandidatePorts.goals;
+                        const settled = decision === 'vault'
+                            ? await ports.settleToVault(this.monthEndModal.summary, this.core.Date.getTodayISO())
+                            : await ports.settleToBudget(this.monthEndModal.summary, this.core.Date.getTodayISO());
+                        if (!settled) {
+                            this.showToast(p04dBlockedCopy(this.lang, 'authority'));
+                            return;
+                        }
+                        await syncP04DCandidateGoals(this);
+                        await syncP04DCandidateInsights(this);
+                        this.clearMonthEndPromptDeferral();
+                        this.monthEndModal.open = false;
+                        this.monthEndModal.summary = null;
+                        this.showToast(decision === 'vault' ? this.t.monthEndMovedToVault : this.t.monthEndAddedToBudget);
+                    } catch {
+                        this.showToast(p04dBlockedCopy(this.lang, 'authority'));
+                    } finally {
+                        this.monthEndModal.isLoading = false;
+                    }
+                },
                 async moveMonthEndSurplusToVault() {
+                    // P04-D4: settlement runs through the canonical goals
+                    // port (closeCycle + disposeCycleRemainder, append-only)
+                    // in candidate mode, never the v1 store.
+                    if (p04dIsCandidate()) {
+                        await this.settleMonthEndViaPorts('vault');
+                        return;
+                    }
                     if (!this.monthEndHasPositiveSurplus || !this.monthEndModal.summary) return;
                     this.monthEndModal.isLoading = true;
                     try {
@@ -1258,6 +1632,11 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     }
                 },
                 async addMonthEndSurplusToBudget() {
+                    // P04-D4: see moveMonthEndSurplusToVault.
+                    if (p04dIsCandidate()) {
+                        await this.settleMonthEndViaPorts('budget');
+                        return;
+                    }
                     if (!this.monthEndHasPositiveSurplus || !this.monthEndModal.summary) return;
                     this.monthEndModal.isLoading = true;
                     try {
@@ -1273,6 +1652,13 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     }
                 },
                 handleApplyTemplatesModalVisibilityChange(nextValue) {
+                    // P04-D4: the month-start mode is a v1 flow; closing the
+                    // modal in candidate mode never arms a v1 deferral.
+                    if (p04dIsCandidate() && !nextValue && this.applyTemplatesModal.mode === 'monthStart') {
+                        this.applyTemplatesModal.preview = null;
+                        this.applyTemplatesModal.open = false;
+                        return;
+                    }
                     if (nextValue) {
                         this.applyTemplatesModal.open = true;
                         return;
@@ -1314,11 +1700,24 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     this.resetApplyTemplatesPreview();
                 },
                 decideMonthStartPromptLater() {
+                    // P04-D4: routes through the port-owned deferral.
+                    if (p04dIsCandidate()) {
+                        this.deferMonthStartPrompt(this.core.Date.getTodayISO());
+                        this.applyTemplatesModal.preview = null;
+                        this.applyTemplatesModal.open = false;
+                        return;
+                    }
                     this.deferMonthStartPrompt(this.core.Date.getTodayISO());
                     this.applyTemplatesModal.preview = null;
                     this.applyTemplatesModal.open = false;
                 },
                 async reviewTemplateApplication() {
+                    // P04-D4: apply previews derive from committed canonical
+                    // plans in candidate mode, never the v1 store.
+                    if (p04dIsCandidate()) {
+                        await this.reviewTemplateApplicationViaPorts();
+                        return;
+                    }
                     if (!this.applyTemplatesEffectiveDateValid || !this.selectedApplyTemplatesProfileId) return;
                     this.applyTemplatesModal.isLoading = true;
                     try {
@@ -1332,7 +1731,79 @@ export function installRootController(app, dataRuntime, environment = globalThis
                         this.applyTemplatesModal.isLoading = false;
                     }
                 },
+                // P04-D4: canonical plan apply helpers. Materialization is
+                // atomic and idempotent with deterministic occurrence IDs: a
+                // retry after a lost acknowledgement replays instead of
+                // recreating managed occurrences, and paid/detached
+                // occurrences are never recreated by the command.
+                async confirmTemplateApplicationViaPorts() {
+                    if (!this.applyTemplatesEffectiveDateValid) return;
+                    if (!p04dIsWritable()) {
+                        this.showToast(p04dBlockedCopy(this.lang, 'authority'));
+                        return;
+                    }
+                    this.applyTemplatesModal.isLoading = true;
+                    try {
+                        const fingerprint = p04dFingerprint({
+                            date: this.applyTemplatesModal.effectiveDate,
+                            plans: (p04dCandidatePorts.plan.listPlans() || []).map((plan) => plan.planId),
+                        });
+                        const operationId = p04dIntentOperationId('plan', fingerprint);
+                        // One intent, one stable identity per plan: a retry
+                        // of the whole apply replays per-plan instead of
+                        // duplicating occurrences.
+                        const operationIds = {};
+                        for (const plan of (p04dCandidatePorts.plan.listPlans() || [])) {
+                            operationIds[String(plan.planId)] = `${operationId}:${String(plan.planId)}`.slice(0, 100);
+                        }
+                        const preview = await p04dCandidatePorts.plan.confirmApply(
+                            this.applyTemplatesModal.effectiveDate,
+                            this.selectedApplyTemplatesProfileId,
+                            { operationIds },
+                        );
+                        if (preview.blocked) {
+                            this.showToast(preview.blockedReason || p04dBlockedCopy(this.lang, 'authority'));
+                            return;
+                        }
+                        this.applyTemplatesModal.preview = preview;
+                        this.clearMonthStartPromptDeferral();
+                        this.applyTemplatesModal.open = false;
+                        await syncP04DCandidateHome(this);
+                        await syncP04DCandidatePlan(this);
+                        await syncP04DCandidateInsights(this);
+                        p04dClearIntent('plan');
+                        this.showToast(preview.totalChanges > 0 ? this.t.applyTemplatesDone : this.t.noChanges);
+                    } catch {
+                        this.showToast(p04dBlockedCopy(this.lang, 'authority'));
+                    } finally {
+                        this.applyTemplatesModal.isLoading = false;
+                    }
+                },
+                async reviewTemplateApplicationViaPorts() {
+                    if (!this.applyTemplatesEffectiveDateValid) return;
+                    this.applyTemplatesModal.isLoading = true;
+                    try {
+                        const preview = await p04dCandidatePorts.plan.previewApply(
+                            this.applyTemplatesModal.effectiveDate,
+                            this.selectedApplyTemplatesProfileId,
+                        );
+                        this.applyTemplatesModal.preview = preview.blocked ? null : preview;
+                        this.applyTemplatesModal.blockedPlan = preview.blocked ? preview : null;
+                    } catch {
+                        this.applyTemplatesModal.preview = null;
+                        this.showToast(p04dBlockedCopy(this.lang, 'authority'));
+                    } finally {
+                        this.applyTemplatesModal.isLoading = false;
+                    }
+                },
                 async confirmTemplateApplication() {
+                    // P04-D4: materialization runs through the canonical plan
+                    // port (atomic, idempotent, deterministic occurrence IDs)
+                    // in candidate mode, never the v1 store.
+                    if (p04dIsCandidate()) {
+                        await this.confirmTemplateApplicationViaPorts();
+                        return;
+                    }
                     if (!this.applyTemplatesEffectiveDateValid || !this.selectedApplyTemplatesProfileId) return;
                     // P1-06 review fix: never reach the write path while the plan is
                     // blocked on a monthly template missing its day.
@@ -1540,7 +2011,49 @@ export function installRootController(app, dataRuntime, environment = globalThis
                         allocatedAmount: ''
                     };
                 },
+                // P04-D4: canonical goal creation helper. One open form keeps
+                // one operation identity so a retry after a lost
+                // acknowledgement replays instead of duplicating the goal.
+                async addVaultGoalViaPorts() {
+                    if (!this.vaultGoalFormValid) return;
+                    if (!p04dIsWritable()) {
+                        this.showToast(p04dBlockedCopy(this.lang, 'authority'));
+                        return;
+                    }
+                    const fingerprint = p04dFingerprint({
+                        name: this.vaultGoalForm.name,
+                        target: this.vaultGoalForm.targetAmount,
+                        allocated: this.vaultGoalForm.allocatedAmount,
+                    });
+                    const operationId = p04dIntentOperationId('goal', fingerprint);
+                    try {
+                        const created = await p04dCandidatePorts.goals.addGoal({
+                            name: this.vaultGoalForm.name,
+                            targetAmount: parseMoneyInput(this.vaultGoalForm.targetAmount),
+                            allocatedAmount: this.vaultGoalForm.allocatedAmount === '' || this.vaultGoalForm.allocatedAmount === null
+                                ? 0
+                                : parseMoneyInput(this.vaultGoalForm.allocatedAmount),
+                        }, { operationId });
+                        if (!created) {
+                            this.showToast(p04dBlockedCopy(this.lang, 'authority'));
+                            return;
+                        }
+                        await syncP04DCandidateGoals(this);
+                        p04dClearIntent('goal');
+                        this.resetVaultGoalForm();
+                        this.showToast(this.t.goalSaved);
+                    } catch {
+                        this.showToast(p04dBlockedCopy(this.lang, 'authority'));
+                    }
+                },
                 async addVaultGoal() {
+                    // P04-D4: goal creation runs through the canonical goals
+                    // port (createGoal plus an explicit opening assignment
+                    // when the user provides one) in candidate mode.
+                    if (p04dIsCandidate()) {
+                        await this.addVaultGoalViaPorts();
+                        return;
+                    }
                     if (!this.vaultGoalFormValid) return;
                     const goal = await this.store.addVaultGoal({
                         id: this.core.UUID(),
@@ -1555,6 +2068,12 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     this.showToast(this.t.goalSaved);
                 },
                 confirmDeleteVaultGoal(goal) {
+                    // P04-D4: goals are append-only with no delete command;
+                    // deletion stays visibly blocked, never a v1 write.
+                    if (p04dIsCandidate()) {
+                        this.showToast(p04dBlockedCopy(this.lang, 'goalDelete'));
+                        return;
+                    }
                     if (!goal?.id) return;
                     this.showConfirmDialog(
                         this.t.deleteGoalQ,
@@ -1681,7 +2200,14 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     if (!normalizedProfile) return '';
                     return normalizedProfile.id === LEGACY_TEMPLATE_PROFILE.id ? this.t.legacyProfile : normalizedProfile.name;
                 },
-                async setActiveTemplateProfile(profileId) {
+                async                 setActiveTemplateProfile(profileId) {
+                    // P04-D4: profiles have no canonical counterpart; the
+                    // active profile stays a v1-only notion and never writes
+                    // in candidate mode.
+                    if (p04dIsCandidate()) {
+                        this.showToast(p04dBlockedCopy(this.lang, 'profile'));
+                        return;
+                    }
                     const resolvedProfileId = this.templateProfiles.some(profile => profile.id === profileId)
                         ? profileId
                         : (this.templateProfiles[0]?.id || LEGACY_TEMPLATE_PROFILE.id);
@@ -1691,6 +2217,12 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     this.resetApplyTemplatesPreview();
                 },
                 async createTemplateProfile() {
+                    // P04-D4: profiles have no canonical counterpart; see
+                    // setActiveTemplateProfile.
+                    if (p04dIsCandidate()) {
+                        this.showToast(p04dBlockedCopy(this.lang, 'profile'));
+                        return;
+                    }
                     const rawName = window.prompt(this.t.profileNamePrompt, '');
                     if (rawName === null) return;
 
@@ -1727,6 +2259,12 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     this.planSectionsOpen[section] = !this.planSectionsOpen[section];
                 },
                 async toggleCurrentProfileOffday(dayIndex) {
+                    // P04-D4: profile offdays have no canonical counterpart
+                    // and never write in candidate mode (see above).
+                    if (p04dIsCandidate()) {
+                        this.showToast(p04dBlockedCopy(this.lang, 'profile'));
+                        return;
+                    }
                     const normalizedDayIndex = normalizeWeekdayIndex(dayIndex);
                     if (normalizedDayIndex === null) return;
                     const currentProfile = this.currentTemplateProfile;
@@ -2335,16 +2873,30 @@ export function installRootController(app, dataRuntime, environment = globalThis
                 },
 
                 // --- SETTINGS LOGIC ---
-                applyTheme(theme) {
+                applyTheme(theme, persist = true) {
                     const resolvedTheme = theme === 'light' ? 'light' : 'dark';
                     this.store.settings.theme = resolvedTheme;
                     document.documentElement.dataset.theme = resolvedTheme;
                     document.documentElement.style.colorScheme = resolvedTheme;
                     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_META_COLORS[resolvedTheme]);
-                    localStorage.setItem('rushd_theme', resolvedTheme);
+                    // P04-D4: in candidate mode persistence belongs to the
+                    // lifecycle port; applying chrome never writes storage.
+                    if (persist && !p04dIsCandidate()) localStorage.setItem('rushd_theme', resolvedTheme);
                 },
                 async setTheme(theme) {
                     const resolvedTheme = theme === 'light' ? 'light' : 'dark';
+                    // P04-D4: theme preference writes route through the
+                    // lifecycle port in candidate mode, never v1 storage.
+                    if (p04dIsCandidate()) {
+                        try {
+                            await p04dCandidatePorts.lifecycle.setTheme(resolvedTheme);
+                        } catch {
+                            this.showToast(p04dBlockedCopy(this.lang, 'authority'));
+                            return;
+                        }
+                        this.applyTheme(resolvedTheme, false);
+                        return;
+                    }
                     this.applyTheme(resolvedTheme);
                     await DB.setSetting('theme', resolvedTheme);
                 },
@@ -2364,20 +2916,44 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     if (prefersReducedMotion) return 'reduce';
                     return resolvedLevel === 'auto' ? this.resolveAutoMotionLevel() : resolvedLevel;
                 },
-                applyMotionProfile(level) {
+                applyMotionProfile(level, persist = true) {
                     const resolvedLevel = normalizeMotionLevel(level);
                     const effectiveLevel = this.resolveEffectiveMotionLevel(resolvedLevel);
                     this.store.settings.motionLevel = resolvedLevel;
                     document.documentElement.dataset.motionSetting = resolvedLevel;
                     document.documentElement.dataset.motion = effectiveLevel;
-                    localStorage.setItem('rushd_motion', resolvedLevel);
+                    // P04-D4: in candidate mode persistence belongs to the
+                    // lifecycle port; applying chrome never writes storage.
+                    if (persist && !p04dIsCandidate()) localStorage.setItem('rushd_motion', resolvedLevel);
                 },
                 async setMotionLevel(level) {
                     const resolvedLevel = normalizeMotionLevel(level);
+                    // P04-D4: motion preference writes route through the
+                    // lifecycle port in candidate mode, never v1 storage.
+                    if (p04dIsCandidate()) {
+                        try {
+                            await p04dCandidatePorts.lifecycle.setMotionLevel(resolvedLevel);
+                        } catch {
+                            this.showToast(p04dBlockedCopy(this.lang, 'authority'));
+                            return;
+                        }
+                        this.applyMotionProfile(resolvedLevel, false);
+                        return;
+                    }
                     this.applyMotionProfile(resolvedLevel);
                     await DB.setSetting('motionLevel', resolvedLevel);
                 },
                 async saveSettings() {
+                    // P04-D4: the monthly allowance migrated into the opening
+                    // cycle starting funds and no canonical command rewrites
+                    // it. The figure stays read-only: revert the typed value
+                    // to the canonical mirror so the display never suggests
+                    // an unsaved edit, and never touch v1.
+                    if (p04dIsCandidate()) {
+                        this.showToast(p04dBlockedCopy(this.lang, 'allowance'));
+                        await syncP04DCandidateSettings(this);
+                        return;
+                    }
                     const baseAllowance = parseMoneyInput(this.store.settings.baseAllowance);
                     if (baseAllowance === null) {
                         this.showToast(this.t.invalidMoneyInput);
@@ -2393,6 +2969,13 @@ export function installRootController(app, dataRuntime, environment = globalThis
                 },
                 // P1-05: setSafeToSpendMode was removed with the fake weekly view.
                 async deleteTemplate(id) {
+                    // P04-D4: recurring plans are append-only with no delete
+                    // command; deletion stays visibly blocked, never a v1
+                    // write.
+                    if (p04dIsCandidate()) {
+                        this.showToast(p04dBlockedCopy(this.lang, 'templateDelete'));
+                        return;
+                    }
                     this.showConfirmDialog(
                         this.t.deleteTemplateQ,
                         this.t.stopAutoFill,
@@ -2415,6 +2998,11 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     this.addModal.open = true;
                 },
                 async buildBackupSnapshot() {
+                    // P04-D4: versioned export comes from the canonical
+                    // portability port in candidate mode, never v1 reads.
+                    if (p04dIsCandidate()) {
+                        return p04dCandidatePorts.portability.buildSnapshot();
+                    }
                     const data = {
                         version: '3.1',
                         exportedAt: new Date().toISOString(),
@@ -2443,7 +3031,67 @@ export function installRootController(app, dataRuntime, environment = globalThis
                         alert(this.t.exportFailed);
                     }
                 },
+                // P04-D4: canonical import helper. The file is parsed and
+                // confirmed exactly like the legacy flow, but the restore
+                // goes through the P04-C commit point: success surfaces only
+                // after durable activation, and the shell resyncs from the
+                // new active storage before anything renders.
+                importDataViaPorts(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    if (!p04dIsWritable()) {
+                        this.showToast(p04dBlockedCopy(this.lang, 'authority'));
+                        return;
+                    }
+                    const reader = new FileReader();
+                    reader.onload = async (e) => {
+                        let data;
+                        try {
+                            data = JSON.parse(e.target.result);
+                        } catch (err) {
+                            console.error('Import Error:', err);
+                            alert(this.t.invalidBackup);
+                            return;
+                        }
+                        this.showConfirmDialog(
+                            this.t.importQ,
+                            this.t.importMsg,
+                            async () => {
+                                try {
+                                    const fingerprint = p04dFingerprint(data);
+                                    const importId = p04dIntentOperationId('import', fingerprint);
+                                    const result = await p04dCandidatePorts.portability.restoreSnapshot(data, {
+                                        importId,
+                                        confirmation: 'REPLACE-ACTIVE-DATABASE',
+                                    });
+                                    if (!result.ok) {
+                                        alert(this.t.invalidBackup);
+                                        return;
+                                    }
+                                    await syncP04DCandidateHome(this);
+                                    await syncP04DCandidatePlan(this);
+                                    await syncP04DCandidateInsights(this);
+                                    await syncP04DCandidateGoals(this);
+                                    p04dClearIntent('import');
+                                    this.currentView = 'dashboard';
+                                    this.showToast(this.t.importSuccess);
+                                } catch (err) {
+                                    console.error('Canonical import failed:', err);
+                                    alert(this.t.invalidBackup);
+                                }
+                            }
+                        );
+                    };
+                    reader.readAsText(file);
+                },
                 importData(event) {
+                    // P04-D4: versioned import runs through the canonical
+                    // portability port (preview/confirm commit point) in
+                    // candidate mode, never v1 restore paths.
+                    if (p04dIsCandidate()) {
+                        this.importDataViaPorts(event);
+                        return;
+                    }
                     const file = event.target.files[0];
                     if (!file) return;
 
@@ -2537,7 +3185,64 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     reader.readAsText(file);
                     event.target.value = '';
                 },
+                // P04-D4: canonical export-first reset helper. The safety
+                // backup downloads before anything destructive runs; the
+                // reset commits through the P04-C commit point and the shell
+                // resyncs from the new active storage before success shows.
+                async resetAppViaPorts() {
+                    if (!p04dIsWritable()) {
+                        this.showToast(p04dBlockedCopy(this.lang, 'authority'));
+                        return;
+                    }
+                    this.showConfirmDialog(
+                        this.t.factoryResetQ,
+                        this.t.factoryResetMsg,
+                        async () => {
+                            try {
+                                this.downloadBackupFile(await p04dCandidatePorts.portability.buildSnapshot());
+                            } catch (err) {
+                                console.error('Reset safety export failed:', err);
+                                this.showConfirmDialog(this.t.resetFailedTitle, this.t.resetBackupFailed, () => {}, this.t.dialogOk, 'brand');
+                                return;
+                            }
+                            try {
+                                const fingerprint = p04dFingerprint({ at: this.store.currentDate });
+                                const resetId = p04dIntentOperationId('reset', fingerprint);
+                                await p04dCandidatePorts.portability.factoryReset({
+                                    resetId,
+                                    confirmation: 'RESET-GUEST-SCOPE',
+                                    onBlocked: () => {
+                                        this.showConfirmDialog(
+                                            this.t.resetWaitingTitle,
+                                            this.t.resetWaiting,
+                                            () => {},
+                                            this.t.dialogOk,
+                                            'brand'
+                                        );
+                                    },
+                                });
+                            } catch (e) {
+                                console.error('Canonical reset failed:', e);
+                                this.showConfirmDialog(this.t.resetFailedTitle, this.t.resetBackupFailed, () => {}, this.t.dialogOk, 'brand');
+                                return;
+                            }
+                            await syncP04DCandidateHome(this);
+                            await syncP04DCandidatePlan(this);
+                            await syncP04DCandidateInsights(this);
+                            await syncP04DCandidateGoals(this);
+                            p04dClearIntent('reset');
+                            this.clearRushdLocalState();
+                            location.reload();
+                        }
+                    );
+                },
                 async resetApp() {
+                    // P04-D4: export-first reset runs through the canonical
+                    // portability port in candidate mode, never v1 reset.
+                    if (p04dIsCandidate()) {
+                        await this.resetAppViaPorts();
+                        return;
+                    }
                     this.showConfirmDialog(
                         this.t.factoryResetQ,
                         this.t.factoryResetMsg,
@@ -2574,6 +3279,16 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     );
                 },
                 clearRushdLocalState() {
+                    // P04-D4: local-preference clearing routes through the
+                    // portability port in candidate mode, never raw storage.
+                    if (p04dIsCandidate()) {
+                        try {
+                            p04dCandidatePorts.portability.clearLocalPreferences();
+                        } catch {
+                            this.showToast(p04dBlockedCopy(this.lang, 'authority'));
+                        }
+                        return;
+                    }
                     // P0-08: remove every Rushd-owned preference so the reset is
                     // complete; language, calendar, and prompt deferrals are included.
                     const keysToRemove = [];
@@ -2590,11 +3305,36 @@ export function installRootController(app, dataRuntime, environment = globalThis
 
                 // --- LANGUAGE ---
                 setLang(newLang) {
+                    // P04-D4: language preference writes route through the
+                    // lifecycle port in candidate mode, never raw storage.
+                    if (p04dIsCandidate()) {
+                        try {
+                            p04dCandidatePorts.lifecycle.setLanguage(newLang);
+                        } catch {
+                            this.showToast(p04dBlockedCopy(this.lang, 'authority'));
+                            return;
+                        }
+                        this.lang = newLang;
+                        this.applyLangDirection();
+                        return;
+                    }
                     this.lang = newLang;
                     localStorage.setItem('rushd_lang', newLang);
                     this.applyLangDirection();
                 },
                 setCalendarType(type) {
+                    // P04-D4: calendar preference writes route through the
+                    // lifecycle port in candidate mode, never raw storage.
+                    if (p04dIsCandidate()) {
+                        try {
+                            p04dCandidatePorts.lifecycle.setCalendarType(type);
+                        } catch {
+                            this.showToast(p04dBlockedCopy(this.lang, 'authority'));
+                            return;
+                        }
+                        this.calendarType = type;
+                        return;
+                    }
                     this.calendarType = type;
                     localStorage.setItem('rushd_calendar', type);
                 },

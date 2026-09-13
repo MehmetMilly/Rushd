@@ -20,6 +20,7 @@ export type {
   NavigationIntent,
   NavigationIntentPort,
   PlanPort,
+  PlanSummaryView,
   PortabilityPort,
   PortStatus,
   P04DAuthorityRequest,
@@ -44,6 +45,21 @@ export {
 export { bindAuthorityState, createLegacyFeaturePorts } from './legacy-ports.js';
 export { createCandidateIdFactory, prepareCandidateShell } from './candidate-shell.js';
 export type { CandidateShell, CandidateShellOptions } from './candidate-shell.js';
+export {
+  P04D_PRODUCTION_AUTHORITY,
+  P04D_PRODUCTION_CALCULATION_VERSION,
+  P04D_PRODUCTION_DEVICE_KEY,
+  P04D_PRODUCTION_GUEST_KEY,
+  P04D_PRODUCTION_MIGRATION_ID,
+  P04D_V1_EXTRACTION_ONLY_REASON,
+  P04D_V1_FROZEN_DB_WRITERS,
+  P04D_V1_FROZEN_STORE_WRITERS,
+  bootProductionApplication,
+  createProductionContext,
+  freezeV1Writers,
+  isProductionCanonical,
+  resolveProductionIdentity,
+} from './production-boot.js';
 export {
   MUTATION_COVERAGE_INVENTORY,
   findDuplicateOwners,

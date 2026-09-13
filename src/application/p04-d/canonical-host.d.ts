@@ -13,6 +13,12 @@ export const P04D_D2_D3_OWNED_REASON: string;
 export const P04D_D2_D4_OWNED_REASON: string;
 export const P04D_D3_PAY_BLOCKED_REASON: string;
 export const P04D_D3_BULK_UNPAID_BLOCKED_REASON: string;
+export const P04D_D4_PROFILE_BLOCKED_REASON: string;
+export const P04D_D4_TEMPLATE_DELETE_BLOCKED_REASON: string;
+export const P04D_D4_GOAL_DELETE_BLOCKED_REASON: string;
+export const P04D_D4_ALLOWANCE_BLOCKED_REASON: string;
+export const P04D_ONBOARDING_STATE_KEY: string;
+export const P04D_NAV_INTENT_KEY: string;
 
 export interface CanonicalStorageAdapter {
   readonly control?: ControlStore;

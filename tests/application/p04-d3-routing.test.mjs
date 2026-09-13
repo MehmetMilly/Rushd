@@ -95,14 +95,16 @@ for (const action of ['selectDate', 'submitNewExpenseViaPorts', 'saveEditedExpen
     assert.ok(template.includes(snippet), `template must visibly block unsupported controls: ${snippet}`);
   }
   assert.ok(!template.includes('@click="commitPayment" :disabled="p04dWritesBlocked"'), 'pay confirm must not rely on writes-blocked alone');
-  // Correction: classification pickers stay out of candidate mode, and the
-  // edit-modal unpaid toggle with them.
+  // D4 parity correction: unsupported classification and unpaid chrome stays
+  // visible for layout continuity, but every control is disabled in candidate
+  // mode before invocation.
   for (const snippet of [
-    "addModal.mode === 'expense' && !p04dCandidateActive",
-    "editModal.type === 'expense' && !p04dCandidateActive",
-    "editModal.form.isPaid && !p04dCandidateActive",
+    '<div v-if="addModal.mode === \'expense\'">',
+    'class="edit-input-group" v-if="editModal.type === \'expense\'">',
+    '<button v-if="editModal.type === \'expense\' && editModal.form.isPaid" @click="markUnpaidFromEdit"',
+    'class="unpaid-tag mt-[2px]" :disabled="p04dCandidateActive"',
   ]) {
-    assert.ok(template.includes(snippet), `template must hide candidate-unusable controls: ${snippet}`);
+    assert.ok(template.includes(snippet), `template must preserve visibly disabled candidate chrome: ${snippet}`);
   }
 }
 

@@ -19,7 +19,9 @@ const expectedSchema = {
 };
 const contentTypes = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8', '.woff2': 'font/woff2'
+  '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
+  '.woff2': 'font/woff2', '.wasm': 'application/wasm',
+  '.webmanifest': 'application/manifest+json'
 };
 
 const server = http.createServer(async (request, response) => {
@@ -54,8 +56,13 @@ async function deleteLegacyDatabase(page) {
   });
 }
 
-async function inspectProductionDatabase(page) {
-  return page.evaluate(async () => {
+async function inspectProductionDatabase(page, expectedRecord) {
+  // P04-D4 cutover: the production app no longer holds a live v1
+  // connection (`DB.connect` is frozen; extraction uses its own handle),
+  // so the proof reads v1 back through a raw reopen only. It asserts the
+  // schema is untouched at version 1 AND the seeded record bytes are
+  // identical (extraction-only: migration never writes v1).
+  return page.evaluate(async (expected) => {
     const describe = (database) => ({
       name: database.name,
       version: database.version,
@@ -71,21 +78,34 @@ async function inspectProductionDatabase(page) {
         };
       })
     });
-    const appDatabase = window.MicroSaveDB?.db;
-    if (!appDatabase) throw new Error('Production app did not expose its IndexedDB connection.');
-    const reopen = await new Promise((resolve, reject) => {
+    if (typeof window.RushdDebug?.getAppProxy !== 'function') {
+      throw new Error('Production app did not mount the established shell.');
+    }
+    const database = await new Promise((resolve, reject) => {
       const request = indexedDB.open('MicroSaveOS_DB', 1);
       let upgraded = false;
       request.onupgradeneeded = () => { upgraded = true; };
-      request.onsuccess = () => {
-        const database = request.result;
-        resolve({ schema: describe(database), upgraded });
-        database.close();
-      };
+      request.onsuccess = () => resolve({ db: request.result, upgraded });
       request.onerror = () => reject(request.error);
     });
-    return { app: describe(appDatabase), reopen };
-  });
+    try {
+      const expenses = await new Promise((resolve, reject) => {
+        const transaction = database.db.transaction(['expenses'], 'readonly');
+        const request = transaction.objectStore('expenses').getAll();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      const seeded = expenses.find((row) => row && row.id === 'p02-legacy-v1-expense');
+      return {
+        schema: describe(database.db),
+        upgraded: database.upgraded,
+        seeded: seeded ?? null,
+        matchesSeed: JSON.stringify(seeded ?? null) === JSON.stringify(expected),
+      };
+    } finally {
+      database.db.close();
+    }
+  }, expectedRecord);
 }
 
 function assertCleanDiagnostics(externalRequests, messages) {
@@ -123,16 +143,26 @@ async function seedLegacyV1(page) {
         key: 'onboardingState',
         value: { status: 'completed', updatedAt: '2026-08-10T09:00:00.000Z', source: 'p02-legacy-proof' }
       });
+      // P04-D4 cutover: the fixture expense is paid. Unpaid legacy rows
+      // are truthfully quarantined (never migrated as spendable facts),
+      // so only a paid actual renders after migration.
       transaction.objectStore('expenses').put({
         id: 'p02-legacy-v1-expense', name: expenseName, expectedCost: 77,
-        actualPaid: 0, isPaid: false, category: 'food', classification: 'essential',
+        actualPaid: 77, isPaid: true, category: 'food', classification: 'essential',
         source: 'manual', date, createdAt: '2026-08-10T09:00:00.000Z'
       });
       transaction.oncomplete = resolve;
       transaction.onerror = () => reject(transaction.error);
     });
     db.close();
-    return date;
+    return {
+      date,
+      record: {
+        id: 'p02-legacy-v1-expense', name: expenseName, expectedCost: 77,
+        actualPaid: 77, isPaid: true, category: 'food', classification: 'essential',
+        source: 'manual', date, createdAt: '2026-08-10T09:00:00.000Z'
+      }
+    };
   }, { expenseName: fakeExpenseName });
 }
 
@@ -157,23 +187,22 @@ async function seedLegacyV1(page) {
   });
 
   await page.goto(`${baseUrl}/p02-idb-seed.html`);
-  const expectedDate = await seedLegacyV1(page);
+  const seeded = await seedLegacyV1(page);
   await page.goto(baseUrl, { waitUntil: 'networkidle', timeout: 60_000 });
   await page.getByText(fakeExpenseName, { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
-  const proof = await inspectProductionDatabase(page);
+  const proof = await inspectProductionDatabase(page, seeded.record);
 
-  assert.equal(expectedDate, await page.evaluate(() => window.MicroSaveStore.currentDate));
-  assert.deepEqual(proof, {
-    app: expectedSchema,
-    reopen: { schema: expectedSchema, upgraded: false }
-  });
+  assert.equal(seeded.date, await page.evaluate(() => window.MicroSaveStore.currentDate));
+  assert.deepEqual(proof.schema, expectedSchema);
+  assert.equal(proof.upgraded, false);
+  assert.equal(proof.matchesSeed, true);
   assertCleanDiagnostics(externalRequests, messages);
 
   await context.close();
 
-  // This must stay separate from the seeded reopen proof: it catches a fresh
-  // production database that accidentally creates `plans` instead of the v1
-  // `templates` store while still allowing legacy data to reopen correctly.
+  // P04-D4 cutover: a fresh boot must NOT create `MicroSaveOS_DB` — v1
+  // opens only inside explicit read-only extraction, and there is nothing
+  // to extract. The shell still mounts canonical on an empty book.
   const freshContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const freshPage = await freshContext.newPage();
   const freshExternalRequests = new Set();
@@ -192,16 +221,18 @@ async function seedLegacyV1(page) {
   await freshPage.goto(`${baseUrl}/p02-idb-seed.html`);
   await deleteLegacyDatabase(freshPage);
   await freshPage.goto(baseUrl, { waitUntil: 'networkidle', timeout: 60_000 });
-  assert.deepEqual(await inspectProductionDatabase(freshPage), {
-    app: expectedSchema,
-    reopen: { schema: expectedSchema, upgraded: false }
-  });
+  const freshShell = await freshPage.evaluate(async () => ({
+    mounted: typeof window.RushdDebug?.getAppProxy === 'function',
+    databases: (await indexedDB.databases()).map((entry) => entry.name),
+  }));
+  assert.equal(freshShell.mounted, true);
+  assert.ok(!freshShell.databases.includes('MicroSaveOS_DB'), 'fresh boot must not create the v1 database');
   assertCleanDiagnostics(freshExternalRequests, freshMessages);
   await freshContext.close();
 
   await browser.close();
   await close();
-  console.log('Rushd legacy IndexedDB v1 reopen/read/render and fresh-schema proof passed.');
+  console.log('Rushd legacy IndexedDB v1 reopen/read/render and fresh-no-create proof passed.');
 })().catch(async (error) => {
   await close().catch(() => {});
   console.error(error);

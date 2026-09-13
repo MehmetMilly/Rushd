@@ -68,8 +68,12 @@ if (!html.includes('<script src="/retire-rejected-shell.js"></script>')) {
 }
 
 const mainTs = readFileSync('src/main.ts', 'utf8');
-if (!mainTs.includes('createLegacyApplication')) {
-  throw new Error('src/main.ts must keep createLegacyApplication as the composition root.');
+if (!mainTs.includes('bootProductionApplication')) {
+  throw new Error('src/main.ts must boot through the reviewed P04-D4 production cutover.');
+}
+const productionBoot = readFileSync('src/application/p04-d/production-boot.js', 'utf8');
+if (!productionBoot.includes('createLegacyApplication')) {
+  throw new Error('P04-D4 production boot must keep createLegacyApplication as the composition root.');
 }
 if (mainTs.includes('createGuestApplication')) {
   throw new Error('src/main.ts must not mount createGuestApplication in this rollback release.');

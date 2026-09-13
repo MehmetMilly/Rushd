@@ -27,7 +27,8 @@
     "ci": "npm run lint && npm run typecheck && npm test && npm run build && npm run test:browser && npm run parity:self-test && npm run parity:quick",
     "baseline:capture": "PLAYWRIGHT_BROWSERS_PATH=0 node scripts/capture-p00-baseline.cjs",
     "baseline:measure": "node scripts/p00-performance-baseline.mjs",
-    "baseline:package": "node scripts/package-p00-evidence.mjs"
+    "baseline:package": "node scripts/package-p00-evidence.mjs",
+    "test:p04d4": "node tests/application/p04-d-mutation-coverage.test.mjs && node tests/application/p04-d4-routing.test.mjs && vitest run --config tests/pwa/vitest.p04d4.config.ts && node tests/pwa/p04-d4-browser.mjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.12.1",

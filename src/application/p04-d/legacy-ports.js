@@ -576,6 +576,23 @@ export function createLegacyFeaturePorts(
         };
       });
     },
+    listPlans() {
+      return asArray(getStore(dataRuntime).templates).map((entry) => {
+        const record = asRecord(entry);
+        const days = asArray(record.days).filter(
+          (day) => Number.isInteger(day) && day >= 1 && day <= 31,
+        );
+        return {
+          planId: toStringValue(record.id),
+          name: toStringValue(record.name || record.id),
+          amount: toNumber(record.expectedCost ?? record.defaultAmount, 0),
+          scheduleDay: days.length > 0 ? days[0] : 1,
+          effectiveDate: '',
+          flexibleDefinitionId: record.source === 'flexible' ? toStringValue(record.id) : null,
+          occurrenceCount: 0,
+        };
+      });
+    },
     getActiveProfileId() {
       return toStringValue(asRecord(getStore(dataRuntime).settings).activeTemplateProfileId);
     },
@@ -913,6 +930,10 @@ export function createLegacyFeaturePorts(
         const key = storage.key.call(storage, index);
         if (
           key &&
+          // D4 correction: the persisted device id is storage namespacing,
+          // not a UI preference; clearing must preserve it so the safety
+          // backup stays re-importable after a reset.
+          key !== 'rushd_device_id' &&
           (key.startsWith('rushd_') || key.startsWith('microsave_') || key === onboardingKey)
         ) {
           doomed.push(key);
@@ -938,13 +959,46 @@ export function createLegacyFeaturePorts(
   /** @type {NavigationIntentPort} */
   const navigation = {
     name: 'navigation',
-    resolveIntent(view) {
+    resolveIntent(view, date) {
       const target = destinations.includes(view) ? view : null;
       if (!target) return null;
-      return { view: target };
+      const intent = { view: target };
+      if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) intent.date = date;
+      return intent;
     },
     listDestinations() {
       return [...destinations];
+    },
+    persistIntent(intent) {
+      // UI route chrome only; persists even while finance writes are
+      // blocked so offline destination recovery keeps working.
+      try {
+        const record = asRecord(intent);
+        if (!destinations.includes(record.view)) return;
+        const payload = { view: record.view };
+        if (typeof record.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(record.date)) {
+          payload.date = record.date;
+        }
+        writeLocalStorage(environment, 'rushd_nav_intent', JSON.stringify(payload));
+      } catch {
+        /* intent persistence is best-effort chrome */
+      }
+    },
+    restoreIntent() {
+      try {
+        const raw = readLocalStorage(environment, 'rushd_nav_intent');
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return null;
+        if (!destinations.includes(parsed.view)) return null;
+        const intent = { view: parsed.view };
+        if (typeof parsed.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date)) {
+          intent.date = parsed.date;
+        }
+        return intent;
+      } catch {
+        return null;
+      }
     },
     getStatus() {
       return navigationStatus.get();

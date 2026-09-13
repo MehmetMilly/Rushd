@@ -678,6 +678,85 @@ suites, and the Playwright Chromium harness
 in explicit candidate mode (add-once, correction, reversal, cross-tab,
 failure, epoch evidence) with clearly fake data.
 
+## Remaining ports and atomic authority cutover (P04-D Task D4)
+
+D4 moves every remaining enabled read/write path — Plan, Insights, Goals,
+settings/lifecycle, portability, navigation persistence — behind canonical
+ports in the established shell, then switches one build-time production
+authority constant. After the cutover v1 is extraction-only: no UI action
+may write it.
+
+- `src/application/p04-d/production-boot.js` (+ `.d.ts`): the single
+  build-time choice (`P04D_PRODUCTION_AUTHORITY = 'canonical'`, not read
+  from URL, storage, cookies, import, globals, or environment text, with
+  no user-reachable dual-authority toggle). `bootProductionApplication`
+  is the exact function `src/main.ts` awaits: read-only v1 extraction
+  (a missing source aborts the open instead of upgrading it), one
+  migration/open through the staging/pointer protocol (reopens never
+  re-migrate), the same `createLegacyApplication` mount in every outcome
+  (failure mounts the host's write-blocked ports, never a legacy
+  fallback), PWA registration on the canonical path, and the v1
+  extraction-only freeze (`freezeV1Writers`: every D1-inventory v1
+  writer throws loudly; reads stay intact for migration/backup
+  compatibility). Device identity is storage namespacing only (a
+  persisted per-device guest scope so reloads reopen the same
+  namespace); it never selects the authority.
+- `src/application/p04-d/canonical-host.js`: plan saves map legacy
+  templates to `createRecurringPlan`/`reviseRecurringPlan` (explicit
+  amount, day, effective date; monthly budgets, caps, profiles, offdays,
+  and assignments are never inferred — amount-less/day-less templates
+  are refused); preview/confirm apply materialize every plan through
+  the end of the effective month atomically with deterministic
+  occurrence IDs (retries replay per plan; paid/detached occurrences
+  are never recreated); profiles and plan deletion stay visibly blocked
+  (no canonical counterpart; append-only rules). Insights derive month
+  totals, category breakdown, weekly buckets, commitments (open
+  obligation residuals), and tracked-pool availability from committed
+  facts; budget/safe-to-spend stay unknown (`null`), never zero.
+  Goals create via `createGoal` (goal id derives from the intent's
+  operation id; a user-provided opening allocation assigns explicitly
+  with its own derived identity, so retries never double-assign) and
+  settle month-end via `closeCycle` + `disposeCycleRemainder` in one
+  write section (vault funds tracked, budget carries into the live open
+  cycle, no-surplus leaves independent; the next cycle opens with zero
+  starting funds when none is open — no allowance is invented; an
+  already-settled month replays its settlement). Goal deletion stays
+  blocked (no delete command; append-only). Settings project the
+  migrated opening-cycle starting funds read-only (rewrites blocked),
+  with theme/motion/language/calendar, onboarding flow status, and
+  prompt deferrals as authority-gated local chrome. Navigation
+  persists route/date intent locally (best-effort chrome that also
+  works while blocked). Portability was canonical in D2; D4 keeps its
+  commit points and adds the loud blocked-reset refusal.
+- `src/application/p04-d/read-models.js`: month/plan/commitment/pool/
+  settings/cycle projections over committed `BookState`, reusing the
+  domain derives and never restating finance rules.
+- `src/pwa/registration.js`: a first install (no live controller)
+  activates without bumping the epoch, so the booting tab never
+  self-blocks; only a genuine update over a live controller retires old
+  writers with one bump.
+- `src/app/root-controller.js` + `src/app/root-template.html`: every
+  remaining inventory action branches through its port first in
+  candidate mode (canonical mirrors assign only in-memory view fields;
+  without-exact-equivalent actions toast truthfully and touch nothing);
+  unsupported controls (allowance save, profiles, template delete,
+  goal delete) disable via `p04dCandidateActive`; settle/apply stay
+  enabled as canonical operations.
+- `src/main.ts` + `index.html`: production awaits the canonical boot;
+  the manifest links locally; zero external runtime requests remain.
+
+The D4 gate is `npm run test:p04d4`: host suites for plans,
+insights, goals, settlement, settings, navigation, failure,
+cross-tab, and the cutover freeze (including the P04-C preview-shape
+and first-install epoch regressions found by the harness),
+controller routing proof for all 37 remaining actions (port calls
+with zero v1 calls, blocked states, legacy delegates intact), and
+the Playwright Chromium harness (`tests/pwa/p04-d4-browser.mjs`)
+booting the real production entry (migrate-once, plan/goals/settle,
+export/import round-trip, reset, real reload, cross-tab, epoch,
+zero v1 writes with byte-identical v1 input, zero remote requests)
+with clearly fake data.
+
 ## Main Screens
 
 - Dashboard: selected-day expense list, safe-to-spend hero, date window, payment and add-expense flows.

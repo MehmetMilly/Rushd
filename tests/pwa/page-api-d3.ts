@@ -265,6 +265,10 @@ export const __p04d3 = {
         const text = (button.textContent ?? '').trim();
         return text === 'Luxury' || text === 'كمالي';
       }).length,
+      disabledClassificationToggles: Array.from(document.querySelectorAll('#app button[disabled]')).filter((button) => {
+        const text = (button.textContent ?? '').trim();
+        return text === 'Luxury' || text === 'كمالي';
+      }).length,
       flexibleToggles: Array.from(document.querySelectorAll('#app button')).filter((button) => {
         const text = (button.textContent ?? '').trim();
         return text === 'Flexible' || text === 'Manual' || text === 'مرن' || text === 'يدوي';

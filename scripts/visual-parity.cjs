@@ -163,6 +163,7 @@ function mimeType(pathname) {
     '.json': 'application/json; charset=utf-8',
     '.svg': 'image/svg+xml',
     '.png': 'image/png',
+    '.wasm': 'application/wasm',
     '.woff': 'font/woff',
     '.woff2': 'font/woff2'
   }[extname(pathname)] || 'application/octet-stream';
@@ -296,8 +297,13 @@ function collectDiagnostics(page, rootUrl) {
 }
 
 async function gotoApp(page, rootUrl) {
-  await page.goto(rootUrl, { waitUntil: 'networkidle', timeout: 60_000 });
+  await page.goto(rootUrl, { waitUntil: 'load', timeout: 60_000 });
   await page.locator('#app').waitFor({ state: 'attached', timeout: 60_000 });
+  await page.waitForFunction(() => {
+    const debugBridge = globalThis.RushdDebug;
+    if (typeof debugBridge?.getAppProxy === 'function') return !!debugBridge.getAppProxy();
+    return !!document.querySelector('#app')?.__vue_app__?._instance?.proxy;
+  }, undefined, { timeout: 60_000 });
   await page.evaluate(async () => {
     if (document.fonts?.ready) await document.fonts.ready;
   });
@@ -323,11 +329,13 @@ async function seedFixture(page, rootUrl, fixture, language, theme, onboarding =
   }
 
   await page.evaluate(async (seed) => {
+    localStorage.clear();
     for (const [key, value] of Object.entries(seed.local_storage)) localStorage.setItem(key, value);
     const databases = typeof indexedDB.databases === 'function' ? await indexedDB.databases() : [];
-    if (databases.some((item) => item.name === seed.indexed_db.name)) {
+    for (const databaseName of ['Rushd_P04C_Control', seed.indexed_db.name]) {
+      if (!databases.some((item) => item.name === databaseName)) continue;
       await new Promise((resolveDelete, rejectDelete) => {
-        const request = indexedDB.deleteDatabase(seed.indexed_db.name);
+        const request = indexedDB.deleteDatabase(databaseName);
         request.onsuccess = () => resolveDelete();
         request.onerror = () => rejectDelete(request.error);
         request.onblocked = () => rejectDelete(new Error('parity seed delete blocked'));
@@ -359,14 +367,21 @@ async function seedFixture(page, rootUrl, fixture, language, theme, onboarding =
   }, payload);
 
   await gotoApp(page, rootUrl);
+  if (onboarding) {
+    await page.evaluate(() => {
+      const proxy = globalThis.__rushdResolveParityProxy('capturing the preserved onboarding modal');
+      if (!proxy.onboardingModal) throw new Error('Mounted proxy has no onboarding modal state.');
+      proxy.onboardingModal.open = true;
+    });
+  }
   const fixtureDate = payload.indexed_db.stores.expenses[0]?.date;
   if (fixtureDate) {
     await page.evaluate(async (date) => {
       const proxy = globalThis.__rushdResolveParityProxy('loading the fixture date');
-      if (typeof proxy.store?.loadDay !== 'function') {
-        throw new Error('Mounted proxy has no Store.loadDay() for fixture loading.');
+      if (typeof proxy.selectDate !== 'function') {
+        throw new Error('Mounted proxy has no selectDate() for fixture loading.');
       }
-      await proxy.store.loadDay(date);
+      await proxy.selectDate(date);
     }, fixtureDate);
   }
   await page.waitForTimeout(100);
@@ -459,7 +474,30 @@ async function captureCharacterizedStates(page, rootUrl, fixture, language, them
   await seedFixture(page, rootUrl, fixture.populated, language, theme);
   await captureScreens(page, states, 'populated');
   await navigate(page, 0);
-  await page.locator('.expense-card').first().click();
+  const firstExpense = page.locator('.expense-card').first();
+  if (await firstExpense.count() === 0) {
+    const state = await page.evaluate(async () => {
+      const proxy = globalThis.__rushdResolveParityProxy('diagnosing the populated expense state');
+      const legacyExpenses = await new Promise((resolveRows, rejectRows) => {
+        const request = indexedDB.open('MicroSaveOS_DB', 1);
+        request.onsuccess = () => {
+          const database = request.result;
+          const rows = database.transaction('expenses', 'readonly').objectStore('expenses').getAll();
+          rows.onsuccess = () => { database.close(); resolveRows(rows.result); };
+          rows.onerror = () => { database.close(); rejectRows(rows.error); };
+        };
+        request.onerror = () => rejectRows(request.error);
+      });
+      return {
+        currentDate: proxy.store?.currentDate,
+        expenses: proxy.store?.currentViewExpenses?.map((row) => ({ id: row.id, date: row.date })),
+        legacyExpenses: legacyExpenses.map((row) => ({ id: row.id, date: row.date })),
+        deviceId: localStorage.getItem('rushd_device_id'),
+      };
+    });
+    throw new Error(`Populated parity fixture rendered no expense card: ${JSON.stringify(state)}`);
+  }
+  await firstExpense.click();
   await captureState(page, states, 'edit-modal');
   await page.getByRole('button', { name: 'close', exact: true }).click();
   await page.locator('.cinematic-stage header button').first().click();

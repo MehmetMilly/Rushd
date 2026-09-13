@@ -374,7 +374,7 @@
                                 <div class="font-bold">{{ t.monthlyAllowance }}</div>
                                 <div class="text-xs text-secondary">{{ t.baseFunds }}</div>
                             </div>
-                        <input type="text" inputmode="decimal" v-model="store.settings.baseAllowance" @change="saveSettings"
+                        <input type="text" inputmode="decimal" v-model="store.settings.baseAllowance" @change="saveSettings" :disabled="p04dCandidateActive"
                             class="bg-surface-1 border border-glass text-end font-mono p-3 rounded-lg w-32 focus:border-brand outline-none text-white">
                         </div>
                         <!-- P1-05: the weekly "divide by four" safe-to-spend view was
@@ -657,13 +657,13 @@
 
                         <!-- ═══ 2. PLAN SELECTOR ═══ -->
                         <div class="plan-selector-row">
-                            <select :value="store.settings.activeTemplateProfileId"
+                            <select :value="store.settings.activeTemplateProfileId" :disabled="p04dCandidateActive"
                                 @change="setActiveTemplateProfile($event.target.value)"
                                 class="plan-selector-dropdown">
                                 <option v-for="profile in templateProfiles" :key="profile.id" :value="profile.id">{{
                                     formatTemplateProfileName(profile) }}</option>
                             </select>
-                            <button class="plan-selector-btn" @click="createTemplateProfile" :title="t.createProfile">
+                            <button class="plan-selector-btn" @click="createTemplateProfile" :disabled="p04dCandidateActive" :title="t.createProfile">
                                 <span class="material-symbols-rounded" style="font-size: 20px;">add</span>
                             </button>
                         </div>
@@ -672,7 +672,7 @@
                         <div class="glass-panel p-4">
                             <div class="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-3">{{ t.planWeeklyRhythm }}</div>
                             <div class="plan-rhythm-row">
-                                <button v-for="day in weekdayOptions" :key="day.value" type="button"
+                                <button v-for="day in weekdayOptions" :key="day.value" type="button" :disabled="p04dCandidateActive"
                                     @click="toggleCurrentProfileOffday(day.value)"
                                     class="plan-day-chip" :class="{ 'is-offday': currentTemplateProfile.offdays.includes(day.value) }">
                                     <span class="day-label">{{ day.short }}</span>
@@ -756,7 +756,7 @@
                                             <div class="text-[10px] text-zinc-500">{{ t[tmpl.applicability] || t.everyday }}</div>
                                         </div>
                                         <div class="plan-tmpl-amount" dir="ltr" style="unicode-bidi: isolate">{{ tmpl.expectedCost }}</div>
-                                        <button class="plan-tmpl-delete" @click.stop="deleteTemplate(tmpl.id)">
+                                        <button class="plan-tmpl-delete" @click.stop="deleteTemplate(tmpl.id)" :disabled="p04dCandidateActive">
                                             <ms-icon name="delete" size="16"></ms-icon>
                                         </button>
                                     </div>
@@ -796,7 +796,7 @@
                                             <div class="text-[10px] text-zinc-500">{{ t[tmpl.applicability] || t.everyday }}</div>
                                         </div>
                                         <div class="plan-tmpl-amount" dir="ltr" style="unicode-bidi: isolate">{{ tmpl.expectedCost }}</div>
-                                        <button class="plan-tmpl-delete" @click.stop="deleteTemplate(tmpl.id)">
+                                        <button class="plan-tmpl-delete" @click.stop="deleteTemplate(tmpl.id)" :disabled="p04dCandidateActive">
                                             <ms-icon name="delete" size="16"></ms-icon>
                                         </button>
                                     </div>
@@ -840,7 +840,7 @@
                                             </div>
                                         </div>
                                         <div class="plan-tmpl-amount" dir="ltr" style="unicode-bidi: isolate">{{ tmpl.expectedCost }}</div>
-                                        <button class="plan-tmpl-delete" @click.stop="deleteTemplate(tmpl.id)">
+                                        <button class="plan-tmpl-delete" @click.stop="deleteTemplate(tmpl.id)" :disabled="p04dCandidateActive">
                                             <ms-icon name="delete" size="16"></ms-icon>
                                         </button>
                                     </div>
@@ -982,7 +982,7 @@
                                                         {{ formatCompactAmount(goal.targetAmount) }} SAR
                                                     </div>
                                                 </div>
-                                                <button class="p-1.5 shrink-0" style="color: var(--c-accent-danger); opacity: 0.35; cursor: pointer; border: none; background: none;"
+                                                <button class="p-1.5 shrink-0" style="color: var(--c-accent-danger); opacity: 0.35; cursor: pointer; border: none; background: none;" :disabled="p04dCandidateActive"
                                                     @click="confirmDeleteVaultGoal(goal)">
                                                     <span class="material-symbols-rounded" style="font-size: 16px">delete</span>
                                                 </button>
@@ -1285,17 +1285,19 @@
                         </div>
                     </div>
 
-                    <!-- Classification Toggle -->
-                    <div v-if="addModal.mode === 'expense' && !p04dCandidateActive">
+                    <!-- Classification Toggle (display chrome; canonical capture has no classification) -->
+                    <div v-if="addModal.mode === 'expense'">
                         <label class="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-2 block">{{ t.classification }}</label>
                         <div class="flex bg-surface-1 rounded-lg p-1 border border-glass">
                             <button @click="addModal.form.classification = 'essential'"
                                 class="flex-1 py-2 text-xs font-bold rounded-md transition-all text-center"
+                                :disabled="p04dCandidateActive"
                                 :class="addModal.form.classification === 'essential' ? 'bg-brand text-white' : 'text-zinc-400 hover:text-white'">
                                 {{ t.essential }}
                             </button>
                             <button @click="addModal.form.classification = 'luxury'"
                                 class="flex-1 py-2 text-xs font-bold rounded-md transition-all text-center"
+                                :disabled="p04dCandidateActive"
                                 :class="addModal.form.classification === 'luxury' ? 'bg-amber-500 text-white' : 'text-zinc-400 hover:text-white'">
                                 {{ t.luxury }}
                             </button>
@@ -1694,8 +1696,8 @@
                             {{ editModal.type === 'template' ? t.editTemplate : t.editExpense }}
                         </h3>
                         <!-- Subtle "Unpaid" toggle -->
-                        <button v-if="editModal.type === 'expense' && editModal.form.isPaid && !p04dCandidateActive" @click="markUnpaidFromEdit"
-                            class="unpaid-tag mt-[2px]">
+                        <button v-if="editModal.type === 'expense' && editModal.form.isPaid" @click="markUnpaidFromEdit"
+                            class="unpaid-tag mt-[2px]" :disabled="p04dCandidateActive">
                             <span class="material-symbols-rounded" style="font-size: 12px;">undo</span>
                             {{ t.unpaid }}
                         </button>
@@ -1772,17 +1774,19 @@
                         <div v-if="!editModalMonthDayValid" class="text-[11px] text-warning mt-1">{{ t.monthlyDayMissingWarning }}</div>
                     </div>
 
-                    <!-- Classification Toggle (expenses only) -->
-                    <div class="edit-input-group" v-if="editModal.type === 'expense' && !p04dCandidateActive">
+                    <!-- Classification Toggle (expenses only; canonical has no classification fact) -->
+                    <div class="edit-input-group" v-if="editModal.type === 'expense'">
                         <label class="edit-input-label">{{ t.classification }}</label>
                         <div class="flex bg-surface-1 rounded-lg p-1 border border-glass">
                             <button type="button" @click="editModal.form.classification = 'essential'"
                                 class="flex-1 py-2 text-xs font-bold rounded-md transition-all text-center"
+                                :disabled="p04dCandidateActive"
                                 :class="editModal.form.classification === 'essential' ? 'bg-brand text-white' : 'text-zinc-400 hover:text-white'">
                                 {{ t.essential }}
                             </button>
                             <button type="button" @click="editModal.form.classification = 'luxury'"
                                 class="flex-1 py-2 text-xs font-bold rounded-md transition-all text-center"
+                                :disabled="p04dCandidateActive"
                                 :class="editModal.form.classification === 'luxury' ? 'bg-amber-500 text-white' : 'text-zinc-400 hover:text-white'">
                                 {{ t.luxury }}
                             </button>

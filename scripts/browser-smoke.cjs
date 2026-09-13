@@ -18,6 +18,7 @@ const contentTypes = {
   '.woff': 'font/woff',
   '.woff2': 'font/woff2',
   '.png': 'image/png',
+  '.wasm': 'application/wasm',
   '.json': 'application/json; charset=utf-8'
 };
 

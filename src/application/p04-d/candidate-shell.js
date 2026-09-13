@@ -7,8 +7,9 @@
 // the same `createLegacyApplication` with the same established template,
 // passing the host-bound port set through the explicit build/test
 // injection (`authorityMode: 'canonicalCandidate'` plus `candidatePorts`).
-// Ordinary `src/main.ts` never passes candidate inputs and stays
-// legacy-authoritative.
+// Ordinary `src/main.ts` boots through `production-boot.js` instead, which
+// always mounts the established shell on host-bound canonical ports
+// (the D4 cutover); this adapter remains the harness composition path.
 //
 // Write rules in candidate mode:
 // - candidate preparation blocks every financial action until active

@@ -12,7 +12,7 @@ const main = await readFile(join(root, 'src/main.ts'), 'utf8');
 
 assert.match(html, /<script src="\/retire-rejected-shell\.js"><\/script>/);
 assert.match(html, /<script type="module" src="\/src\/main\.ts"><\/script>/);
-assert.match(main, /createLegacyApplication/);
+assert.match(main, /bootProductionApplication/);
 assert.doesNotMatch(main, /createGuestApplication/);
 assert.doesNotMatch(main, /p04d-guest-shell/);
 

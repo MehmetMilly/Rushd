@@ -140,17 +140,18 @@ async function main() {
     check(opened.dayCount >= 1, `migrated day has ${opened.dayCount} rows, want >= 1`);
     check(opened.domCards >= 1, `mounted template shows ${opened.domCards} cards, want >= 1`);
     check(opened.domCards === opened.dayCount, `DOM cards (${opened.domCards}) must equal canonical rows (${opened.dayCount})`);
-    check(opened.safeToSpend === null, 'candidate safe-to-spend must stay unknown, never fabricated');
-    check(opened.heroUnknown === true, 'hero must show the truthful unknown state, not a number');
+    check(Number.isFinite(opened.safeToSpend), 'candidate hero must project finite open-cycle availability');
+    check(opened.heroUnknown === false, 'hero must render the canonical availability amount when it is known');
     check(opened.inputIntact === true, 'v1 migration input must stay byte-identical (no dual writer)');
 
-    // 1b. No fabricated classificationrenders; unsupported Add controls
-    // stay out of the candidate modal.
+    // 1b. No fabricated classification renders; unsupported Add controls
+    // remain visibly present for layout continuity but disabled.
     const domState = await tabA.evaluate(() => globalThis.__p04d3.unsupportedDomState());
     check(domState.luxuryTags === 0, `luxury source rows must render no luxury tag (found ${domState.luxuryTags})`);
     const addCheck = await tabA.evaluate(() => globalThis.__p04d3.openAddForCheck());
     check(addCheck.modalOpen === true, 'add modal must still open for manual capture');
-    check(addCheck.classificationToggles === 0, 'candidate add modal must hide the classification picker');
+    check(addCheck.classificationToggles >= 1, 'candidate add modal must preserve classification chrome');
+    check(addCheck.disabledClassificationToggles === addCheck.classificationToggles, 'candidate classification controls must all be disabled');
     check(addCheck.flexibleToggles === 0, 'candidate add modal must hide the flexible toggle');
 
     // 2. Selecting a day refreshes canonical Home rows.

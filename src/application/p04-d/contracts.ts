@@ -200,10 +200,25 @@ export interface TemplateApplyPreview {
   readonly blockedReason?: string;
 }
 
+/** Canonical recurring-plan summary. Profiles/offdays are never synthesized. */
+export interface PlanSummaryView {
+  readonly planId: string;
+  readonly name: string;
+  /** Committed per-occurrence amount, or null when the revision is missing. Never defaulted. */
+  readonly amount: number | null;
+  /** Committed monthly schedule day, or null when unknown. Never defaulted to 1. */
+  readonly scheduleDay: number | null;
+  readonly effectiveDate: string;
+  readonly flexibleDefinitionId: string | null;
+  readonly occurrenceCount: number;
+}
+
 /** Plan profiles, templates, assignments, and atomic apply. */
 export interface PlanPort {
   readonly name: 'plan';
   listProfiles(): TemplateProfileView[];
+  /** Canonical recurring-plan summaries (D4); empty when no plans exist. */
+  listPlans(): PlanSummaryView[];
   getActiveProfileId(): string;
   setActiveProfile(profileId: string): Promise<void>;
   createProfile(name: string): Promise<TemplateProfileView | null>;
@@ -294,6 +309,10 @@ export interface NavigationIntentPort {
   /** Returns `null` for unknown destinations instead of guessing. */
   resolveIntent(view: string, date?: string): NavigationIntent | null;
   listDestinations(): NavigationIntent['view'][];
+  /** Persists UI route/date chrome locally; never finance truth. */
+  persistIntent(intent: NavigationIntent): void;
+  /** Restores the persisted UI intent, or `null` when absent/invalid. */
+  restoreIntent(): NavigationIntent | null;
   getStatus(): PortStatus;
 }
 

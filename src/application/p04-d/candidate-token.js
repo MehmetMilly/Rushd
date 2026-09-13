@@ -9,8 +9,9 @@
 // this module's `markCandidatePorts` function.
 //
 // The module is deliberately dependency-free: the latch can import it
-// without opening storage, workers, or network paths, so the default
-// production bundle stays legacy-authoritative.
+// without opening storage, workers, or network paths, so the production
+// bundle keeps a single build-time authority choice with no runtime
+// switch.
 
 const marked = new WeakSet();
 

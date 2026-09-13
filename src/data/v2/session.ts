@@ -25,8 +25,23 @@ export interface OpenDurableRepositoryOptions {
 
 const DEFAULT_SQLITE_ASSET_BASE = '/pkg';
 
-function defaultWorkerUrl(): string {
-  return new URL('./sqlite-worker.js', import.meta.url).href;
+/**
+ * Production worker URL, resolved at runtime from the page base (Vite
+ * emits `dist/sqlite-worker.js` next to `index.html`). This deliberately
+ * avoids a static `new URL(..., import.meta.url)` pattern so the build
+ * emits no unresolved-worker warning; callers that need another worker
+ * (test harnesses) pass `workerUrl` explicitly.
+ */
+export function defaultWorkerUrl(): string {
+  try {
+    const doc = (globalThis as { document?: { baseURI?: string } }).document;
+    if (doc && typeof doc.baseURI === 'string' && doc.baseURI.length > 0) {
+      return new URL('sqlite-worker.js', doc.baseURI).href;
+    }
+  } catch {
+    /* fall through to the root-relative default below */
+  }
+  return '/sqlite-worker.js';
 }
 
 export async function openDurableGuestRepository(options: OpenDurableRepositoryOptions): Promise<DurableGuestRepository> {

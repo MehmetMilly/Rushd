@@ -1,10 +1,15 @@
-// P04-D1/D2: build/test-controlled authority latch.
+// P04-D1/D2/D4: build/test-controlled authority latch.
 //
-// The latch answers one question: which finance authority may serve writes?
-// Ordinary production always resolves to `legacy`. A `canonicalCandidate`
-// mode exists for test/build harnesses: D1 acknowledged it as a blocked
-// `canonicalPreparing` state on the legacy port set, and D2 additionally
-// routes requests that carry a host-bound canonical port set (marked by
+// The latch answers one question: which finance authority may serve writes
+// for one explicitly composed application instance?
+// Ordinary production no longer calls this latch directly: since the D4
+// cutover, `src/main.ts` boots through `production-boot.js`, which always
+// mounts the established shell on host-bound canonical ports
+// (`P04D_PRODUCTION_AUTHORITY = 'canonical'`). This latch remains the
+// injection mechanism underneath: a `canonicalCandidate` mode exists for
+// test/build callers, D1 acknowledged it as a blocked `canonicalPreparing`
+// state on the legacy port set, and D2 additionally routes requests that
+// carry a host-bound canonical port set (marked by
 // `prepareCanonicalCandidateHost` via `./candidate-token.js`) to that set
 // with the host's live authority state. Unmarked candidate-shaped requests
 // keep the D1 fail-close.

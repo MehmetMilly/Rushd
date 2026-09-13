@@ -43,16 +43,21 @@ function stripComments(source) {
   assert.doesNotMatch(stripComments(raw), /fetch/, 'retirement worker must have no fetch handler');
 }
 
-// 3. Default production references neither the candidate worker nor a
-// candidate mode: index.html, main.ts, and the legacy boot path stay clean.
+// 3. Production boots canonical only through the build-time production
+// boot: index.html keeps the rollback retirement trigger plus the local
+// manifest link, main.ts boots via bootProductionApplication with no
+// runtime authority inputs, and the legacy boot path still registers no
+// workers and opens no v2 storage itself.
 {
   const html = await readFile('index.html', 'utf8');
-  assert.ok(!html.includes('rushd-pwa-sw'), 'default index.html must not reference the candidate worker');
-  assert.match(html, /retire-rejected-shell\.js/, 'default index.html must keep the rollback retirement trigger');
+  assert.ok(!html.includes('rushd-pwa-sw'), 'index.html must not hardcode the worker URL (registration owns it)');
+  assert.match(html, /retire-rejected-shell\.js/, 'index.html must keep the rollback retirement trigger');
+  assert.match(html, /manifest\.webmanifest/, 'production index.html must link the local manifest');
   const main = await readFile('src/main.ts', 'utf8');
-  assert.ok(!main.includes('rushd-pwa'), 'default main.ts must not register candidate PWA');
-  assert.ok(!main.includes('canonicalCandidate'), 'default main.ts must not request candidate mode');
-  assert.ok(!main.includes('serviceWorker'), 'default main.ts must not touch service workers');
+  assert.match(main, /bootProductionApplication/, 'production main.ts must boot through the reviewed cutover');
+  assert.ok(!main.includes('canonicalCandidate'), 'production main.ts must not name candidate modes');
+  assert.ok(!main.includes('candidatePorts'), 'production main.ts must not pass raw candidate ports');
+  assert.ok(!main.includes('serviceWorker'), 'production main.ts must not touch service workers directly');
   const bootstrap = await readFile('src/application/bootstrap.js', 'utf8');
   assert.ok(!bootstrap.includes('serviceWorker'), 'bootstrap must not register service workers');
   assert.ok(!bootstrap.includes('v2/session'), 'bootstrap must not open v2 storage');
@@ -118,8 +123,9 @@ function stripComments(source) {
 }
 
 // 9. D3 candidate shell: owned by the manifest, dependency-light, and the
-// application boundary rejects unknown injected port sets. Default
-// production still passes no candidate inputs.
+// application boundary rejects unknown injected port sets. Production no
+// longer passes candidate inputs itself; the production boot module owns
+// the single injection.
 {
   for (const file of ['src/application/p04-d/candidate-shell.js', 'src/application/p04-d/candidate-shell.d.ts']) {
     assert.ok(ownedProductionFiles.includes(file), `${file} must be in the production manifest`);
@@ -136,8 +142,41 @@ function stripComments(source) {
   const bootstrap = await readFile('src/application/bootstrap.js', 'utf8');
   assert.match(bootstrap, /refusing unknown featurePorts/, 'bootstrap must reject unknown injected port sets');
   const main = await readFile('src/main.ts', 'utf8');
-  assert.ok(!main.includes('candidatePorts'), 'default main.ts must not pass candidate ports');
-  assert.ok(!main.includes('authorityMode'), 'default main.ts must not pass an authority request');
+  assert.ok(!main.includes('candidatePorts'), 'production main.ts must not pass candidate ports itself');
+  assert.ok(!main.includes('authorityMode'), 'production main.ts must not pass an authority request itself');
+}
+
+// 10. D4 atomic cutover: one build-time production authority choice, v1
+// extraction-only freeze, and no user-reachable dual-authority toggle.
+{
+  for (const file of ['src/application/p04-d/production-boot.js', 'src/application/p04-d/production-boot.d.ts']) {
+    assert.ok(ownedProductionFiles.includes(file), `${file} must be in the production manifest`);
+    assert.ok(existsSync(file), `${file} must exist`);
+  }
+  const boot = stripComments(await readFile('src/application/p04-d/production-boot.js', 'utf8'));
+  assert.match(boot, /P04D_PRODUCTION_AUTHORITY = 'canonical'/, 'production authority must be a hardcoded canonical constant');
+  assert.match(boot, /createLegacyApplication/, 'production boot must reuse the established composition root');
+  assert.ok(!boot.includes('createGuestApplication'), 'production boot must not mount an alternate root');
+  // The authority choice cannot be steered at runtime: no location, URL
+  // parsing, cookies, or environment-text reads anywhere in the module.
+  // (localStorage holds only device namespacing and UI chrome, which never
+  // select the finance authority.)
+  for (const forbidden of ['location', 'URLSearchParams', 'cookie', 'matchMedia', 'imported']) {
+    assert.ok(!boot.includes(forbidden), `production-boot must not reference ${forbidden}`);
+  }
+  assert.match(boot, /freezeV1Writers/, 'production boot must freeze v1 writers after the mount');
+  assert.match(boot, /registerCandidatePwa/, 'production boot must register the reviewed worker on the canonical path');
+  assert.match(boot, /refusing a legacy fallback/, 'production boot must refuse a legacy fallback instead of mounting one');
+  const bootMain = await readFile('src/main.ts', 'utf8');
+  assert.match(bootMain, /await bootProductionApplication/, 'production must await the canonical boot before mounting');
+  // No dual-authority toggle: no build-mode flag, and the production
+  // bundle exposes no runtime switch. (The single reviewed injection into
+  // the established composition root lives in production-boot only.)
+  for (const file of ['src/main.ts', 'index.html']) {
+    const source = stripComments(await readFile(file, 'utf8'));
+    assert.ok(!/authorityMode|P04D_BUILD_MODE|useLegacy|useCanonical/i.test(source), `${file} must expose no runtime authority switch`);
+  }
+  assert.ok(!/P04D_BUILD_MODE|useLegacy|useCanonical/i.test(boot), 'production-boot must expose no runtime authority switch');
 }
 
 console.log('p04-d2 static checks passed');

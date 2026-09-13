@@ -1,10 +1,10 @@
-// P04-D2: candidate-only PWA registration and update coordination.
+// P04-D2/D4: candidate-only PWA registration and update coordination.
 //
-// This module is never called by default production (`src/main.ts` mounts
-// the legacy application without registering any worker). Only an explicit
-// test/build caller registers the candidate service worker, and only that
-// caller drives updates through the same cross-tab critical-section
-// protocol as writes, import, reset, and migration:
+// Since the D4 cutover this module IS called by ordinary production, but
+// only through `production-boot.js` on the canonical path (`src/main.ts`
+// passes no worker inputs itself). Test/build callers register explicitly,
+// and only the registered caller drives updates through the same cross-tab
+// critical-section protocol as writes, import, reset, and migration:
 //
 // - registration happens once with `updateViaCache: 'none'`;
 // - a waiting update activates (via `rushd-pwa-skip-waiting`) only while
@@ -53,12 +53,21 @@ export async function registerCandidatePwa(options = {}) {
   }
   const swUrl = typeof options.swUrl === 'string' && options.swUrl ? options.swUrl : CANDIDATE_SW_URL;
   const scope = typeof options.scope === 'string' && options.scope ? options.scope : CANDIDATE_SW_SCOPE;
+  // D4: a first install controls no previous binary, so its activation must
+  // not bump the epoch (that would hard-block the tab that just booted).
+  // Only a genuine update over a live controller retires an old writer.
+  let hadController = false;
+  try {
+    hadController = !!environment.navigator.serviceWorker.controller;
+  } catch {
+    hadController = false;
+  }
   try {
     const registration = await environment.navigator.serviceWorker.register(swUrl, {
       scope,
       updateViaCache: 'none',
     });
-    wireUpdateFound(registration, options.coordination ?? null);
+    wireUpdateFound(registration, options.coordination ?? null, hadController);
     return { ok: true, reason: '', registration };
   } catch (error) {
     return { ok: false, reason: error instanceof Error ? error.message : String(error) };
@@ -68,8 +77,9 @@ export async function registerCandidatePwa(options = {}) {
 /**
  * @param {{ updatefound?: unknown, waiting?: { postMessage(m: unknown): void } | null, addEventListener?: Function }} registration
  * @param {{ canActivateUpdate(): boolean } | null} coordination
+ * @param {boolean} [hadController]
  */
-function wireUpdateFound(registration, coordination) {
+function wireUpdateFound(registration, coordination, hadController = true) {
   if (!registration || typeof registration.addEventListener !== 'function') return;
   registration.addEventListener('updatefound', () => {
     const worker = registration.installing;
@@ -79,7 +89,7 @@ function wireUpdateFound(registration, coordination) {
       if (typeof worker.removeEventListener === 'function') {
         worker.removeEventListener('statechange', onStateChange);
       }
-      void activateCandidateUpdate(registration, coordination);
+      void activateCandidateUpdate(registration, coordination, 'candidate-update-activated', { hadController });
     };
     worker.addEventListener('statechange', onStateChange);
   });
@@ -113,16 +123,21 @@ export async function maybeActivateWaiting(registration, coordination) {
  * bump the coordination epoch so tabs that opened under the old binary
  * lose write authority until they reload. A withheld activation
  * (critical section active, no waiting worker, or messaging failure)
- * never bumps the epoch.
+ * never bumps the epoch. D4: a first install (`hadController: false`) has
+ * no old binary to retire, so it activates without bumping.
  * @param {{ waiting?: { postMessage(m: unknown): void } | null }} registration
  * @param {{ canActivateUpdate(): boolean, activeCriticalSections?(): Array<{ kind: string, tabId: string }>, bumpEpoch?(reason?: string): number } | null} coordination
  * @param {string} [reason]
+ * @param {{ hadController?: boolean }} [options]
  * @returns {Promise<{ activated: boolean, epoch: number | null, reason: string }>}
  */
-export async function activateCandidateUpdate(registration, coordination, reason = 'candidate-update-activated') {
+export async function activateCandidateUpdate(registration, coordination, reason = 'candidate-update-activated', options = {}) {
   const requested = await maybeActivateWaiting(registration, coordination);
   if (!requested.activated) {
     return { activated: false, epoch: null, reason: requested.reason };
+  }
+  if (options && options.hadController === false) {
+    return { activated: true, epoch: null, reason: 'first-install' };
   }
   if (coordination && typeof coordination.bumpEpoch === 'function') {
     try {

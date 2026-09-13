@@ -24,6 +24,7 @@ export function activateCandidateUpdate(
   registration: { readonly waiting?: { postMessage(message: unknown): void } | null } | null,
   coordination: (UpdateCoordination & Partial<EpochCoordination>) | null,
   reason?: string,
+  options?: { readonly hadController?: boolean },
 ): Promise<{ readonly activated: boolean; readonly epoch: number | null; readonly reason: string }>;
 
 export function maybeActivateWaiting(
