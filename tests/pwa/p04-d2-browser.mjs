@@ -1,5 +1,5 @@
 // P04-D2 browser lifecycle gate. Run: node tests/pwa/p04-d2-browser.mjs
-/* global URL:readonly, console:readonly, process:readonly, navigator:readonly */
+/* global URL:readonly, console:readonly, process:readonly, navigator:readonly, caches:readonly */
 //
 // Durable proof over the real OPFS-backed candidate stack in Chromium:
 // isolated candidate open/migrate/write/reload, offline reload with zero
@@ -24,7 +24,7 @@ const PAGE_API_BUNDLE = `${RAW_DIR}/page-api.bundle.mjs`;
 // fixture that 404s required assets must fail installation, exactly like
 // production.
 const SQLITE_WORKER_BUNDLE = `${RAW_DIR}/sqlite-worker.bundle.mjs`;
-const MIME = { '.mjs': 'text/javascript', '.js': 'text/javascript', '.wasm': 'application/wasm', '.html': 'text/html', '.webmanifest': 'application/manifest+json' };
+const MIME = { '.mjs': 'text/javascript', '.js': 'text/javascript', '.wasm': 'application/wasm', '.html': 'text/html', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
 
 const failures = [];
 function check(condition, label) {
@@ -64,6 +64,15 @@ function startServer() {
       if (url.pathname === '/manifest.webmanifest') {
         res.writeHead(200, { 'Content-Type': 'application/manifest+json' });
         res.end(await readFile(join(ROOT, 'public/manifest.webmanifest')));
+        return;
+      }
+      // The candidate SW precaches its install icons as required assets;
+      // serve them from public/ so installation can succeed in this
+      // fixture origin exactly as it must in production.
+      if (url.pathname.startsWith('/icons/')) {
+        const file = join(ROOT, 'public', url.pathname.replace(/^\/+/, ''));
+        res.writeHead(200, { 'Content-Type': MIME[extname(file)] || 'application/octet-stream', 'Cache-Control': 'public, max-age=3600' });
+        res.end(await readFile(file));
         return;
       }
       if (url.pathname.startsWith('/pkg/')) {
@@ -214,7 +223,10 @@ async function main() {
     await context2.close();
 
     // 8. Offline PWA reload: register the candidate worker, let it cache
-    // the shell, then kill the server and reload purely from cache.
+    // the shell, then go offline at the browser-context level and reload
+    // purely from the service-worker cache. The origin server stays alive;
+    // Playwright's offline emulation (not server.close()) is what proves
+    // the navigation and subresources are served without the network.
     await tabB.evaluate(() => globalThis.__p04d2.close());
     await tabA.close();
     const offline = await context.newPage();
@@ -222,21 +234,43 @@ async function main() {
     await offline.evaluate(() => navigator.serviceWorker.register('/rushd-pwa-sw.js', { scope: '/' }));
     await offline.waitForFunction(async () => (await navigator.serviceWorker.getRegistrations()).length > 0);
     await offline.reload();
-    await offline.waitForFunction(() => navigator.serviceWorker.controller !== null, null, { timeout: 15000 }).catch(() => undefined);
+    await offline.waitForFunction(() => navigator.serviceWorker.controller !== null, null, { timeout: 15000 });
+    check((await offline.evaluate(() => navigator.serviceWorker.controller !== null)) === true, 'service worker must control the page before the offline reload');
     await offline.addScriptTag({ type: 'module', url: `${origin}/harness/page-api.bundle.mjs` });
     await offline.waitForFunction(() => globalThis.__p04d2 !== undefined);
     const onlineUnderSw = await offline.evaluate(({ did }) => globalThis.__p04d2.openCandidate({ deviceId: did, withSnapshot: false, tabId: 'browser-offline' }), { did: device });
     check(onlineUnderSw.ok === true, `candidate open under SW failed: ${onlineUnderSw.reason}`);
-    await new Promise((resolve) => server.close(resolve));
-    await offline.reload();
-    // The shell, bundles, and worker assets must come from the SW cache;
-    // the bundle re-executes and committed OPFS state reopens offline.
-    await offline.addScriptTag({ type: 'module', url: `${origin}/harness/page-api.bundle.mjs` });
-    await offline.waitForFunction(() => globalThis.__p04d2 !== undefined, null, { timeout: 30000 });
-    const offlineOpened = await offline.evaluate(({ did }) => globalThis.__p04d2.openCandidate({ deviceId: did, withSnapshot: false, tabId: 'browser-offline' }), { did: device });
-    check(offlineOpened.ok === true, `offline reload open failed: ${offlineOpened.reason}`);
-    const offlineDay = await offline.evaluate(() => globalThis.__p04d2.listDay('2026-09-05'));
-    check(offlineDay.length >= 2, `offline reload serves ${offlineDay.length} committed rows, want >= 2`);
+    // The required offline closure must be cached before going offline;
+    // a missing worker/engine/shell entry fails the gate here, not later.
+    const closure = await offline.evaluate(async () => {
+      const cache = await caches.open('rushd-pwa-v2');
+      const required = ['/', '/index.html', '/sqlite-worker.js', '/pkg/dist/wa-sqlite.mjs', '/pkg/dist/wa-sqlite.wasm'];
+      const missing = [];
+      for (const path of required) {
+        const hit = await cache.match(path, { ignoreSearch: path === '/' || path === '/index.html' });
+        if (!hit) missing.push(path);
+      }
+      return missing;
+    });
+    check(closure.length === 0, `offline closure missing from SW cache: ${closure.join(', ')}`);
+    await context.setOffline(true);
+    try {
+      await offline.reload();
+      // The shell, bundles, and worker assets must come from the SW cache;
+      // the bundle re-executes and committed OPFS state reopens offline.
+      // Any network reach here fails: the context is offline, so success
+      // proves SW/cache serving, and a miss fails the assertions below.
+      await offline.addScriptTag({ type: 'module', url: `${origin}/harness/page-api.bundle.mjs` });
+      await offline.waitForFunction(() => globalThis.__p04d2 !== undefined, null, { timeout: 30000 });
+      const offlineControlled = await offline.evaluate(() => navigator.serviceWorker.controller !== null);
+      check(offlineControlled === true, 'service worker must still control the page after the offline reload');
+      const offlineOpened = await offline.evaluate(({ did }) => globalThis.__p04d2.openCandidate({ deviceId: did, withSnapshot: false, tabId: 'browser-offline' }), { did: device });
+      check(offlineOpened.ok === true, `offline reload open failed: ${offlineOpened.reason}`);
+      const offlineDay = await offline.evaluate(() => globalThis.__p04d2.listDay('2026-09-05'));
+      check(offlineDay.length >= 2, `offline reload serves ${offlineDay.length} committed rows, want >= 2`);
+    } finally {
+      await context.setOffline(false);
+    }
 
     // 9. Zero remote runtime requests across the whole run.
     const remote = requests.filter((url) => {
@@ -255,6 +289,7 @@ async function main() {
       console.log('p04-d2 browser lifecycle passed: migrate/write/reload, two-tab, update coordination, old-tab blocking, failure recovery, offline reload, zero remote requests');
     }
   } finally {
+    await context.setOffline(false).catch(() => undefined);
     await browser.close().catch(() => undefined);
     if (server.listening) server.close();
   }
