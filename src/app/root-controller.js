@@ -3230,9 +3230,9 @@ export function installRootController(app, dataRuntime, environment = globalThis
                         // Legacy payload: fall through to the v1
                         // validation/confirm/atomic-restore flow below with the
                         // already-parsed document (no second read). In
-                        // canonical production the v1 writers are frozen and
-                        // fail closed with `importFailed` (no partial write);
-                        // in legacy/test runtimes the restore succeeds. Either
+                        // canonical production restores through the staged
+                        // migration port while v1 writers remain frozen; only
+                        // blocked or non-candidate paths fail closed. Either
                         // way a portable export never reaches the legacy
                         // `expenses` validator.
                         await this.importLegacyBackupDocument(probed, event);
