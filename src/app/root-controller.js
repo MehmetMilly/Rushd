@@ -3147,7 +3147,9 @@ export function installRootController(app, dataRuntime, environment = globalThis
                                     console.error('Canonical import failed:', err);
                                     alert(this.t.invalidBackup);
                                 }
-                            }
+                            },
+                            this.t.importBtn,
+                            'brand'
                         );
                     };
                     reader.readAsText(file);
