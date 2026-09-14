@@ -95,8 +95,11 @@ function install() {
 }
 
 async function openImportConfirmation(ctx) {
+  // P04-D5 roundtrip fix: the candidate helper owns ONLY portable documents;
+  // the confirmation seam must drive a portable payload (legacy payloads now
+  // route to the legacy path before confirmation and never reach this mock).
   await ctx.importDataViaPorts.call(ctx, {
-    target: { files: [{ text: JSON.stringify({ version: '3.1', expenses: [] }) }] },
+    target: { files: [{ text: JSON.stringify({ format: 'rushd.portable.v1', expenses: undefined }) }] },
   });
   await new Promise((resolve) => setImmediate(resolve));
 }

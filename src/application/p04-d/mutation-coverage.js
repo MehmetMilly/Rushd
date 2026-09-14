@@ -82,6 +82,7 @@ export const MUTATION_COVERAGE_INVENTORY = Object.freeze([
   // Portability: versioned export/import/reset through P04-C commit points.
   { action: 'clearRushdLocalState', port: 'portability', reason: 'portability.clearLocalPreferences: UI chrome only, device id preserved' },
   { action: 'importData', port: 'portability', reason: 'portability.restoreSnapshot: preview plus importPortableReplacement commit point' },
+  { action: 'importLegacyBackupDocument', port: 'portability', reason: 'legacy validateBackupPayload gate plus atomic DB.restoreBackupRecords; reached only via format-routed importData' },
   { action: 'resetApp', port: 'portability', reason: 'portability export-first safety backup plus resetGuestScope commit point' },
   { action: 'resetAppViaPorts', port: 'portability', reason: 'canonical reset helper: safety backup downloads before anything destructive runs' },
 

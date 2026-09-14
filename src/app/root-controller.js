@@ -140,6 +140,25 @@ export function installRootController(app, dataRuntime, environment = globalThis
         p04dIntentStore.confirm = { key, operationId: operationIds[0], operationIds };
         return operationIds;
     };
+    // P04-D5 portable-roundtrip fix: route backup payloads by FORMAT, not by
+    // authority alone. The candidate portability port validates/restores only
+    // `rushd.portable.v1` documents; the v1 `validateBackupPayload` path
+    // validates/restores only legacy `{ expenses: [...] }` backups. Routing
+    // by authority sent portable exports into the legacy validator (`expenses`
+    // failure, the physical-iPhone symptom) and legacy backups into the
+    // portable validator (`malformedRecord`). This pure discriminant performs
+    // no validation itself: portable payloads keep the full P04-C contract
+    // (integrity/version/scope/cancel/exactly-once/atomic), legacy payloads
+    // keep the full legacy validation/conversion, and unknown payloads stay
+    // rejected before mutation. No finance rules, migration mapping, or copy
+    // are changed here.
+    const p04dClassifyBackupPayload = (value) => {
+        const record = value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+        if (!record) return 'unknown';
+        if (record.format === 'rushd.portable.v1') return 'portable';
+        if (Array.isArray(record.expenses)) return 'legacy';
+        return 'unknown';
+    };
     // Mirror the canonical Home read model into the reactive view state so
     // the established template renders committed canonical rows with no
     // visual change. This assigns only in-memory view fields; it never
@@ -3121,6 +3140,18 @@ export function installRootController(app, dataRuntime, environment = globalThis
                             alert(this.t.invalidBackup);
                             return;
                         }
+                        // P04-D5: this helper owns ONLY portable documents.
+                        // Legacy/unknown payloads never open confirmation here
+                        // and never reach the portable commit point; the
+                        // format-aware `importData` entry routes them to the
+                        // legacy validation path (or immediate rejection) so a
+                        // portable export can never be judged by the legacy
+                        // `expenses` validator. No mutation before this point.
+                        if (p04dClassifyBackupPayload(data) !== 'portable') {
+                            console.error('Import rejected: not a portable backup document');
+                            alert(this.t.invalidBackup);
+                            return;
+                        }
                         this.showConfirmDialog(
                             this.t.importQ,
                             this.t.importMsg,
@@ -3155,27 +3186,66 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     reader.readAsText(file);
                 },
                 importData(event) {
-                    // P04-D4: versioned import runs through the canonical
-                    // portability port (preview/confirm commit point) in
-                    // candidate mode, never v1 restore paths.
-                    if (p04dIsCandidate()) {
-                        this.importDataViaPorts(event);
-                        return;
-                    }
+                    // P04-D5: route by payload FORMAT, not authority alone.
+                    // Portable documents always use the canonical portability
+                    // port (when available); legacy backups always use legacy
+                    // validation/conversion; unknown payloads are rejected
+                    // before confirmation with no mutation. This preserves all
+                    // existing validation, scope, cancel, exactly-once, and
+                    // atomic behavior while fixing authority-only misrouting.
                     const file = event.target.files[0];
                     if (!file) return;
-
-                    const reader = new FileReader();
-                    reader.onload = async (e) => {
-                        let data;
+                    // Fast path preserves the existing candidate helper
+                    // boundary: portable files still flow through
+                    // `importDataViaPorts` (which re-reads the same small file
+                    // and enforces its own portable-only guard). To route by
+                    // format we must peek first; the double FileReader read
+                    // for portable files is negligible (backups are KBs) and
+                    // avoids duplicating either confirm/restore block.
+                    const probe = new FileReader();
+                    probe.onload = async (e) => {
+                        let probed;
                         try {
-                            data = JSON.parse(e.target.result);
+                            probed = JSON.parse(e.target.result);
                         } catch (err) {
                             console.error('Import Error:', err);
                             alert(this.t.invalidBackup);
                             return;
                         }
-
+                        const kind = p04dClassifyBackupPayload(probed);
+                        if (kind === 'portable') {
+                            if (p04dIsCandidate()) {
+                                this.importDataViaPorts(event);
+                                return;
+                            }
+                            console.error('Import rejected: portable backup without candidate ports');
+                            alert(this.t.invalidBackup);
+                            return;
+                        }
+                        if (kind !== 'legacy') {
+                            console.error('Import rejected: unknown backup format');
+                            alert(this.t.invalidBackup);
+                            return;
+                        }
+                        // Legacy payload: fall through to the v1
+                        // validation/confirm/atomic-restore flow below with the
+                        // already-parsed document (no second read). In
+                        // canonical production the v1 writers are frozen and
+                        // fail closed with `importFailed` (no partial write);
+                        // in legacy/test runtimes the restore succeeds. Either
+                        // way a portable export never reaches the legacy
+                        // `expenses` validator.
+                        await this.importLegacyBackupDocument(probed, event);
+                    };
+                    probe.readAsText(file);
+                },
+                // P04-D5: legacy validation/confirm/atomic-restore flow,
+                // extracted unchanged from `importData` so both authorities
+                // share one implementation. Strict `validateBackupPayload`
+                // still rejects malformed backups before any store is touched;
+                // `DB.restoreBackupRecords` still writes settings/templates/
+                // expenses in one atomic IndexedDB transaction.
+                async importLegacyBackupDocument(data, event) {
                         // P1-10: strict structural validation rejects malformed
                         // backups before any canonical store is touched.
                         const validation = validateBackupPayload(data);
@@ -3251,9 +3321,9 @@ export function installRootController(app, dataRuntime, environment = globalThis
                             this.t.importBtn,
                             'brand'
                         );
-                    };
-                    reader.readAsText(file);
-                    event.target.value = '';
+                    if (event && event.target) {
+                        try { event.target.value = ''; } catch { /* file-input reset is best-effort */ }
+                    }
                 },
                 // P04-D4: canonical export-first reset helper. The safety
                 // backup downloads before anything destructive runs; the
