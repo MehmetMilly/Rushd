@@ -64,6 +64,9 @@ const REQUIRED_URLS = [
   '/pkg/src/FacadeVFS.js',
   '/pkg/src/VFS.js',
   '/pkg/src/examples/OPFSCoopSyncVFS.js',
+  '/icons/rushd-192.png',
+  '/icons/rushd-512.png',
+  '/icons/rushd-512-maskable.png',
 ];
 const BEST_EFFORT_URLS = [
   '/manifest.webmanifest',
