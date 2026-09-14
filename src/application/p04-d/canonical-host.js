@@ -87,8 +87,10 @@ import {
   exportActiveSnapshot,
   importPortableReplacement,
   previewPortableImport,
+  REPLACE_ACTIVE_CONFIRMATION,
   resetGuestScope,
 } from '../../data/portability/snapshot.ts';
+import { snapshotFromStores } from '../../data/migration/extract.ts';
 
 /**
  * @typedef {import('./contracts.ts').AuthorityState} AuthorityState
@@ -2294,6 +2296,49 @@ export async function prepareCanonicalCandidateHost(options = {}) {
           // importReplacement. Adopt the flip (reopen, guarantee a usable
           // book, retire other tabs) before serving reads or further
           // writes, so no dual v1/v2 writer can exist.
+          await adoptActivationFlip('import', result.activeStorageId);
+          return { ok: true, reason: '' };
+        }).catch((error) => {
+          portabilityStatus.fail(error instanceof Error ? error.message : String(error));
+          return { ok: false, reason: 'error' };
+        });
+      },
+      // P04-D5 correction: a validated legacy `{ expenses: [...] }` backup
+      // restores through the canonical staged-migration commit point instead
+      // of the frozen v1 writers. The controller keeps owning legacy
+      // `validateBackupPayload` validation plus v1 settings normalization;
+      // this port converts the normalized entries via `snapshotFromStores`
+      // (the same extraction shape boot migration consumes) and commits via
+      // `storage.migrate` plus the activation-pointer flip, so failure
+      // leaves the active database untouched and success resyncs from the
+      // new active storage exactly like a portable import.
+      async restoreLegacyBackup(document, options = {}) {
+        const blocked = requireWritable('portability.restoreLegacyBackup');
+        if (blocked) return { ok: false, reason: 'blocked' };
+        const migrationId = toText(options.migrationId);
+        const confirmation = toText(options.confirmation);
+        if (!migrationId) return { ok: false, reason: 'validation' };
+        if (confirmation !== REPLACE_ACTIVE_CONFIRMATION) return { ok: false, reason: 'confirmation' };
+        return withHeldCritical('import', async () => {
+          const record = document && typeof document === 'object' && !Array.isArray(document) ? document : null;
+          const settingsEntries = record && Array.isArray(record.settingsEntries) ? record.settingsEntries : null;
+          const templates = record && Array.isArray(record.templates) ? record.templates : null;
+          const expenses = record && Array.isArray(record.expenses) ? record.expenses : null;
+          if (!settingsEntries || !templates || !expenses) return { ok: false, reason: 'validation' };
+          let snapshot;
+          try {
+            snapshot = snapshotFromStores({ settings: settingsEntries, templates, expenses });
+          } catch {
+            return { ok: false, reason: 'validation' };
+          }
+          const result = await storage.migrate(migrationId, snapshot);
+          if (!result.ok) {
+            portabilityStatus.fail(result.detail ?? result.reason ?? 'canonical legacy restore failed');
+            return { ok: false, reason: result.reason ?? 'error' };
+          }
+          // Explicit commit point, mirroring restoreSnapshot: the
+          // control-store pointer flipped inside migrate. Adopt the flip
+          // before serving reads so no dual v1/v2 writer can exist.
           await adoptActivationFlip('import', result.activeStorageId);
           return { ok: true, reason: '' };
         }).catch((error) => {

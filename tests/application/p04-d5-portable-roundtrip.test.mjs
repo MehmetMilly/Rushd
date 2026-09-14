@@ -81,6 +81,22 @@ function makePorts(authorityState, behavior = {}) {
         if (!doc || doc.format !== PORTABLE_FORMAT) return { ok: false, reason: 'routing-mismatch' };
         return behavior.restoreResult ?? { ok: true, reason: '' };
       },
+      // P04-D5 correction: canonical staged-migration entry for validated
+      // legacy backups. The discriminant mirrors the host contract: the
+      // converted `{ settingsEntries, templates, expenses }` shape plus an
+      // explicit destructive confirmation. Full conversion fidelity runs
+      // through the real pipeline in tests/data/p04d5-canonical-roundtrip.
+      restoreLegacyBackup: async (document, options) => {
+        calls.legacyRestore.push({ document, options });
+        const doc = document && typeof document === 'object' ? document : null;
+        if (!doc || !Array.isArray(doc.settingsEntries) || !Array.isArray(doc.templates) || !Array.isArray(doc.expenses)) {
+          return { ok: false, reason: 'validation' };
+        }
+        if (!options || typeof options.migrationId !== 'string' || options.confirmation !== 'REPLACE-ACTIVE-DATABASE') {
+          return { ok: false, reason: 'validation' };
+        }
+        return behavior.restoreLegacyResult ?? { ok: true, reason: '' };
+      },
       buildSnapshot: async () => JSON.stringify(portableDoc()),
       factoryReset: async () => undefined,
       clearLocalPreferences: () => {},
@@ -218,11 +234,12 @@ async function driveImport(ctx, payload) {
 }
 
 // 2. Legacy backup in candidate mode must NOT be sent to the portable
-//    path. Before the fix, authority-only routing called restoreSnapshot
-//    with a legacy payload (portable discriminant rejects -> RED). After
-//    the fix it routes to the legacy validation/conversion path with no
-//    portable callback; valid legacy opens confirmation and restores once
-//    via the atomic legacy path, with no mutation on invalid.
+//    path — and must NOT touch the frozen v1 writers. Before the format
+//    fix, authority-only routing called restoreSnapshot with a legacy
+//    payload (portable discriminant rejects -> RED). The P04-D5 correction
+//    routes it to the canonical staged-migration port instead: valid legacy
+//    opens confirmation and restores once via restoreLegacyBackup with an
+//    explicit destructive confirmation, with no mutation on invalid.
 {
   const alerts = [];
   const runtime = makeRuntime();
@@ -242,7 +259,16 @@ async function driveImport(ctx, payload) {
     ports.calls.restore.length, 0,
     `legacy confirm must not touch portable restore (got ${ports.calls.restore.length} portable calls)`,
   );
-  assert.equal(runtime.legacyRestores.length, 1, 'legacy confirm must restore exactly once via the legacy path');
+  assert.equal(ports.calls.legacyRestore.length, 1, 'legacy confirm must restore exactly once via the canonical migration port');
+  assert.equal(
+    ports.calls.legacyRestore[0].options.confirmation, 'REPLACE-ACTIVE-DATABASE',
+    'legacy restore must carry the explicit destructive confirmation',
+  );
+  assert.equal(typeof ports.calls.legacyRestore[0].options.migrationId, 'string', 'legacy restore must carry a migration identity');
+  assert.equal(
+    runtime.legacyRestores.length, 0,
+    `candidate legacy must never touch the frozen v1 writers (got ${runtime.legacyRestores.length} v1 restores)`,
+  );
   assert.equal(alerts.length, 0, 'valid legacy must not alert');
 }
 
@@ -295,7 +321,27 @@ async function driveImport(ctx, payload) {
   ctx.handleConfirmDialogCancel.call(ctx);
   await flush();
   assert.equal(ports.calls.restore.length, 0, 'legacy cancel must not reach portable restore');
+  assert.equal(ports.calls.legacyRestore.length, 0, 'legacy cancel must not reach the migration port');
   assert.equal(runtime.legacyRestores.length, 0, 'legacy cancel must perform no legacy restore');
+}
+
+// 5. Legacy authority (non-candidate) keeps the unfrozen v1 atomic path:
+//    no port call, exactly one DB restore on confirm.
+{
+  const alerts = [];
+  const runtime = makeRuntime();
+  const ports = makePorts({ kind: 'legacy', writable: true });
+  const ctx = install({ runtime, environment: makeEnvironment(alerts), ports });
+  ctx.__alerts = alerts;
+  const opened = await driveImport(ctx, legacyBackup());
+  await flush();
+  assert.equal(opened.confirmOpen, true, 'legacy-authority backup must open confirmation');
+  ctx.handleConfirmDialogConfirm.call(ctx);
+  await flush();
+  assert.equal(ports.calls.restore.length, 0, 'legacy authority must not reach portable restore');
+  assert.equal(ports.calls.legacyRestore.length, 0, 'legacy authority must not reach the migration port');
+  assert.equal(runtime.legacyRestores.length, 1, 'legacy authority confirm must restore exactly once via the v1 atomic path');
+  assert.equal(alerts.length, 0, 'valid legacy-authority import must not alert');
 }
 
 console.log('P04-D5 portable roundtrip format-routing regression passed');

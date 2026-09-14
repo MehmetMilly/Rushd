@@ -288,7 +288,19 @@ export interface PortabilityPort {
    * Restores a validated backup snapshot. Validation stays inside the
    * legacy `validateBackupPayload` gate; this port never invents data.
    */
-  restoreSnapshot(snapshot: unknown): Promise<{ ok: boolean; reason: string }>;
+  restoreSnapshot(snapshot: unknown, options?: { migrationId?: string; confirmation?: string }): Promise<{ ok: boolean; reason: string }>;
+  /**
+   * Restores a validated legacy `{ expenses: [...] }` backup through the
+   * canonical staged-migration commit point (never frozen v1 writers). The
+   * caller keeps owning legacy `validateBackupPayload` validation and v1
+   * settings normalization; this port converts the normalized entries via
+   * `snapshotFromStores` and commits via staged migration plus the
+   * activation-pointer flip, mirroring boot migration.
+   */
+  restoreLegacyBackup(
+    document: unknown,
+    options?: { migrationId?: string; confirmation?: string },
+  ): Promise<{ ok: boolean; reason: string }>;
   factoryReset(onBlocked?: (() => void) | null): Promise<void>;
   clearLocalPreferences(): void;
   getStatus(): PortStatus;

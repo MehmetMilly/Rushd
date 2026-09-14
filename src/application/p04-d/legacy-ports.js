@@ -911,6 +911,13 @@ export function createLegacyFeaturePorts(
         return { ok: false, reason: 'error' };
       }
     },
+    // P04-D5 correction: legacy authority has no staged-migration commit
+    // point, so the canonical legacy-restore entry stays refused here. The
+    // controller only calls it in candidate mode; legacy-authority imports
+    // keep using the unfrozen v1 restore path exactly as before.
+    async restoreLegacyBackup() {
+      return { ok: false, reason: 'legacy-authority' };
+    },
     async factoryReset(onBlocked = null) {
       authority.assertWritable('portability.factoryReset');
       await callAsync(getDB(dataRuntime), 'factoryReset', [onBlocked]);

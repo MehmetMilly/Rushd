@@ -3240,11 +3240,13 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     probe.readAsText(file);
                 },
                 // P04-D5: legacy validation/confirm/atomic-restore flow,
-                // extracted unchanged from `importData` so both authorities
-                // share one implementation. Strict `validateBackupPayload`
-                // still rejects malformed backups before any store is touched;
-                // `DB.restoreBackupRecords` still writes settings/templates/
-                // expenses in one atomic IndexedDB transaction.
+                // extracted from `importData` so both authorities share one
+                // implementation. Strict `validateBackupPayload` still
+                // rejects malformed backups before any store is touched. In
+                // candidate mode the confirm commits through the canonical
+                // staged-migration port; otherwise `DB.restoreBackupRecords`
+                // still writes settings/templates/expenses in one atomic
+                // IndexedDB transaction.
                 async importLegacyBackupDocument(data, event) {
                         // P1-10: strict structural validation rejects malformed
                         // backups before any canonical store is touched.
@@ -3298,10 +3300,46 @@ export function installRootController(app, dataRuntime, environment = globalThis
                                         }
                                     }
 
+                                    const templates = Array.isArray(data.templates) ? data.templates : [];
+                                    const expenses = data.expenses;
+                                    // P04-D5 correction: in candidate mode a
+                                    // validated legacy backup restores through
+                                    // the canonical staged-migration commit
+                                    // point (`portability.restoreLegacyBackup`:
+                                    // snapshotFromStores conversion plus
+                                    // activation-pointer flip), never the
+                                    // frozen v1 writers. The port re-checks
+                                    // writability, so a blocked authority
+                                    // fails closed with no mutation. Outside
+                                    // candidate mode the unfrozen v1 atomic
+                                    // restore below runs exactly as before.
+                                    if (p04dIsCandidate()
+                                        && p04dCandidatePorts.portability
+                                        && typeof p04dCandidatePorts.portability.restoreLegacyBackup === 'function') {
+                                        const fingerprint = p04dFingerprint(data);
+                                        const migrationId = p04dIntentOperationId('import', fingerprint);
+                                        const result = await p04dCandidatePorts.portability.restoreLegacyBackup(
+                                            { settingsEntries, templates, expenses },
+                                            { migrationId, confirmation: 'REPLACE-ACTIVE-DATABASE' },
+                                        );
+                                        if (!result.ok) {
+                                            alert(this.t.invalidBackup);
+                                            return;
+                                        }
+                                        await syncP04DCandidateHome(this);
+                                        await syncP04DCandidatePlan(this);
+                                        await syncP04DCandidateInsights(this);
+                                        await syncP04DCandidateGoals(this);
+                                        p04dClearIntent('import');
+                                        this.currentView = 'dashboard';
+                                        this.showToast(this.t.importSuccess);
+                                        return;
+                                    }
+
                                     await DB.restoreBackupRecords({
                                         settingsEntries,
-                                        templates: Array.isArray(data.templates) ? data.templates : [],
-                                        expenses: data.expenses
+                                        templates,
+                                        expenses
                                     });
 
                                     localStorage.setItem('rushd_import_success', '1');
