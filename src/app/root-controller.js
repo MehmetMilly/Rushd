@@ -331,7 +331,7 @@ export function installRootController(app, dataRuntime, environment = globalThis
         });
     }
     const { EXPENSE_SOURCE_VALUES, DEFINITION_SOURCE_VALUES, MOTION_LEVEL_VALUES, toFiniteNumber, MAX_MONEY_INPUT, MONEY_DECIMAL_PATTERN, parseMoneyInput, roundMoney, normalizePersistedMoney, normalizeMotionLevel, toNonNegativeInteger, getMonthKey, toISODate, parseLocalCalendarDate, DEFAULT_PROFILE_OFFDAYS, TEMPLATE_APPLICABILITY_VALUES, getMonthBoundsFromDate, getPreviousMonthKey, isDateInRange, enumerateDateRange, normalizeWeekdayIndex, normalizeProfileOffdays, normalizeTemplateDays, getValidTemplateDays, hasValidMonthlySchedule, getDateWeekdayIndex, isProfileOffdayForDate, templateMatchesApplicabilityForDate, getMonthlyTemplateDays, templateOccursOnDate, compareExpensePriority, matchesTemplateFallbackShape, findTemplateExpenseMatch, buildTemplateExpenseFromDefinition, didTemplateExpenseRebuildChange, LEGACY_TEMPLATE_PROFILE, MONTH_START_PROMPT_DEFER_KEY, MONTH_END_PROMPT_DEFER_KEY, ONBOARDING_STATE_KEY, ONBOARDING_STATUS_VALUES, MONTH_END_SETTLEMENT_DECISIONS, normalizeTemplateProfileRecord, normalizeTemplateProfiles, getTemplateProfileRecordById, MONTH_KEY_PATTERN, normalizeMonthlyTemplateAssignmentRecord, normalizeMonthlyTemplateAssignments, normalizeMonthlyBaseAllowances, normalizeOnboardingStateRecord, normalizeVaultGoalRecord, normalizeVaultGoals, normalizeVaultTransactionRecord, normalizeVaultStateRecord, normalizeMonthEndSettlementRecord, normalizeMonthEndSettlements, getDefinitionProfileId, isDefinitionInProfile, normalizeDefinitionRecord, isFlexibleDefinitionRecord, toSerializableValue, getExpenseTemplateOriginId, getExpenseTemplateProtection, didExpenseStructureChange, normalizeExpenseRecord, BACKUP_EXPENSE_MONEY_FIELDS, isPlainObjectRecord, isValidBackupMoneyValue, isValidIsoDateString, isValidTimestampString, hasDuplicateRecordIds, validateBackupPayload, DB, Store } = dataRuntime;
-    const { localStorage, document, navigator, alert, location, Blob, URL, FileReader, setTimeout, clearTimeout, window } = environment;
+    const { localStorage, document, navigator, alert, location, Blob, URL, FileReader, setTimeout, clearTimeout, window, File } = environment;
 
         /**
          * ================================================================
@@ -3099,22 +3099,109 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     };
                     return JSON.stringify(data, null, 2);
                 },
+                backupFileName() {
+                    return `rushd-backup-${Core.Date.getTodayISO()}.json`;
+                },
                 downloadBackupFile(jsonStr) {
                     const blob = new Blob([jsonStr], { type: 'application/json' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = `rushd-backup-${Core.Date.getTodayISO()}.json`;
+                    // P04-D5: keep the detached-call contract (the filename
+                    // gate drives this method with an empty receiver), so
+                    // fall back to the civil-date filename when the helper
+                    // is not reachable through `this`.
+                    a.download = typeof this?.backupFileName === 'function'
+                        ? this.backupFileName()
+                        : `rushd-backup-${Core.Date.getTodayISO()}.json`;
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);
                     URL.revokeObjectURL(url);
                 },
-                async exportData() {
+                // P04-D5 iOS reset/export correction: explicit async
+                // save/share path with testable outcome semantics. iOS
+                // (including installed Home Screen PWAs) does not honor
+                // blob-URL anchor downloads: the tap navigates to a JSON
+                // preview and the pending reset continuation never runs, so
+                // "reset only exports". On iOS with Web Share files support
+                // the backup goes through `navigator.share`, which stays
+                // in-app and settles explicitly. Everywhere else keeps the
+                // legacy anchor download unchanged. Fail closed on detected
+                // iOS/iPad: when file sharing is unavailable (no
+                // `navigator.share`/`canShare`/`File`, `canShare` false, or
+                // `canShare` throws) the anchor fallback is never used —
+                // it would navigate away and reproduce the original bug —
+                // so the save resolves `{ ok: false, reason: 'failed' }`
+                // and callers leave data untouched. Never claims a save that
+                // did not complete: resolves `{ ok: true, via }` only after
+                // share acceptance or after the legacy download starts,
+                // `{ ok: false, reason: 'cancelled' }` when the user
+                // dismisses the sheet, and `{ ok: false, reason: 'failed' }`
+                // otherwise. Callers must not run anything destructive
+                // unless `ok` is true.
+                async saveBackupFile(jsonStr) {
+                    const fileName = this.backupFileName();
+                    // P04-D5 follow-up: iOS detection stays independent of
+                    // share capability so a missing/throwing share path
+                    // still counts as detected iOS and fails closed below.
+                    const isIosDevice = (() => {
+                        try {
+                            const ua = String(navigator?.userAgent || '');
+                            return /iPad|iPhone|iPod/.test(ua)
+                                || (/Macintosh/.test(ua) && typeof navigator?.maxTouchPoints === 'number' && navigator.maxTouchPoints > 1);
+                        } catch {
+                            return false;
+                        }
+                    })();
+                    const shareFile = (() => {
+                        try {
+                            if (!isIosDevice) return null;
+                            if (!navigator || typeof navigator.canShare !== 'function' || typeof navigator.share !== 'function') return null;
+                            if (typeof File !== 'function') return null;
+                            const file = new File([jsonStr], fileName, { type: 'application/json' });
+                            return navigator.canShare({ files: [file] }) ? file : null;
+                        } catch {
+                            return null;
+                        }
+                    })();
+                    if (shareFile) {
+                        try {
+                            await navigator.share({ files: [shareFile], title: 'Rushd backup', text: fileName });
+                            return { ok: true, via: 'share' };
+                        } catch (err) {
+                            if (err && err.name === 'AbortError') return { ok: false, reason: 'cancelled' };
+                            console.error('Backup share failed:', err);
+                            return { ok: false, reason: 'failed' };
+                        }
+                    }
+                    if (isIosDevice) {
+                        console.error('Backup share unavailable on iOS/iPad; refusing anchor download fallback.');
+                        return { ok: false, reason: 'failed' };
+                    }
                     try {
-                        this.downloadBackupFile(await this.buildBackupSnapshot());
+                        this.downloadBackupFile(jsonStr);
+                        return { ok: true, via: 'download' };
+                    } catch (err) {
+                        console.error('Backup download failed:', err);
+                        return { ok: false, reason: 'failed' };
+                    }
+                },
+                async exportData() {
+                    let snapshot;
+                    try {
+                        snapshot = await this.buildBackupSnapshot();
                     } catch (err) {
                         console.error('Export failed:', err);
+                        alert(this.t.exportFailed);
+                        return;
+                    }
+                    // P04-D5: ordinary export shares the explicit save path
+                    // so iOS stays in-app. A dismissed sheet is silent (no
+                    // success is claimed); only a real failure alerts.
+                    const saved = await this.saveBackupFile(snapshot);
+                    if (!saved.ok && saved.reason !== 'cancelled') {
+                        console.error('Export failed:', saved.reason);
                         alert(this.t.exportFailed);
                     }
                 },
@@ -3376,11 +3463,26 @@ export function installRootController(app, dataRuntime, environment = globalThis
                         this.t.factoryResetQ,
                         this.t.factoryResetMsg,
                         async () => {
+                            // P04-D5: the safety backup must fully resolve
+                            // (shared/saved or downloaded) before anything
+                            // destructive runs; a dismissed or failed save
+                            // leaves data untouched.
+                            let snapshot;
                             try {
-                                this.downloadBackupFile(await p04dCandidatePorts.portability.buildSnapshot());
+                                snapshot = await p04dCandidatePorts.portability.buildSnapshot();
                             } catch (err) {
                                 console.error('Reset safety export failed:', err);
                                 this.showConfirmDialog(this.t.resetFailedTitle, this.t.resetBackupFailed, () => {}, this.t.dialogOk, 'brand');
+                                return;
+                            }
+                            const saved = await this.saveBackupFile(snapshot);
+                            if (!saved.ok) {
+                                if (saved.reason === 'cancelled') {
+                                    this.showConfirmDialog(this.t.resetCancelledTitle, this.t.resetCancelled, () => {}, this.t.dialogOk, 'brand');
+                                } else {
+                                    console.error('Reset safety export failed:', saved.reason);
+                                    this.showConfirmDialog(this.t.resetFailedTitle, this.t.resetBackupFailed, () => {}, this.t.dialogOk, 'brand');
+                                }
                                 return;
                             }
                             try {
@@ -3427,11 +3529,26 @@ export function installRootController(app, dataRuntime, environment = globalThis
                         async () => {
                             // P0-08: export-first reset. If the safety backup cannot
                             // be created, the reset is cancelled and data stays intact.
+                            // P04-D5: the backup resolves through the explicit
+                            // save/share path first, so an iOS share-sheet
+                            // dismiss can never silently cancel the reset by
+                            // navigating away, nor commit a reset without a backup.
+                            let snapshot;
                             try {
-                                this.downloadBackupFile(await this.buildBackupSnapshot());
+                                snapshot = await this.buildBackupSnapshot();
                             } catch (err) {
                                 console.error('Reset safety export failed:', err);
                                 this.showConfirmDialog(this.t.resetFailedTitle, this.t.resetBackupFailed, () => {}, this.t.dialogOk, 'brand');
+                                return;
+                            }
+                            const saved = await this.saveBackupFile(snapshot);
+                            if (!saved.ok) {
+                                if (saved.reason === 'cancelled') {
+                                    this.showConfirmDialog(this.t.resetCancelledTitle, this.t.resetCancelled, () => {}, this.t.dialogOk, 'brand');
+                                } else {
+                                    console.error('Reset safety export failed:', saved.reason);
+                                    this.showConfirmDialog(this.t.resetFailedTitle, this.t.resetBackupFailed, () => {}, this.t.dialogOk, 'brand');
+                                }
                                 return;
                             }
 
