@@ -316,16 +316,15 @@ describe('P04-D5 A55 correction', () => {
     await tab.host.close();
   });
 
-  it('A12: post-reset writes are captured by the safety export and survive re-import', async () => {
+  it('A12: post-reset writes are captured by an explicit export and survive re-import', async () => {
     const control = createMemoryControlStore();
     const coordStore = memoryStore();
     const { context } = createDeterministicContext({ deviceId: 'dev-a55-correction' });
     const storage = createMemoryStorage({ context, control });
     const tab = await openTab({ tag: 'safety', control, coordStore, storage, snapshot: fakeV1Snapshot() });
 
-    // The export-first reset safety net is only meaningful when the scope
-    // stays writable after reset: the post-reset write below must commit
-    // (it stays in the modal on the base commit), enter the safety
+    // The port-level reset never exports: the post-reset write below must
+    // commit (it stays in the modal on the base commit), enter an explicit
     // export, and come back through re-import.
     await tab.host.featurePorts.portability.factoryReset({
       resetId: 'rs-a55-safety',

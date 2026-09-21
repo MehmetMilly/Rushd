@@ -6,9 +6,9 @@
 // manifest) into `bootProductionApplication` over fake v1 data seeded into
 // the REAL IndexedDB source and the REAL durable canonical stack
 // (`dist/sqlite-worker.js` + `dist/pkg` engine closure). It exercises
-// migrate-once, controller-driven add/plan/goals/settle, controller-driven
-// export-first reset with download, reload, re-import of the safety
-// backup, offline reload, retirement coexistence, storage-failure
+// migrate-once, controller-driven add/plan/goals/settle, manual Export
+// Backup with download, no-export controller Factory Reset (no download
+// of its own), reload, re-import of the manual backup, offline reload, retirement coexistence, storage-failure
 // write-blocking, and epoch hard-blocking — with zero v1 writes end to
 // end (byte-identical v1 input) and zero remote requests. All data is
 // clearly fake; no account/cloud client is constructed.
@@ -440,8 +440,10 @@ async function main() {
     check(v1Write.threw === true, 'direct v1 writes must throw after the cutover');
     await tabB.close();
 
-    // ---- Phase 8: reload rejoins writability after the epoch, then the
-    // controller performs export-first reset, reload, safety re-import.
+    // ---- Phase 8: reload rejoins writability after the epoch, then a
+    // manual Export Backup (the only download in this phase), then a
+    // no-export controller Factory Reset (no download/share/export of its
+    // own), reload state, and re-import of the manual backup.
     // (Reset requires a writable tab, so the reload comes first.)
     await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 });
     await waitBridge(page);
@@ -450,16 +452,17 @@ async function main() {
       await proxy.navigateTo('settings');
       await proxy.$nextTick();
     });
-    const downloadPromise = page.waitForEvent('download', { timeout: 30000 });
+    const exportDownloadPromise = page.waitForEvent('download', { timeout: 30000 });
+    await page.getByText('تصدير نسخة احتياطية', { exact: false }).first().click();
+    const [backupDownload] = await Promise.all([exportDownloadPromise]);
+    const safetyPath = join(RAW_DIR, 'safety-backup.json');
+    await backupDownload.saveAs(safetyPath);
+    const resetDownloadWatch = page.waitForEvent('download', { timeout: 5000 }).then(() => true, () => false);
     await page.getByText('إعادة ضبط المصنع', { exact: false }).first().click();
     await page.locator('.confirm-dialog-card:visible').waitFor({ state: 'visible', timeout: 10000 });
-    const [download] = await Promise.all([
-      downloadPromise,
-      page.locator('.confirm-dialog-card:visible').getByText('حذف', { exact: true }).click(),
-    ]);
-    const safetyPath = join(RAW_DIR, 'safety-backup.json');
-    await download.saveAs(safetyPath);
+    await page.locator('.confirm-dialog-card:visible').getByText('حذف', { exact: true }).click();
     await waitBridge(page);
+    check(await resetDownloadWatch === false, 'factory reset must not trigger its own download/export');
     summary = await page.evaluate(proxySummaryScript());
     check(summary.dayRows === 0 && summary.domCards === 0, `reset must empty the canonical scope (got ${summary.dayRows} rows)`);
     check(await page.evaluate(() => localStorage.getItem('rushd_device_id')) === deviceBefore, 'reset must preserve the device id or the backup cannot restore');
@@ -472,22 +475,34 @@ async function main() {
     });
     await page.locator('input[type="file"]').first().setInputFiles(safetyPath);
     await page.locator('.confirm-dialog-card:visible').waitFor({ state: 'visible', timeout: 10000 });
-    await page.locator('.confirm-dialog-card:visible').getByText('حذف', { exact: true }).click();
+    await page.locator('.confirm-dialog-card:visible').getByText('استيراد', { exact: true }).click();
     await page.getByText('تم الاستيراد بنجاح!', { exact: false }).waitFor({ state: 'visible', timeout: 15000 }).catch(() => undefined);
     summary = await page.evaluate(proxySummaryScript());
-    check(summary.dayRows >= 2, `safety re-import must restore rows (got ${summary.dayRows})`);
+    check(summary.dayRows >= 2, `manual backup re-import must restore rows (got ${summary.dayRows})`);
 
     // ---- Phase 9: invalid import fails closed with no state change.
+    // Unknown payloads are rejected before any confirmation: no confirm
+    // dialog opens, the invalid-backup alert fires, state is unchanged.
     const garbagePath = join(RAW_DIR, 'garbage-backup.json');
     writeFileSync(garbagePath, '{"nope":true}');
     const rowsBefore = summary.dayRows;
+    await page.evaluate(async () => {
+      const proxy = window.RushdDebug.getAppProxy();
+      await proxy.navigateTo('settings');
+      await proxy.$nextTick();
+    });
     await page.locator('input[type="file"]').first().setInputFiles(garbagePath);
-    await page.locator('.confirm-dialog-card:visible').waitFor({ state: 'visible', timeout: 10000 });
-    await page.locator('.confirm-dialog-card:visible').getByText('حذف', { exact: true }).click();
     await page.waitForTimeout(2000);
+    const garbageDialogOpen = await page.evaluate(() => window.RushdDebug.getAppProxy().confirmDialog.open);
+    check(garbageDialogOpen === false, 'corrupt import must not open a confirmation dialog');
     check(dialogs.some((entry) => entry.includes('alert')), 'corrupt import must raise the invalid-backup alert');
     summary = await page.evaluate(proxySummaryScript());
     check(summary.dayRows === rowsBefore, 'corrupt import must change no state');
+    // The fail-closed rejection logs an expected console error; excuse only
+    // that induced noise so the final zero-error gate keeps its strength.
+    for (let i = consoleErrors.length - 1; i >= 0; i -= 1) {
+      if (consoleErrors[i].includes('Import rejected')) consoleErrors.splice(i, 1);
+    }
 
     // ---- Phase 10: offline reload serves shell + data with zero remote.
     await context.setOffline(true);
@@ -525,7 +540,7 @@ async function main() {
       console.error(`p04-d4 browser failures:\n- ${failures.join('\n- ')}`);
       process.exitCode = 1;
     } else {
-      console.log('p04-d4 browser passed: real dist entry, migrate-once, controller add/plan/goals/settle, controller reset/reload/safety-reimport, offline reload, retirement coexistence, epoch block, zero v1 writes, zero remote requests');
+      console.log('p04-d4 browser passed: real dist entry, migrate-once, controller add/plan/goals/settle, manual export plus no-export controller reset/reload/reimport, offline reload, retirement coexistence, epoch block, zero v1 writes, zero remote requests');
     }
   } finally {
     await browser.close().catch(() => undefined);

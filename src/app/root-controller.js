@@ -3450,10 +3450,12 @@ export function installRootController(app, dataRuntime, environment = globalThis
                         try { event.target.value = ''; } catch { /* file-input reset is best-effort */ }
                     }
                 },
-                // P04-D4: canonical export-first reset helper. The safety
-                // backup downloads before anything destructive runs; the
-                // reset commits through the P04-C commit point and the shell
-                // resyncs from the new active storage before success shows.
+                // P04-D5 no-export correction: Factory Reset never
+                // triggers an export, share, download, file save, or
+                // snapshot. Export Backup stays a separate explicit user
+                // action. After confirmation the reset commits through the
+                // P04-C commit point and the shell resyncs from the new
+                // active storage before success shows.
                 async resetAppViaPorts() {
                     if (!p04dIsWritable()) {
                         this.showToast(p04dBlockedCopy(this.lang, 'authority'));
@@ -3463,28 +3465,6 @@ export function installRootController(app, dataRuntime, environment = globalThis
                         this.t.factoryResetQ,
                         this.t.factoryResetMsg,
                         async () => {
-                            // P04-D5: the safety backup must fully resolve
-                            // (shared/saved or downloaded) before anything
-                            // destructive runs; a dismissed or failed save
-                            // leaves data untouched.
-                            let snapshot;
-                            try {
-                                snapshot = await p04dCandidatePorts.portability.buildSnapshot();
-                            } catch (err) {
-                                console.error('Reset safety export failed:', err);
-                                this.showConfirmDialog(this.t.resetFailedTitle, this.t.resetBackupFailed, () => {}, this.t.dialogOk, 'brand');
-                                return;
-                            }
-                            const saved = await this.saveBackupFile(snapshot);
-                            if (!saved.ok) {
-                                if (saved.reason === 'cancelled') {
-                                    this.showConfirmDialog(this.t.resetCancelledTitle, this.t.resetCancelled, () => {}, this.t.dialogOk, 'brand');
-                                } else {
-                                    console.error('Reset safety export failed:', saved.reason);
-                                    this.showConfirmDialog(this.t.resetFailedTitle, this.t.resetBackupFailed, () => {}, this.t.dialogOk, 'brand');
-                                }
-                                return;
-                            }
                             try {
                                 const fingerprint = p04dFingerprint({ at: this.store.currentDate });
                                 const resetId = p04dIntentOperationId('reset', fingerprint);
@@ -3503,7 +3483,7 @@ export function installRootController(app, dataRuntime, environment = globalThis
                                 });
                             } catch (e) {
                                 console.error('Canonical reset failed:', e);
-                                this.showConfirmDialog(this.t.resetFailedTitle, this.t.resetBackupFailed, () => {}, this.t.dialogOk, 'brand');
+                                this.showConfirmDialog(this.t.resetFailedTitle, this.t.resetFailed, () => {}, this.t.dialogOk, 'brand');
                                 return;
                             }
                             await syncP04DCandidateHome(this);
@@ -3517,8 +3497,11 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     );
                 },
                 async resetApp() {
-                    // P04-D4: export-first reset runs through the canonical
+                    // P04-D4: reset runs through the canonical
                     // portability port in candidate mode, never v1 reset.
+                    // P04-D5 no-export correction: neither path exports,
+                    // shares, downloads, saves, or snapshots. Cancelling
+                    // the confirmation dialog does nothing.
                     if (p04dIsCandidate()) {
                         await this.resetAppViaPorts();
                         return;
@@ -3527,31 +3510,6 @@ export function installRootController(app, dataRuntime, environment = globalThis
                         this.t.factoryResetQ,
                         this.t.factoryResetMsg,
                         async () => {
-                            // P0-08: export-first reset. If the safety backup cannot
-                            // be created, the reset is cancelled and data stays intact.
-                            // P04-D5: the backup resolves through the explicit
-                            // save/share path first, so an iOS share-sheet
-                            // dismiss can never silently cancel the reset by
-                            // navigating away, nor commit a reset without a backup.
-                            let snapshot;
-                            try {
-                                snapshot = await this.buildBackupSnapshot();
-                            } catch (err) {
-                                console.error('Reset safety export failed:', err);
-                                this.showConfirmDialog(this.t.resetFailedTitle, this.t.resetBackupFailed, () => {}, this.t.dialogOk, 'brand');
-                                return;
-                            }
-                            const saved = await this.saveBackupFile(snapshot);
-                            if (!saved.ok) {
-                                if (saved.reason === 'cancelled') {
-                                    this.showConfirmDialog(this.t.resetCancelledTitle, this.t.resetCancelled, () => {}, this.t.dialogOk, 'brand');
-                                } else {
-                                    console.error('Reset safety export failed:', saved.reason);
-                                    this.showConfirmDialog(this.t.resetFailedTitle, this.t.resetBackupFailed, () => {}, this.t.dialogOk, 'brand');
-                                }
-                                return;
-                            }
-
                             try {
                                 await DB.factoryReset(() => {
                                     this.showConfirmDialog(

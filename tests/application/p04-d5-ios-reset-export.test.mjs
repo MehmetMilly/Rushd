@@ -1,26 +1,30 @@
-// P04-D5 iOS reset/export correction regression.
+// P04-D5 reset/export regression: Factory Reset never exports.
 // Run: node tests/application/p04-d5-ios-reset-export.test.mjs
 //
-// Physical symptom on an installed iPhone Home Screen PWA: tapping Factory
-// Reset downloaded the automatic JSON safety backup as a navigation to a
-// JSON preview, so the pending reset continuation never ran ("reset only
-// exports"). Committed expenses rendering checked/paid is expected P04-D
-// behavior and is not covered here.
+// P04-D5 no-export correction (supersedes the old export-first reset).
+// Factory Reset must NEVER trigger Export Backup, Web Share, an anchor
+// download, file saving, or snapshot generation; Export Backup remains a
+// separate explicit user action. After confirmation the reset commits
+// exactly once and reloads; cancelling the confirmation does nothing.
 //
-// The correction routes every safety/ordinary backup through the explicit
-// async `saveBackupFile` path: on iOS devices with Web Share file support
-// the backup resolves via `navigator.share` (stays in-app, settles
-// explicitly); everywhere else the legacy anchor download is unchanged.
-// Nothing destructive runs unless the save resolves `{ ok: true }`.
+// The ordinary Export Backup path is unchanged and still resolves through
+// the explicit async `saveBackupFile` path: on iOS devices with Web Share
+// file support the backup resolves via `navigator.share` (stays in-app,
+// settles explicitly); everywhere else the legacy anchor download is
+// unchanged; detected iOS without file sharing fails closed (never the
+// anchor fallback). Committed expenses rendering checked/paid is expected
+// P04-D behavior and is not covered here.
 //
 // This file drives the real installed controller methods with fake ports
 // and a recording runtime and proves:
-//   1. a successful safety export lets the reset commit exactly once;
-//   2. a cancelled/failed safety export leaves data unchanged and never
-//      calls reset (with a truthful cancelled-vs-failed dialog);
-//   3. the ordinary Export Backup path still behaves (download/share
+//   1. a confirmed reset (candidate or legacy, iOS or desktop) performs
+//      zero export side effects, exactly one reset, exactly one reload;
+//   2. cancelling the reset confirmation does nothing (no reset, no
+//      export, no reload, dialog closed);
+//   3. a throwing reset surfaces the generic reset-failure dialog;
+//   4. the ordinary Export Backup path still behaves (download/share
 //      success, silent share dismiss, alerted failure, never a reset);
-//   4. no duplicate reset or export is triggered in any path.
+//   5. no duplicate reset or export is triggered in any path.
 import assert from 'node:assert/strict';
 import { installRootController } from '../../src/app/root-controller.js';
 import { TRANSLATIONS } from '../../src/app/i18n/translations.js';
@@ -143,7 +147,7 @@ function makeRuntime(counters) {
   };
 }
 
-function makePorts(counters, { snapshotThrows = false } = {}) {
+function makePorts(counters, { snapshotThrows = false, resetThrows = false } = {}) {
   return {
     authority: { getState: () => ({ kind: 'ready-stub', writable: true }) },
     home: {
@@ -166,7 +170,10 @@ function makePorts(counters, { snapshotThrows = false } = {}) {
         if (snapshotThrows) throw new Error('snapshot failed');
         return '{"portable":true}';
       },
-      factoryReset: async () => { counters.resets += 1; },
+      factoryReset: async () => {
+        counters.resets += 1;
+        if (resetThrows) throw new Error('reset failed');
+      },
       clearLocalPreferences: () => {},
     },
     navigation: {
@@ -209,7 +216,24 @@ async function confirmFactoryReset(ctx) {
   await flush();
 }
 
-// --- saveBackupFile outcome semantics (shared by reset + ordinary export) ---
+// Legacy reset never reaches the controller backup helpers; wrap them so
+// any snapshot/save call from the legacy reset path is observed.
+function spyLegacyBackupHelpers(ctx, counters) {
+  counters.helperSnapshots = 0;
+  counters.helperSaves = 0;
+  const originalSnapshot = ctx.buildBackupSnapshot;
+  ctx.buildBackupSnapshot = async function (...args) {
+    counters.helperSnapshots += 1;
+    return originalSnapshot.apply(this, args);
+  };
+  const originalSave = ctx.saveBackupFile;
+  ctx.saveBackupFile = async function (...args) {
+    counters.helperSaves += 1;
+    return originalSave.apply(this, args);
+  };
+}
+
+// --- saveBackupFile outcome semantics (ordinary Export Backup only) ---
 
 {
   const counters = { snapshots: 0, shares: 0, downloads: 0, resets: 0 };
@@ -259,115 +283,115 @@ async function confirmFactoryReset(ctx) {
   assert.equal(counters.downloads, 0, 'failed share must not claim a download either');
 }
 
-// --- Candidate (canonical) reset gating ---
+// --- Candidate (canonical) reset: never exports ---
 
 {
-  // Success: iOS share accepted -> exactly one snapshot, one share, one reset.
+  // Success on iOS with share available: zero export side effects,
+  // exactly one canonical reset, exactly one reload.
   const counters = { snapshots: 0, shares: 0, downloads: 0, resets: 0 };
   const { env } = makeEnvironment(counters, { ua: IPHONE_UA, maxTouchPoints: 3, share: 'accept' });
   const ports = makePorts(counters);
   const { ctx } = install({ candidate: true, counters, env, ports });
   await confirmFactoryReset(ctx);
-  assert.equal(counters.snapshots, 1, 'candidate reset must build exactly one safety snapshot');
-  assert.equal(counters.shares, 1, 'candidate reset must save exactly once via share');
+  assert.equal(counters.snapshots, 0, 'candidate reset must not build any snapshot');
+  assert.equal(counters.shares, 0, 'candidate reset must never touch Web Share');
   assert.equal(counters.downloads, 0, 'candidate iOS reset must not navigate via download');
-  assert.equal(counters.resets, 1, 'successful safety export must let the canonical reset commit exactly once');
+  assert.equal(counters.resets, 1, 'confirmed reset must let the canonical reset commit exactly once');
   assert.equal(env.reloads, 1, 'committed reset must reload once');
 }
 
 {
-  // Cancelled: dismissed share -> no reset, data unchanged, cancelled dialog.
+  // Cancelling the confirmation does nothing: no reset, no export, no reload.
   const counters = { snapshots: 0, shares: 0, downloads: 0, resets: 0 };
-  const { env } = makeEnvironment(counters, { ua: IPHONE_UA, maxTouchPoints: 3, share: 'abort' });
+  const { env } = makeEnvironment(counters, { ua: IPHONE_UA, maxTouchPoints: 3, share: 'accept' });
   const ports = makePorts(counters);
   const { ctx } = install({ candidate: true, counters, env, ports });
-  await confirmFactoryReset(ctx);
-  assert.equal(counters.snapshots, 1, 'cancelled reset still attempts exactly one safety export');
-  assert.equal(counters.resets, 0, 'dismissed safety export must never call reset');
-  assert.equal(counters.downloads, 0, 'dismissed safety export must not navigate away');
+  await ctx.resetApp.call(ctx);
+  assert.equal(ctx.confirmDialog.open, true, 'reset must open a confirmation dialog');
+  ctx.handleConfirmDialogCancel.call(ctx);
+  await flush();
+  assert.equal(counters.snapshots, 0, 'cancelled reset must not build any snapshot');
+  assert.equal(counters.shares, 0, 'cancelled reset must not share');
+  assert.equal(counters.downloads, 0, 'cancelled reset must not download');
+  assert.equal(counters.resets, 0, 'cancelled confirmation must never call reset');
   assert.equal(env.reloads, 0, 'cancelled reset must not reload');
-  assert.equal(ctx.confirmDialog.title, TRANSLATIONS.en.resetCancelledTitle, 'cancelled reset must show the cancelled dialog');
-  assert.equal(ctx.confirmDialog.message, TRANSLATIONS.en.resetCancelled, 'cancelled dialog must state data is unchanged');
+  assert.equal(ctx.confirmDialog.open, false, 'cancelled reset must close the dialog');
 }
 
 {
-  // Failed: share error -> no reset, failed dialog (not the cancelled copy).
+  // Reset failure surfaces the generic reset-failure dialog (never a
+  // backup dialog), with no export side effects and no reload.
   const counters = { snapshots: 0, shares: 0, downloads: 0, resets: 0 };
-  const { env } = makeEnvironment(counters, { ua: IPHONE_UA, maxTouchPoints: 3, share: 'fail' });
-  const ports = makePorts(counters);
+  const { env } = makeEnvironment(counters, { ua: IPHONE_UA, maxTouchPoints: 3, share: 'accept' });
+  const ports = makePorts(counters, { resetThrows: true });
   const { ctx } = install({ candidate: true, counters, env, ports });
   await confirmFactoryReset(ctx);
-  assert.equal(counters.resets, 0, 'failed safety export must never call reset');
+  assert.equal(counters.snapshots, 0, 'failed reset must not build any snapshot');
+  assert.equal(counters.shares, 0, 'failed reset must not share');
+  assert.equal(counters.downloads, 0, 'failed reset must not download');
+  assert.equal(counters.resets, 1, 'failed reset must attempt the canonical reset exactly once');
   assert.equal(env.reloads, 0, 'failed reset must not reload');
   assert.equal(ctx.confirmDialog.title, TRANSLATIONS.en.resetFailedTitle, 'failed reset must show the failure dialog');
 }
 
 {
-  // Snapshot build failure -> no save attempt, no reset.
-  const counters = { snapshots: 0, shares: 0, downloads: 0, resets: 0 };
-  const { env } = makeEnvironment(counters, { ua: IPHONE_UA, maxTouchPoints: 3, share: 'accept' });
-  const ports = makePorts(counters, { snapshotThrows: true });
-  const { ctx } = install({ candidate: true, counters, env, ports });
-  await confirmFactoryReset(ctx);
-  assert.equal(counters.snapshots, 1, 'snapshot build must be attempted exactly once');
-  assert.equal(counters.shares, 0, 'unbuildable snapshot must never reach the save path');
-  assert.equal(counters.resets, 0, 'unbuildable snapshot must never call reset');
-  assert.equal(ctx.confirmDialog.title, TRANSLATIONS.en.resetFailedTitle, 'snapshot failure must show the failure dialog');
-}
-
-{
-  // Desktop parity: download success still commits exactly once, no share.
+  // Desktop parity: same no-export invariant, no share involved either.
   const counters = { snapshots: 0, shares: 0, downloads: 0, resets: 0 };
   const { env } = makeEnvironment(counters);
   const ports = makePorts(counters);
   const { ctx } = install({ candidate: true, counters, env, ports });
   await confirmFactoryReset(ctx);
-  assert.equal(counters.downloads, 1, 'desktop reset must download the safety backup exactly once');
+  assert.equal(counters.snapshots, 0, 'desktop candidate reset must not build any snapshot');
+  assert.equal(counters.downloads, 0, 'desktop candidate reset must not download anything');
   assert.equal(counters.shares, 0, 'desktop reset must not touch Web Share');
-  assert.equal(counters.resets, 1, 'desktop reset must commit exactly once after the download');
+  assert.equal(counters.resets, 1, 'desktop reset must commit exactly once');
+  assert.equal(env.reloads, 1, 'committed reset must reload once');
 }
 
-{
-  // Download failure (e.g. blocked blob URL) also blocks the reset.
-  const counters = { snapshots: 0, shares: 0, downloads: 0, resets: 0 };
-  const { env } = makeEnvironment(counters, { downloadThrows: true });
-  const ports = makePorts(counters);
-  const { ctx } = install({ candidate: true, counters, env, ports });
-  await confirmFactoryReset(ctx);
-  assert.equal(counters.resets, 0, 'failed download must never call reset');
-  assert.equal(env.reloads, 0, 'failed download must not reload');
-  assert.equal(ctx.confirmDialog.title, TRANSLATIONS.en.resetFailedTitle, 'failed download must show the failure dialog');
-}
-
-// --- Legacy reset gating (same export-first invariant) ---
+// --- Legacy reset (same no-export invariant) ---
 
 {
   const counters = { snapshots: 0, shares: 0, downloads: 0, resets: 0 };
   const { env } = makeEnvironment(counters, { ua: IPHONE_UA, maxTouchPoints: 3, share: 'accept' });
   const { ctx } = install({ candidate: false, counters, env, ports: null });
+  spyLegacyBackupHelpers(ctx, counters);
   await confirmFactoryReset(ctx);
-  assert.equal(counters.shares, 1, 'legacy iOS reset must save exactly once via share');
-  assert.equal(counters.resets, 1, 'legacy reset must commit exactly once after an accepted share');
+  assert.equal(counters.helperSnapshots, 0, 'legacy iOS reset must not build any backup snapshot');
+  assert.equal(counters.helperSaves, 0, 'legacy iOS reset must not call saveBackupFile');
+  assert.equal(counters.shares, 0, 'legacy iOS reset must never touch Web Share');
   assert.equal(counters.downloads, 0, 'legacy iOS reset must not navigate via download');
+  assert.equal(counters.resets, 1, 'legacy reset must commit exactly once');
+  assert.equal(env.reloads, 1, 'committed legacy reset must reload once');
 }
 
 {
+  // Cancelling the confirmation does nothing: no reset, no export, no reload.
   const counters = { snapshots: 0, shares: 0, downloads: 0, resets: 0 };
-  const { env } = makeEnvironment(counters, { ua: IPHONE_UA, maxTouchPoints: 3, share: 'abort' });
+  const { env } = makeEnvironment(counters, { ua: IPHONE_UA, maxTouchPoints: 3, share: 'accept' });
   const { ctx } = install({ candidate: false, counters, env, ports: null });
-  await confirmFactoryReset(ctx);
-  assert.equal(counters.resets, 0, 'legacy dismissed share must never call reset');
+  spyLegacyBackupHelpers(ctx, counters);
+  await ctx.resetApp.call(ctx);
+  assert.equal(ctx.confirmDialog.open, true, 'reset must open a confirmation dialog');
+  ctx.handleConfirmDialogCancel.call(ctx);
+  await flush();
+  assert.equal(counters.helperSnapshots, 0, 'cancelled legacy reset must not snapshot');
+  assert.equal(counters.helperSaves, 0, 'cancelled legacy reset must not save');
+  assert.equal(counters.resets, 0, 'cancelled legacy confirmation must never call reset');
   assert.equal(env.reloads, 0, 'legacy cancelled reset must not reload');
-  assert.equal(ctx.confirmDialog.title, TRANSLATIONS.en.resetCancelledTitle, 'legacy cancelled reset must show the cancelled dialog');
+  assert.equal(ctx.confirmDialog.open, false, 'cancelled reset must close the dialog');
 }
 
 {
   const counters = { snapshots: 0, shares: 0, downloads: 0, resets: 0 };
   const { env } = makeEnvironment(counters);
   const { ctx } = install({ candidate: false, counters, env, ports: null });
+  spyLegacyBackupHelpers(ctx, counters);
   await confirmFactoryReset(ctx);
-  assert.equal(counters.downloads, 1, 'legacy desktop reset must download exactly once');
+  assert.equal(counters.helperSnapshots, 0, 'legacy desktop reset must not build any backup snapshot');
+  assert.equal(counters.helperSaves, 0, 'legacy desktop reset must not call saveBackupFile');
+  assert.equal(counters.downloads, 0, 'legacy desktop reset must not download anything');
   assert.equal(counters.resets, 1, 'legacy desktop reset must commit exactly once');
+  assert.equal(env.reloads, 1, 'committed legacy reset must reload once');
 }
 
 // --- Ordinary Export Backup path ---
@@ -418,14 +442,15 @@ async function confirmFactoryReset(ctx) {
   assert.equal(counters.resets, 0, 'ordinary export must never reset');
 }
 
-// --- P04-D5 follow-up: fail-closed iOS when file sharing is unavailable ---
+// --- P04-D5 follow-up: fail-closed iOS for ordinary export ---
 //
 // On a detected iPhone/iPad, an absent share path (`navigator.share` /
 // `canShare` / `File` missing), `canShare` false, or `canShare` throwing
 // must NEVER fall back to the anchor download (the installed-PWA
-// navigation-away bug). It resolves `{ ok: false, reason: 'failed' }` so
-// reset never commits and ordinary export reports failure. Non-iOS
-// desktop/Android keeps the anchor download path.
+// navigation-away bug). Ordinary export resolves
+// `{ ok: false, reason: 'failed' }` and reports failure. Factory Reset
+// never reaches this path at all (see the no-export reset blocks above).
+// Non-iOS desktop/Android keeps the anchor download path.
 
 {
   const counters = { snapshots: 0, shares: 0, downloads: 0, resets: 0 };
@@ -485,42 +510,45 @@ async function confirmFactoryReset(ctx) {
 }
 
 {
-  // Candidate reset blocked when iPhone file sharing is unavailable.
+  // No-export reset ignores share availability: iPhone without Web Share
+  // still resets exactly once with zero export side effects.
   const counters = { snapshots: 0, shares: 0, downloads: 0, resets: 0 };
   const { env } = makeEnvironment(counters, { ua: IPHONE_UA, maxTouchPoints: 3, share: null });
   const ports = makePorts(counters);
   const { ctx } = install({ candidate: true, counters, env, ports });
   await confirmFactoryReset(ctx);
-  assert.equal(counters.snapshots, 1, 'blocked reset still attempts exactly one safety export');
-  assert.equal(counters.downloads, 0, 'blocked iOS reset must never navigate via download');
-  assert.equal(counters.resets, 0, 'unavailable iOS share must never call reset');
-  assert.equal(env.reloads, 0, 'blocked reset must not reload');
-  assert.equal(ctx.confirmDialog.title, TRANSLATIONS.en.resetFailedTitle, 'blocked reset must show the failure dialog (not cancelled copy)');
+  assert.equal(counters.snapshots, 0, 'share-less reset must not build any snapshot');
+  assert.equal(counters.downloads, 0, 'share-less iOS reset must never navigate via download');
+  assert.equal(counters.resets, 1, 'share-less iOS reset must still commit exactly once');
+  assert.equal(env.reloads, 1, 'committed reset must reload once');
 }
 
 {
-  // Candidate reset blocked when iPhone canShare is false.
+  // Candidate reset proceeds when iPhone canShare is false (share is
+  // simply never used by reset).
   const counters = { snapshots: 0, shares: 0, downloads: 0, resets: 0 };
   const { env } = makeEnvironment(counters, { ua: IPHONE_UA, maxTouchPoints: 3, share: 'accept', canShareFiles: false });
   const ports = makePorts(counters);
   const { ctx } = install({ candidate: true, counters, env, ports });
   await confirmFactoryReset(ctx);
   assert.equal(counters.downloads, 0, 'canShare-false iOS reset must never navigate via download');
-  assert.equal(counters.resets, 0, 'canShare-false safety export must never call reset');
-  assert.equal(env.reloads, 0, 'canShare-false reset must not reload');
-  assert.equal(ctx.confirmDialog.title, TRANSLATIONS.en.resetFailedTitle, 'canShare-false reset must show the failure dialog');
+  assert.equal(counters.resets, 1, 'canShare-false reset must still commit exactly once');
+  assert.equal(env.reloads, 1, 'committed reset must reload once');
 }
 
 {
-  // Legacy reset blocked when iPhone canShare throws.
+  // Legacy reset proceeds when iPhone canShare throws (share is simply
+  // never used by reset).
   const counters = { snapshots: 0, shares: 0, downloads: 0, resets: 0 };
   const { env } = makeEnvironment(counters, { ua: IPHONE_UA, maxTouchPoints: 3, share: 'accept', canShareThrows: true });
   const { ctx } = install({ candidate: false, counters, env, ports: null });
+  spyLegacyBackupHelpers(ctx, counters);
   await confirmFactoryReset(ctx);
+  assert.equal(counters.helperSnapshots, 0, 'throwing-canShare legacy reset must not snapshot');
+  assert.equal(counters.helperSaves, 0, 'throwing-canShare legacy reset must not save');
   assert.equal(counters.downloads, 0, 'throwing-canShare legacy reset must never navigate via download');
-  assert.equal(counters.resets, 0, 'throwing-canShare legacy reset must never call reset');
-  assert.equal(env.reloads, 0, 'throwing-canShare legacy reset must not reload');
-  assert.equal(ctx.confirmDialog.title, TRANSLATIONS.en.resetFailedTitle, 'throwing-canShare legacy reset must show the failure dialog');
+  assert.equal(counters.resets, 1, 'throwing-canShare legacy reset must still commit exactly once');
+  assert.equal(env.reloads, 1, 'committed reset must reload once');
 }
 
 {
@@ -572,13 +600,19 @@ async function confirmFactoryReset(ctx) {
 }
 
 // --- Copy truthfulness in both launch languages ---
+// Reset warns of permanent deletion, names the manual Export Backup action
+// the user must take first, and never promises an automatic backup.
 
 {
   for (const locale of ['ar', 'en']) {
     const t = TRANSLATIONS[locale];
-    assert.ok(t.resetCancelledTitle && t.resetCancelled, `${locale} must carry the cancelled-reset copy`);
-    assert.ok(t.factoryResetMsg.includes(locale === 'ar' ? 'مشاركة' : 'share'), `${locale} reset copy must disclose the iPhone/iPad save/share choice`);
+    assert.match(t.factoryResetMsg, locale === 'ar' ? /نهائي/ : /permanently deletes/i, `${locale} reset copy must warn of permanent deletion`);
+    assert.match(t.factoryResetMsg, locale === 'ar' ? /ألغ/ : /cancel/i, `${locale} reset copy must tell the user to cancel for a backup`);
+    assert.match(t.factoryResetMsg, locale === 'ar' ? /تصدير نسخة احتياطية/ : /Export Backup/, `${locale} reset copy must name the manual Export Backup action`);
+    assert.match(t.factoryResetMsg, locale === 'ar' ? /غير مشمولة/ : /not included/, `${locale} reset copy must state what is not preserved`);
   }
+  assert.doesNotMatch(TRANSLATIONS.en.factoryResetMsg, /safety backup/i, 'en reset copy must not promise an automatic safety backup');
+  assert.doesNotMatch(TRANSLATIONS.ar.factoryResetMsg, /سيتم حفظ نسخة احتياطية/, 'ar reset copy must not promise an automatic safety backup');
 }
 
 console.log('P04-D5 iOS reset/export correction regression passed');

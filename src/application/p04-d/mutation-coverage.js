@@ -83,8 +83,8 @@ export const MUTATION_COVERAGE_INVENTORY = Object.freeze([
   { action: 'clearRushdLocalState', port: 'portability', reason: 'portability.clearLocalPreferences: UI chrome only, device id preserved' },
   { action: 'importData', port: 'portability', reason: 'portability.restoreSnapshot: preview plus importPortableReplacement commit point' },
   { action: 'importLegacyBackupDocument', port: 'portability', reason: 'legacy validateBackupPayload gate plus atomic DB.restoreBackupRecords; reached only via format-routed importData' },
-  { action: 'resetApp', port: 'portability', reason: 'portability export-first safety backup plus resetGuestScope commit point' },
-  { action: 'resetAppViaPorts', port: 'portability', reason: 'canonical reset helper: safety backup downloads before anything destructive runs' },
+  { action: 'resetApp', port: 'portability', reason: 'portability resetGuestScope commit point; never exports, shares, downloads, or snapshots' },
+  { action: 'resetAppViaPorts', port: 'portability', reason: 'canonical reset helper: resetGuestScope commits with no export, share, download, or snapshot' },
 
   // Lifecycle: boot, preferences, onboarding flow state, prompt deferrals.
   { action: 'applyMotionProfile', port: 'lifecycle', reason: 'DOM chrome apply; persistence belongs to the lifecycle port in candidate mode' },

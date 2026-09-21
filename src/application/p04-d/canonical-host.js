@@ -2390,7 +2390,7 @@ export async function prepareCanonicalCandidateHost(options = {}) {
         // D4 correction: the persisted device id (`rushd_device_id`,
         // owned by production-boot as pure storage namespacing) is NOT a
         // UI preference and must survive clearing. Wiping it would orphan
-        // the guest scope: the export-first safety backup is device-bound,
+        // the guest scope: export backups are device-bound,
         // and re-import rejects a mismatched device id.
         const doomed = [];
         for (let index = 0; index < (store.length ?? 0); index += 1) {

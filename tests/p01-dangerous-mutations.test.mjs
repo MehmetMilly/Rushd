@@ -233,10 +233,9 @@ async function databaseSnapshot(runtime) {
         ...method,
         t: {
             factoryResetQ: 'إعادة ضبط المصنع؟',
-            factoryResetMsg: 'سيتم تنزيل نسخة احتياطية كاملة تلقائياً قبل الحذف، ثم تُحذف جميع البيانات نهائياً. لا يمكن التراجع.',
+            factoryResetMsg: 'ستُحذف جميع البيانات المحلية نهائياً ولا يمكن التراجع. لن يتم إنشاء أي نسخة احتياطية تلقائياً؛ إذا كنت تريد نسخة احتياطية، ألغِ واستخدم تصدير نسخة احتياطية أولاً.',
             resetFailedTitle: 'تعذّرت إعادة الضبط',
             resetWaitingTitle: 'إعادة الضبط قيد الانتظار',
-            resetBackupFailed: 'تعذّر إنشاء النسخة الاحتياطية قبل الحذف، لذلك أُلغيت إعادة الضبط ولم تتغير بياناتك. جرّب التصدير يدوياً ثم أعد المحاولة.',
             resetWaiting: 'إعادة الضبط تنتظر إغلاق تبويب أو نافذة أخرى لرُشد. سيستمر الحذف تلقائيًا عند إغلاقها؛ لا تغلق هذه الصفحة.',
             resetFailed: 'تعذّر حذف البيانات المحلية ولم يتغير شيء. أعد المحاولة.',
             dialogOk: 'حسنًا'
@@ -253,8 +252,7 @@ async function databaseSnapshot(runtime) {
     void confirmCallback();
     await reset;
     for (let index = 0; index < 6; index += 1) await waitTick();
-    assert.equal(runtime.anchorClicks.length, 1);
-    assert.match(runtime.anchorClicks[0].download, /^rushd-backup-\d{4}-\d{2}-\d{2}\.json$/);
+    assert.equal(runtime.anchorClicks.length, 0, 'no-export reset must not trigger any backup download');
     assert.equal(dialogs.at(-1)?.title, 'إعادة الضبط قيد الانتظار');
     assert.equal(dialogs.at(-1)?.message, 'إعادة الضبط تنتظر إغلاق تبويب أو نافذة أخرى لرُشد. سيستمر الحذف تلقائيًا عند إغلاقها؛ لا تغلق هذه الصفحة.');
     assert.equal(runtime.localStorage.getItem('rushd_lang'), 'ar');

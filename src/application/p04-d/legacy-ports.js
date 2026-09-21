@@ -938,7 +938,7 @@ export function createLegacyFeaturePorts(
         if (
           key &&
           // D4 correction: the persisted device id is storage namespacing,
-          // not a UI preference; clearing must preserve it so the safety
+          // not a UI preference; clearing must preserve it so an export
           // backup stays re-importable after a reset.
           key !== 'rushd_device_id' &&
           (key.startsWith('rushd_') || key.startsWith('microsave_') || key === onboardingKey)

@@ -3,9 +3,10 @@
 //
 // Exercises the A55 correction boundaries through the PRODUCTION adapter
 // (`rushd.portable.v1`, OPFS/SQLite worker, real service worker):
-// online migrate + capture, non-empty versioned export, export-first
-// reset with immediate usable capture (no reload), re-import restoring
-// rows with further usable writes, offline reload rendering committed
+// online migrate + capture, non-empty versioned export, explicit
+// snapshot plus port-level reset with immediate usable capture
+// (no reload), re-import restoring rows with further usable writes,
+// offline reload rendering committed
 // rows from local storage, offline Range serving of the engine WASM,
 // and device-id stability — with zero v1 writes and zero remote
 // requests. All data is clearly fake; no account/cloud client exists.
@@ -196,8 +197,8 @@ async function main() {
     check(parsed.format === 'rushd.portable.v1', `export is versioned production portability (got ${parsed.format})`);
     check(backup.includes('d5-seeded'), 'non-empty export carries the committed row');
 
-    // Export-first reset through the production adapter, then immediate
-    // usable capture with no reload and no restore.
+    // Explicit snapshot, port-level reset (the port never exports), then
+    // immediate usable capture with no reload and no restore.
     const deviceBefore = await page.evaluate(() => localStorage.getItem('rushd_device_id'));
     await portsCall(page, `await ports.portability.factoryReset({ resetId: 'rs-d5-01', confirmation: 'RESET-GUEST-SCOPE' });`);
     const usable = await portsCall(page, `return { book: ports.lifecycle.hasUsableBook(), authority: ports.authority.getState() };`);
@@ -208,7 +209,7 @@ async function main() {
     check(second.modalOpen === false && second.rows.includes('d5-post-reset'), 'post-reset capture commits without reload');
     check(!second.rows.includes('d5-seeded'), 'reset cleared prior finance data');
 
-    // Re-import the safety backup through the production adapter: rows
+    // Re-import the explicit snapshot through the production adapter: rows
     // return and the scope stays usable for new writes.
     const restored = await portsCall(page, `
       return ports.portability.restoreSnapshot(${JSON.stringify(backup)}, { importId: 'im-d5-01', confirmation: 'REPLACE-ACTIVE-DATABASE' });
