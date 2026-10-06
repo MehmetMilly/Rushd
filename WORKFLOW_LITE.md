@@ -1,5 +1,7 @@
 # Rushd Workflow Lite
 
+> **Status, 6 October 2026:** written for the Codex-era Development Master. For the Claude Code Development Master, the *Model routing*, *Astra consultation*, *Approved unattended execution* and file-handoff mechanics below are historical: the delegation model is being agreed with the founder. The durable principles still apply: founder consultation, the evidence boundary, risk-proportional independent verification, one writer per checkout, explicit Git staging, no push or publication without permission, and the product boundaries. The current state is in `docs/implementation/DEVELOPMENT_MASTER_HANDOFF.md`.
+
 This is the active delivery workflow. Preserve the master plan's product quality and phase acceptance outcomes while minimizing total cost, including Master time, worker corrections, repeated reviews, and founder effort.
 
 ## Authority and roles
@@ -63,7 +65,7 @@ Two unsuccessful correction rounds are a signal to reassess root cause and task 
 
 A task delivers one coherent behavior, safety fix, infrastructure capability, or documented containment. Split when dependencies or review risk justify it; avoid tiny dispatches and manager handholding. One product writer owns a checkout at a time. Parallel work requires independent scopes and, where necessary, isolated worktrees.
 
-Save every manual worker/reviewer/consultation prompt as a file, normally under `/Users/mehmet/Desktop/Rushd-P04D-Restart/artifacts/agent-reports/`. Use committed phase task cards under `docs/implementation/` when they are durable interfaces. Results always have a separate exact output path under the same ignored report directory.
+Save every manual worker/reviewer/consultation prompt as a file, normally under `/Users/mehmet/Desktop/Rushd-P04D-Restart/artifacts/agent-reports/` (gitignored, local only). Use committed phase task cards under `docs/implementation/` when they are durable interfaces. Results always have a separate exact output path under the same ignored report directory.
 
 A prompt includes outcome, repository and base, ownership/allowed paths, relevant context pointers, acceptance, scoped validation, exclusions, chosen model/effort and reason, Git permissions, and the exact result path. Review prompts pin the candidate and require independent behavior checks without product edits. Resume the original worker for corrections when available.
 

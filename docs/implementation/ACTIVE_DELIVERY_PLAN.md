@@ -1,6 +1,6 @@
 # Rushd active delivery plan
 
-**Updated:** 24 September 2026
+**Updated:** 6 October 2026
 
 This file records the current delivery position and resource strategy. It does not replace the product contract in `docs/RUSHD_MASTER_PLAN_FINAL.md`, the phase outcomes in `docs/implementation/phase-plan.json`, or the working method in `WORKFLOW_LITE.md`.
 
@@ -10,7 +10,36 @@ Build the full Rushd feature set described by the final master plan. The founder
 
 The working target is a feature-complete build ready for private founder use within one month. Public-release validation is a later finish line because P13 requires at least four weeks of real beta evidence plus external legal and operational work. This separates calendar validation from implementation without removing product features.
 
-## Current position
+## Current position — 6 October 2026
+
+**P04 is open; its private-use phone checkpoint has passed; visible P05/P06 work is authorized but not started.** Development Master moved from Codex to Claude Code (Opus 5.5) on 6 October. The full verified state, risks and reasoning are in `DEVELOPMENT_MASTER_HANDOFF.md`; this section is the short status.
+
+- Branch `codex/p04d-restart`. Checkpoint commit `6268eb3` holds the phone-tested build (bytes match the device-gate deployment `dpl_2PKp8cCzPNN3YmK7Vizp4zgTzJzC`). Lint, typecheck, `npm test`, `test:data` and `test:pwa` pass on it. 71 commits ahead of `origin/main`, none pushed.
+- Private-use checkpoint: iPhone script (founder report) and Galaxy A55 v2→v4/offline/two-tab (agent-observed) passed; A55 remainder by founder report. iPadOS, Mac Safari and unsafe storage-failure probes are **NOT_TESTED**; P04-A6 (VFS ADR) and P04-A7 (URL routes, deferred) stay open. Do not claim P04 closure.
+- P05 `early_start_exception` (23 Sep) authorizes visible P05/P06 design and core-product work. Not publication.
+- The founder confirmed on 6 October that no deployment holds real financial data.
+- Motion experiments run between 24 September and 2 October in disposable copies are documented in `MOTION_EXPERIMENTS.md`; none is merged.
+
+## Next action
+
+1. Agree with the founder: the Claude Code delegation model; whether to push the local commits; the first P05/P06 slice.
+2. Show the founder a visible proposal for the locked navigation (Home, Plan, Ask Rushd, Insights, Goals, Settings in the header) and the first slice. The handoff recommends capture → commit → ledger/availability plus new-user funding/onboarding.
+3. Then freeze the Motion Lab rubric and motion-token source and start P05/P06 on the canonical runtime.
+
+## Founder decisions that remain external
+
+The Development Master owns technical choices unless one of these needs founder input:
+
+- paid provider, cloud region, residency, domain, or billing choice;
+- real-user beta participation and recruitment;
+- legal approval or public claims;
+- publication, DNS, production rollout, or pushing work to an external remote when permission is required.
+
+## History (Codex era)
+
+Everything below records the delivery position, method and routing up to 24 September 2026. It is kept for the reasons behind decisions. Where it conflicts with the sections above or with `DEVELOPMENT_MASTER_HANDOFF.md`, those win; in particular the model routing, the Sol/Astra Master arrangement, unattended monitoring and the "D4 worker is next" action are superseded.
+
+### Position on 24 September
 
 **P04-D5 remains open.** Base `9a3267b` has uncommitted candidate work. The
 first subset deployment reused v3 worker bytes, leaving old icon CSS cached
@@ -140,7 +169,7 @@ authorize personal financial data, deployment, publication, or P05.
 - P03 Task D is closed at `291228c`, following implementation `7d4f3b5`, corrections `289ff96` and `a129082`, and the final Grok correction `291228c`. The final independent review returned `ready_for_integration` after 9/9 adversarial transaction, rollback, provenance, replay, and conflict probes. Persistent storage, networking, and UI integration were not added.
 - P03 is closed at reviewed product commit `291228c`. The Master reran lint, typecheck, `npm test` (25 domain files / 186 tests plus repository and legacy checks), `npm run test:property` (7 files / 23 tests), build, and the full `f80cfc9..291228c` diff check successfully on 7 September. A separate Luna Max acceptance audit mapped P03-A1 through P03-A6 to production paths and current executable evidence and returned `ready_to_close`.
 
-## Working method
+### Working method
 
 **Founder-approved handoff, 6 September:** Sol High becomes the regular Development Master after the founder compacts and switches the selected model. Astra handles ambitious signature animation work and selected design work, as well as bounded architecture/escalation decisions. This records the approved routing, not a claim that the UI switch has already happened. Recent manager work does not establish enough incremental benefit from Astra on every turn; retain independent financial verification and judge routing by completion, correction rate, and actual allowance consumption. Reduce repeated manager reads/status edits regardless of model.
 
@@ -155,13 +184,13 @@ The founder explicitly treats ambitious animation and visual-design quality as n
 - Preserve Codex capacity for Development Master continuity. External models should handle most implementation, testing, and routine independent review when they can do so reliably.
 - High-consequence finance, migration, sync, security, AI-write, release, and major visual work receives independent review. Ordinary low-risk changes receive direct Master review. Sol High is not the automatic reviewer for every high-risk task.
 - When practical, worker and reviewer come from different model families.
-- Assign external workers/reviewers a fixed report path under `/Users/mehmet/Desktop/Rushd/artifacts/agent-reports/`. They save results there; the founder only says which task finished. The Master reads the report directly. Do not assume automatic notifications. Use isolated worktrees for concurrent writers, return corrections to the original worker, and integrate dependencies before starting dependent work.
+- Assign external workers/reviewers a fixed report path under `/Users/mehmet/Desktop/Rushd/artifacts/agent-reports/` (note, 6 Oct: that is where P00–P03 and pre-restart P04 reports live; restart-era reports from 12 September on are in `/Users/mehmet/Desktop/Rushd-P04D-Restart/artifacts/agent-reports/`). They save results there; the founder only says which task finished. The Master reads the report directly. Do not assume automatic notifications. Use isolated worktrees for concurrent writers, return corrections to the original worker, and integrate dependencies before starting dependent work.
 - For long delegated work, offer the founder the unattended-worker option before launch. With explicit approval, run the named cheap worker asynchronously, delegate long-interval liveness checks and bounded same-session continuation to Luna Low/Medium (using a separate Luna xHigh UI operator when the worker is only reachable through computer control), notify on completion/blocker, and end the Development Master's turn. Do not keep Sol/Astra alive to poll partial output.
 - Every founder-facing handoff ends with an explicit instruction for what the founder should do next.
 - Tests cover production behavior and the important failure boundary. Full matrices run at integration or phase gates rather than after every small edit.
 - No receipt ceremony, patch manifest, lifecycle transcript, or manual state transition is part of normal development.
 
-## Model routing
+### Model routing
 
 Routing changes when pricing, resets, free windows, or model availability changes. The founder will report those changes and the Development Master will adjust upcoming work.
 
@@ -185,7 +214,7 @@ Artificial Analysis's [v4.2 announcement](https://artificialanalysis.ai/articles
 
 **Design/motion priority, 13 September:** design and animation are the founder's highest creative-quality priority. When P05/P11 or another consequential experience slice begins, deliberately combine GPT Image exploration, selective Fable taste input, and Astra's approved design/motion role. Pursue an ambitious signature experience rather than a generic finance shell, while keeping Reduced Motion, interruption behavior, performance, accessibility, and equal Arabic/English quality non-negotiable. Use the Rushd Motion Lab skill and validate animations in the running app.
 
-## Reasoning levels
+### Reasoning levels
 
 Choose reasoning from task shape rather than model prestige:
 
@@ -199,7 +228,7 @@ Weak or unfamiliar models may need a higher reasoning level for the same task. A
 
 If an external app does not expose the suggested setting, use its highest suitable available setting and report it. Each prompt still states the desired reasoning depth and why.
 
-## Acceleration plan
+### Acceleration plan
 
 1. P01 is closed at reviewed commit `075317e`.
 2. P02 is closed at `f80cfc9`.
@@ -209,7 +238,7 @@ If an external app does not expose the suggested setting, use its highest suitab
 6. Integrate through the Development Master. Use short-lived branches or isolated worktrees for parallel writers and keep one integration owner.
 7. Treat P01 through P11 as the full feature build. P12 is integrated hardening and release-candidate work. P13 is real-world beta and public-release validation.
 
-## Next action and continuity
+### Next action and continuity as of D4 (stale)
 
 The D4 worker and its later independent review are the active critical path.
 Keep monitoring local and minimal. The
@@ -226,12 +255,3 @@ The generated-child-ID convergence case remains documented for later sync comman
 Keep current status and resource changes in this file, and task interfaces in the phase execution plan. `DEVELOPMENT_MASTER_HANDOFF.md` explains how to resume after compaction. No additional personal AGENTS file is needed.
 
 The one-month feature target is aggressive, not yet an evidence-based forecast. Measure throughput after P03's first integrated tasks. Arrange P04 physical-device access and P08 provider/region decisions early. Prepare AI development examples once action schemas settle, while keeping the required release holdout isolated from prompt tuning. These dependencies can block progress even when code generation is fast.
-
-## Founder decisions that remain external
-
-The Development Master owns technical choices unless one of these needs founder input:
-
-- paid provider, cloud region, residency, domain, or billing choice;
-- real-user beta participation and recruitment;
-- legal approval or public claims;
-- publication, DNS, production rollout, or pushing work to an external remote when permission is required.

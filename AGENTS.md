@@ -67,8 +67,9 @@ Manual QA checklist lives in `docs/manual-qa.md`.
 - `docs/RUSHD_FINAL_FOUNDER_BRIEF.md`: concise approved product description.
 - `docs/RUSHD_MASTER_PLAN_FINAL.md`: canonical product and technical contract.
 - `docs/implementation/phase-plan.json`: machine-readable phases and acceptance gates.
-- `docs/implementation/ACTIVE_DELIVERY_PLAN.md`: current phase status, model routing, acceleration plan, and Astra handoff context.
-- When resuming Development Master work after a model change or compaction, read `docs/implementation/DEVELOPMENT_MASTER_HANDOFF.md`, then the active delivery plan. They hold current decisions and the next action; historical chat prompts may be stale.
+- `docs/implementation/ACTIVE_DELIVERY_PLAN.md`: current phase status, next action, and the dated decision history.
+- When resuming Development Master work after a model change or compaction, read `docs/implementation/DEVELOPMENT_MASTER_HANDOFF.md` first (`CLAUDE.md` points there for Claude Code), then the active delivery plan. They hold current decisions and the next action; historical chat prompts may be stale.
+- `docs/implementation/MOTION_EXPERIMENTS.md`: the disposable motion-experiment copies, the founder's verdicts on them, and what to reuse.
 - `docs/implementation/P02_EXECUTION_PLAN.md`: chosen P02 architecture, task boundaries, model routing, and proportional gates.
 - `docs/RUSHD_EXECUTION_PROTOCOL.md`: manager/worker/reviewer state machine.
 - `.agents/skills/rushd-phase-orchestrator/SKILL.md`: reusable phase orchestration workflow.
@@ -84,7 +85,7 @@ Financial calculations should be explicit and testable. Do not silently change b
 
 ## Privacy Rules
 
-Do not commit secrets, API keys, `.env` files, real financial data, personal screenshots, or user records. Demo data must be clearly fake. Rushd currently stores app data in IndexedDB and preferences in localStorage.
+Do not commit secrets, API keys, `.env` files, real financial data, personal screenshots, or user records. Demo data must be clearly fake. Since the P04-D4 cutover, canonical finance data lives in a local SQLite database on OPFS (via a worker); legacy v1 IndexedDB `MicroSaveOS_DB` is read once for migration and never written; UI preferences such as `rushd_lang` live in localStorage.
 
 ## What Not To Change Casually
 
@@ -103,13 +104,4 @@ Follow `WORKFLOW_LITE.md`. Read the relevant phase contract and product invarian
 
 ## Master cost and handoff rules
 
-- Treat Master context and turns as scarce. Use Codex primarily for monitoring and return paths. Use Muse's available free capacity and Grok for substantial implementation, correction, review, and gates according to `WORKFLOW_LITE.md`; Luna xHigh/Max is only an occasional simple bounded exception. Short manager decisions and edits may be cheaper to finish directly.
-- Route product-diff review, test execution, and evidence packaging to a cheaper capable reviewer. The Master adjudicates the packaged result; direct hands-on verification is an explicitly disclosed exception.
-- Once delegated work is the only remaining action, end the turn. This includes reviewers and audits, not just external implementations. Do not poll, wait in a loop, inspect partial work, or repeat the assigned task.
-- Reuse verifiable review/test evidence at the same product commit. Keep required independent safety review; repeat gates only for a concrete reason. Assign one integrated-gate owner.
-- Save manual prompts as files with exact report paths. Tell the founder the app/model, effort and reason, short instruction to paste, and next action.
-- Prepare and disclose an unattended launch before requesting approval. After approval, verify one writer and one cheap monitor, then end the Master turn. The monitor must preserve continuity by resuming an approved same session after a mechanical stop within `WORKFLOW_LITE.md` limits, or alerting the Master when safe recovery is unclear. Confirm the real notification/resume mechanism; do not promise a background loop that is not running.
-- For unattended status, follow the evidence-state rules in `WORKFLOW_LITE.md`. A PID or screen proves presence only; call work progressing only after an observable delta, and recover a 20-minute three-check stall under the approved same-session limits.
-- Use current routing, not old phase-role defaults. Delegated Sol is rare and Medium/High only. Prepare a bounded Astra consultation and explain why it is needed before seeking approval.
-- Involve Astra in consequential taste work, including design, typography, interaction feel, and animation, through the approved consultation or implementation route.
-- Read completed reports and take the next authorized step without another permission round. Respect explicit phase stops. Share useful concerns and recommendations in simple language.
+The Codex-era Master cost, monitoring and routing rules that lived here are archived in `docs/implementation/archive/CODEX_MASTER_RULES_2026-09.md`. They do not apply to the Claude Code Development Master; the delegation model is being agreed with the founder. The current resume point is `docs/implementation/DEVELOPMENT_MASTER_HANDOFF.md`.
