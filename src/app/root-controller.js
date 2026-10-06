@@ -3241,7 +3241,7 @@ export function installRootController(app, dataRuntime, environment = globalThis
                         }
                         this.showConfirmDialog(
                             this.t.importQ,
-                            this.t.importMsg,
+                            this.t.importReplaceMsg,
                             async () => {
                                 try {
                                     const fingerprint = p04dFingerprint(data);
@@ -3346,7 +3346,7 @@ export function installRootController(app, dataRuntime, environment = globalThis
 
                         this.showConfirmDialog(
                             this.t.importQ,
-                            this.t.importMsg,
+                            p04dIsCandidate() ? this.t.importReplaceMsg : this.t.importMsg,
                             async () => {
                                 try {
                                     // P0-03: settings, templates, and expenses are

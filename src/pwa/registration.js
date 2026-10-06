@@ -30,7 +30,7 @@ export const CANDIDATE_SW_SCOPE = '/';
 // service worker's `PWA_CACHE_VERSION` (asserted by `static-checks.mjs`);
 // the worker stays a dependency-free static file, so the name is mirrored
 // here instead of imported.
-export const CANDIDATE_PWA_CACHE = 'rushd-pwa-v2';
+export const CANDIDATE_PWA_CACHE = 'rushd-pwa-v4';
 /** Maximum warmed URLs per boot: bounds quota use on constrained devices. */
 export const PWA_WARM_URL_LIMIT = 60;
 
@@ -75,6 +75,18 @@ export async function registerCandidatePwa(options = {}) {
       updateViaCache: 'none',
     });
     wireUpdateFound(registration, options.coordination ?? null, hadController);
+    // D5 update correction: explicitly check for an update once per boot.
+    // `register()` runs the browser's update job, but a caller that keeps
+    // the page open (installed PWA relaunched from cache, long-lived tab)
+    // must not depend on the browser's 24h background cadence. Discovery
+    // only — activation still flows through the gated waiting-worker path.
+    try {
+      if (!registration.waiting && !registration.installing && typeof registration.update === 'function') {
+        void registration.update().catch(() => undefined);
+      }
+    } catch {
+      /* a discovery nudge must never break registration */
+    }
     return { ok: true, reason: '', registration };
   } catch (error) {
     return { ok: false, reason: error instanceof Error ? error.message : String(error) };
@@ -88,6 +100,21 @@ export async function registerCandidatePwa(options = {}) {
  */
 function wireUpdateFound(registration, coordination, hadController = true) {
   if (!registration || typeof registration.addEventListener !== 'function') return;
+  // D5 update correction: one activation request per waiting worker. The
+  // updatefound/statechange path covers workers that install while this
+  // page is open; the immediate check below recovers a worker that already
+  // reached `waiting` before this registration returned (installed while
+  // every tab was closed, or updatefound fired before listeners attached —
+  // the stale-client escape hatch). Both paths share one guard so a single
+  // transition can never double-bump the epoch, and both stay gated on the
+  // critical-section protocol: a withheld activation is retried by the next
+  // boot's registration, which sees the same still-waiting worker.
+  let activationWorker = null;
+  const requestActivation = (worker) => {
+    if (!worker || activationWorker === worker) return;
+    activationWorker = worker;
+    void activateCandidateUpdate(registration, coordination, 'candidate-update-activated', { hadController });
+  };
   registration.addEventListener('updatefound', () => {
     const worker = registration.installing;
     if (!worker || typeof worker.addEventListener !== 'function') return;
@@ -96,10 +123,15 @@ function wireUpdateFound(registration, coordination, hadController = true) {
       if (typeof worker.removeEventListener === 'function') {
         worker.removeEventListener('statechange', onStateChange);
       }
-      void activateCandidateUpdate(registration, coordination, 'candidate-update-activated', { hadController });
+      requestActivation(worker);
     };
     worker.addEventListener('statechange', onStateChange);
   });
+  try {
+    if (registration.waiting) requestActivation(registration.waiting);
+  } catch {
+    /* a waiting-worker probe must never break registration */
+  }
 }
 
 /**

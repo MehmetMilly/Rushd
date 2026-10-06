@@ -358,13 +358,33 @@
       "source_url": "https://raw.githubusercontent.com/google/material-design-icons/master/LICENSE",
       "sha256": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd"
     },
+    "source_asset": {
+      "path": "font-sources/material-symbols-rounded-v370.woff2",
+      "source_url": "https://fonts.gstatic.com/s/materialsymbolsrounded/v370/sykg-zNym6YjUruM-QrEh7-nyTnjDwKNJ_190FjzaqkNCeE.woff2",
+      "sha256": "80c1f0011a71e5a2c39bdbb78f63652dd024c6e3635b26bbf3942a991dfa7c5b",
+      "format": "woff2"
+    },
     "assets": [
       {
-        "path": "fonts/sykg-zNym6YjUruM-QrEh7-nyTnjDwKNJ_190FjzaqkNCeE.woff2",
-        "source_url": "https://fonts.gstatic.com/s/materialsymbolsrounded/v370/sykg-zNym6YjUruM-QrEh7-nyTnjDwKNJ_190FjzaqkNCeE.woff2",
-        "sha256": "80c1f0011a71e5a2c39bdbb78f63652dd024c6e3635b26bbf3942a991dfa7c5b",
-        "format": "woff2"
+        "path": "fonts/sykg-zNym6YjUruM-QrEh7-nyTnjDwKNJ_190FjzaqkNCeE-subset.woff2",
+        "sha256": "d24dd74877cca4c320accdcdd2b6fe565f2986ca2eebf0495bf5a953799397ae",
+        "format": "woff2",
+        "derived_from": "font-sources/material-symbols-rounded-v370.woff2"
       }
-    ]
+    ],
+    "subset": {
+      "generator": "scripts/subset-material-symbols.py",
+      "manifest": "src/components/material-symbol-icons.json",
+      "tool": "fonttools==4.61.1",
+      "brotli": "brotli==1.2.0",
+      "zopfli": "zopfli==0.4.3",
+      "layout_feature": "rlig",
+      "output_format": "woff2",
+      "max_bytes": 150000,
+      "input_size_bytes": 5360396,
+      "output_size_bytes": 49892,
+      "sha256": "d24dd74877cca4c320accdcdd2b6fe565f2986ca2eebf0495bf5a953799397ae",
+      "variation_axes": ["FILL", "GRAD", "opsz", "wght"]
+    }
   }
 }

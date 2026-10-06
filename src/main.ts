@@ -23,6 +23,7 @@ void (async () => {
     });
 
     const mountedProxy = app.mount('#app');
+    window.dispatchEvent(new Event('rushd:app-mounted'));
 
     // This is a deliberately narrow P02 compatibility/debug seam. It lets the
     // existing test harness exercise the same DB, Store, and mounted proxy as the

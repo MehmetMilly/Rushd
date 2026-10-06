@@ -621,6 +621,20 @@ lift never overrides a harm threshold.
 
 ### Direction
 
+Founder clarification, 11 September 2026: evolve the existing Rushd visual identity.
+The preserved interface and `docs/baseline/current/` screenshots are the starting
+reference for composition, density, typography roles, colors, cards, day strip,
+ledger, navigation treatment, and capture interactions. Improve their finish,
+responsiveness, accessibility, and motion without substituting a different visual
+direction. Required financial semantics and the locked destination hierarchy still
+apply; preserving appearance does not require retaining obsolete behavior.
+Technical migrations and later-phase placeholders do not authorize replacing the
+visible app with a generic shell. Compare changed screens against the baseline
+in Arabic and English, light and dark, and mobile and wider layouts. Consequential
+departures require an explicit founder design decision based on a visible proposal.
+References to UI replacement below mean implementation replacement within this
+direction, not permission to discard the established design.
+
 The product should feel premium, elegant, alive, and joyful, with high information
 clarity. Preserve the current Arabic fonts subject to license verification. Select a more
 elegant English family through device and readability testing. Arabic and English layouts

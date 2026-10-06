@@ -1,204 +1,116 @@
 # Rushd Workflow Lite
 
-This is the active delivery workflow. It optimizes for useful product progress while preserving the quality invariants that matter for a personal finance app.
+This is the active delivery workflow. Preserve the master plan's product quality and phase acceptance outcomes while minimizing total cost, including Master time, worker corrections, repeated reviews, and founder effort.
 
-## Roles
+## Authority and roles
 
-- **Founder:** owns product intent, manual experience feedback, account/provider decisions, publication, and explicit acceptance of major product tradeoffs.
-- **Development Master:** owns planning, task sizing, technical decisions, risk classification, verification, integration, and concise task cards for Workers.
-- **Worker:** implements an assigned slice in a dedicated chat, runs logical tests, and reports honestly.
-- **Reviewer:** a separate agent used only when a change needs independent adversarial verification. It reviews behavior, diffs, tests, screenshots/video where relevant, and risks—not process paperwork.
+The founder owns product intent, experience feedback, external account/provider decisions, publication, and major product tradeoffs. The Development Master owns technical direction, task design, routing, verification, and integration. Workers implement; independent reviewers verify expensive failure boundaries.
 
-The Development Master may directly verify low-risk changes. Independent Reviewer is reserved for high-consequence work.
+Founder clarification, 11 September: consult the founder before implementing major changes to visual direction, core interactions, navigation, or feature scope. Show the concrete proposal and explain the tradeoff. Routine technical choices remain autonomous. The founder has authorized a compatibility-first P04-D restart that preserves the mounted legacy application and evolves the established visual identity on the new data layer. This is not authorization for another replacement shell, empty permanent destinations, P05, or publication. Favor Muse/OpenCode and Grok/Cursor, minimize Codex work and repeated gates.
 
-## Task sizing
+Use `AGENTS.md` for project invariants, `docs/implementation/ACTIVE_DELIVERY_PLAN.md` for current status, and the relevant phase entry in `phase-plan.json` for acceptance. Read only the master-plan sections needed for the decision. Historical protocols, task prompts, and model assignments do not override this workflow or current founder instructions.
 
-A normal task is a coherent, respectable slice—not a one-line chore and not an entire phase compressed into one prompt. A task should usually produce one of:
+## Master operating loop
 
-- a complete user-visible flow;
-- a complete financial-safety fix plus regression coverage;
-- a bounded refactor with behavior preservation;
-- a complete infrastructure capability;
-- a documented containment for a defect whose final solution belongs later.
+1. Recover current status once. Inspect the assigned report, Git state, and the relevant evidence. Do not reread the whole project or transcript on each turn.
+2. Identify the next concrete outcome and choose its owner. Do short decisions, targeted evidence checks, and small coherent edits directly when delegation would cost more. Delegate bounded exploration, implementation, test execution, and evidence packaging to cheaper capable workers.
+3. Complete authorized work through its next useful handoff. A result notification means read the result and act: accept and integrate, save a correction prompt, or identify a specific decision needed. Do not merely acknowledge completion or ask whether to read the report.
+4. If useful independent Master work remains, do it. When only delegated work remains, end the turn with the actual next action and return mechanism. This applies to subagents, reviewers, new tasks, external workers, and audits equally. Do not park the Master in wait loops, poll progress, inspect partial diffs, or redo delegated work.
+5. Resume when a completion/blocker event or the founder arrives. A single compact status check on an explicit status request or recovery event is appropriate. Report observed state precisely: a PID or screen proves presence, not progress. Do not claim progress, a sleeping monitor, or automatic wakeup without evidence that the mechanism is working.
+6. Update the active status once at a meaningful handoff or closure. Suggest or execute the next authorized step. An explicit phase stop overrides general momentum; do not start the next phase.
 
-Batch related edits into the same task. Split only when risk, uncertainty, review size, or a hard dependency makes splitting genuinely useful.
+The Master is accountable for outcomes, not required to personally execute every test. Sending a task to a cheaper model and then following every step defeats delegation. A blocked tool wait is not itself proof of token consumption; the avoidable overhead is repeated inference, large contexts, and duplicated work. Do not invent cost savings or measured usage.
 
-## Test scope
+## Model routing
 
-Tests verify meaningful behavior; they are not ceremonial coverage theater.
+These are founder preferences, not published pricing or benchmark claims. Use the available model/effort actually exposed by the tool. Never silently substitute a model or claim a UI setting was selected.
 
-For most product changes:
+| Route | Assignment and effort |
+| --- | --- |
+| Luna | Codex is primarily a monitoring and return-path tool. Use Luna Low/Medium for monitoring and simple bounded tasks. Prefer a capable founder-named free external agent for substantial code work; when those routes are unavailable or unsuitable, GPT-6 Luna xHigh or Max can own code-related review and agentic work. Choose xHigh or Max upfront from task difficulty and risk; Max is viable for harder tasks, not a last-resort exception. For Codex subagents, request the exact `gpt-6-luna` model and effort; never infer the model from a preset role name. Do not interrupt an already-running adequate review merely to raise effort. |
+| Muse Spark 1.3 through OpenCode | First choice for substantial well-defined implementation, tests, and suitable independent review while its contributor route is free and not rate-limited. Choose High, xHigh, or Max upfront from task breadth, ambiguity, and risk; do not mechanically start at High. Escalate the same session later only when the initial assessment proves insufficient and the free route exposes the higher effort. |
+| Kimi K3, DeepSeek V4.1 Flash, and GLM 5.3 Flash through Cline | Founder-reported free ClinePass capacity. Kimi suits harder bounded code and diagnosis; DeepSeek and GLM suit clear implementation and test tasks. Verify the exact model and free allowance in the app before launch, and never let a fallback silently spend credits. |
+| DeepSeek V4.1 Flash and GLM 5.3 Flash through Verdent | Founder-reported free capacity for bounded coding tasks. Prefer explicit ownership, small contexts, and checkable tests. App access is known; do not assume a CLI is installed or that its allowance remains free. |
+| Grok 4.6 or 4.7 through Cursor | Use for hard implementation, finance/concurrency reasoning, or difficult independent review when a free route is inadequate. The founder wants 4.7 used where its quality merits it, but suspects materially higher token use than 4.6; record observed task-level tokens/cost when available instead of assuming the benchmark ratio. Confirm the selected Cursor model and billing route before launch; past Cursor usage unexpectedly spent paid credits. Medium/High normally; xHigh only for exceptional work. |
+| Gemini 3.8 Flash through Anti-gravity | Fast, cheap owner for explicit low-risk implementation, fixtures, mechanical tests, and bounded evidence tasks. Give it narrow files and deterministic checks. Do not assign architecture, ambiguous finance behavior, concurrency, migration safety, or final high-risk review. |
+| Fable 5.1 | Premium taste specialist for high-leverage UI direction, visual hierarchy, component composition, and motion critique/exploration. The founder reports a total remaining budget of about USD 16; reserve it for consequential design decisions, use compact briefs, avoid routine coding/review, and record spend when known. |
+| GPT Image 2.5 through ChatGPT.com | Low-cost visual ideation for UI frames, alternate art directions, animation keyframes, and composition experiments. Use images to widen and communicate design options, never as implementation proof or a substitute for bilingual, accessible, responsive validation in the running app. |
+| Terra | Do not use for ordinary Rushd implementation or review. Reserve only for an explicitly justified internal exception when external Muse/Grok cannot perform a tiny bounded task. |
+| Sol | Do not delegate ordinary Rushd implementation or review to Codex Sol. Use Medium/High only for an explicitly justified bounded exception. |
+| Astra | The founder may select Astra as Master. Also preserve its approved role in ambitious motion and selected design work. For consultation from another Master, tell the founder first and use Low or Medium only. |
 
-- test the main accepted behavior;
-- test the important failure or boundary;
-- update affected regressions;
-- run targeted tests during development;
-- run the relevant full gate before handoff.
+The founder has not settled Astra Light versus Sol High as Master. Keep the selected Master; do not switch it or impose Sol as the default. “Light” is the founder's UI terminology; map it to an actual supported effort only when known. A chosen Sol Master does not authorize additional Sol reviewers.
 
-Add deeper property, migration, accessibility, performance, security, or visual checks only when the change touches those risks or the phase contract demands them.
+The founder reports GPT-6 Sol and Luna as roughly 50% cheaper than their GPT-5.6 predecessors in current usage. Treat that as a routing preference, not verified billing; preserve Master continuity and use free competent workers first. Free windows and model availability can change. Check the actual app/provider route before each external launch; a rate limit or exhausted allowance is not permission to switch to paid credits.
 
-Additional rules:
+Use only the founder-named external model routes above unless the founder approves another model. A model being free is not sufficient reason to substitute it. In particular, do not route Rushd work to Nemotron; the founder rejected that choice. If a named app is inaccessible and Muse is rate-limited, use a bounded Luna review/task or ask for a manual app handoff rather than silently choosing an unapproved free model.
 
-- If a Worker finds a credible new path to silent data loss, duplication, or materially wrong money answers, stop that slice and report it before broadening scope.
-- A dangerous prototype action may be visibly blocked until its permanent fix; the UI must say the action is temporarily unavailable rather than failing silently.
-- Tests must exercise production logic. A copy of the formula in a test helper is not proof.
-- Claims about atomic writes or retry safety need an injected failure followed by reload/retry verification.
-- At handoff, report the commit, tests, manual checks, remaining visible containments, and any unexplained changes. No additional process artifacts are required.
+For substantial implementation, correction, independent review, and gate ownership, prefer a capable free route through OpenCode, Cline, Verdent, or Anti-gravity before paid Cursor or Codex. A separate Codex task may monitor an external run and message the Development Master, but it must not silently replace that external route with Codex implementation/review. Do not keep the Development Master active while another route works.
 
-## Verification tiers
+Give each dispatch a one-sentence reason connecting model and effort to task difficulty. Prefer a fresh compact worker context with files, base, scope, and output path over a full-history fork. Use subagents for supporting work; create a sidebar task only when the founder explicitly asks.
 
-### Tier 0 — Master direct
+### Astra consultation
 
-Use for docs, comments, configuration, formatting, small developer tooling, and obvious cleanup. The Development Master inspects the result directly.
+Taste is also a reason to involve Astra: visual hierarchy, typography, bilingual composition, interaction feel, animation choreography, and design critique. Consult it before consequential taste choices are locked in, even when implementation is technically straightforward. Use Light for one focused critique and Medium only when several design/motion decisions interact. Astra may own exploration, prototypes, and implementation when approved; it is not restricted to reviewing someone else's design. Preserve the existing motion-quality commitment.
 
-### Tier 1 — Master technical verification
+Design and animation are the founder's highest creative-quality priority. For P05/P11 and other consequential experience work, combine cheap image-based exploration, selective Fable 5.1 taste input, and Astra's approved motion/design role before implementation is locked. Push the experience ambitiously while retaining Reduced Motion, interruption safety, performance, accessibility, and equal Arabic/English composition. Use the Rushd Motion Lab workflow and judge motion in the running app; static images are concept evidence only.
 
-Use for normal features, refactors, bug fixes, and UI changes. The Worker reports implementation and tests; the Development Master reviews diff, behavior, scope, and tests.
+Recommend Astra Light for a bounded second opinion and Medium for interacting architecture, financial semantics, design, or animation decisions when the current Master cannot resolve a consequential ambiguity, reviewers disagree on a contract, or repeated corrections reveal an unsettled design. Prepare one compact file with the exact question, evidence, options, and the Master's recommendation. Tell the founder why the consultation is worth its cost and request approval before launching it or asking for a model switch. Do not quietly call Astra. Already-approved consultation needs no second approval. The founder has pre-approved one conservative Light-or-Medium consultation for P04-D/P05 design and animation planning or critique when it materially improves quality; use the smallest adequate effort and do not multiply consultations.
 
-### Tier 2 — Independent Reviewer
+Two unsuccessful correction rounds are a signal to reassess root cause and task fit, not a trigger for a prescribed expensive model. Prefer Grok for technical correction; propose Astra when the unresolved issue is a consequential decision. Keep the final quality gate intact.
 
-Use when mistakes are expensive or subjective quality matters:
+## Task ownership and file handoffs
 
-- finance calculations and reconciliation;
-- data mutation, import/export, reset, migration;
-- sync/auth/security/privacy;
-- AI output handling or proposals;
-- release/beta readiness;
-- major architecture choices;
-- significant visual, motion, or bilingual UX work.
+A task delivers one coherent behavior, safety fix, infrastructure capability, or documented containment. Split when dependencies or review risk justify it; avoid tiny dispatches and manager handholding. One product writer owns a checkout at a time. Parallel work requires independent scopes and, where necessary, isolated worktrees.
 
-For important UI or animation work, the Reviewer may record and inspect live video rather than relying only on static screenshots.
+Save every manual worker/reviewer/consultation prompt as a file, normally under `/Users/mehmet/Desktop/Rushd-P04D-Restart/artifacts/agent-reports/`. Use committed phase task cards under `docs/implementation/` when they are durable interfaces. Results always have a separate exact output path under the same ignored report directory.
 
-## Task card
+A prompt includes outcome, repository and base, ownership/allowed paths, relevant context pointers, acceptance, scoped validation, exclusions, chosen model/effort and reason, Git permissions, and the exact result path. Review prompts pin the candidate and require independent behavior checks without product edits. Resume the original worker for corrections when available.
 
-Every Worker assignment includes:
+For a manual handoff, provide the app, model, effort, routing reason, saved prompt, short paste instruction, and the founder's next action. Do not paste the whole file into chat unless requested. A bare “prompt created” is incomplete.
 
-1. outcome;
-2. repository context/files;
-3. allowed paths;
-4. acceptance criteria;
-5. tests to run;
-6. out-of-scope items;
-7. expected concise report and its exact absolute output path.
+Reports include status, actual model/effort, base/result SHA or uncommitted state, changed scope, behavior, commands/results, evidence paths, blockers, and remaining limitations. Record elapsed time and retries if available; do not poll account usage or invent dollar costs. Reports live in the ignored directory. Commit only when authorized, and report after the commit when one was requested.
 
-Workers read only what they need. They do not reread the whole governance corpus for every slice.
+## Verification without duplication
 
-## Worker report
+- Low-risk docs, tooling, and obvious changes: direct focused inspection.
+- Ordinary implementation: scoped tests and relevant diff/evidence review by an assigned cheaper capable reviewer. The Master reads the packaged evidence and adjudicates it.
+- Finance, mutation/migration, sync/auth/security, AI writes, release, significant visual/motion/bilingual work: independent risk-focused review. Prefer an external reviewer when capable. Different families are useful, not a reason to order another full audit after an adequate independent review.
+- Worker tests do not replace independent review. Reviewers exercise real production paths and adversarial cases, not copied formulas.
+- Reuse passing command evidence from an independent reviewer at the exact integrated product SHA when commands, results, and environment are verifiable. Run missing gates or rerun after relevant changes, environment differences, weak evidence, or an explicit phase requirement. Do not automatically run the same full gate as worker, reviewer, Master, and closure auditor.
+- Assign one owner to the integrated gate. The Master checks its evidence and acceptance coverage. A docs-only status commit does not invalidate product tests.
+- Direct product-diff inspection or test execution by the Master is an exception. Use it only for a small manager check or when no cheaper capable route exists, and tell the founder before spending that effort.
+- Atomicity/retry claims need injected failure plus reopening/retry at the implemented boundary. In-memory proof is not durable browser proof.
+- After correction, review the affected failure paths and relevant regressions. Broaden only when the change or new evidence justifies it.
+- A real silent-loss, duplicate-effect, wrong-money, or identity defect blocks acceptance. Record exact reproduction and return it to the responsible worker. Do not reclassify a defect as later work simply to close a phase.
+- Record genuine later-phase gaps with the reason for deferral, owner phase, and required future proof. Preserve closure unless new evidence warrants reopening it.
 
-The Worker saves its final report at the exact path in the task prompt, normally `/Users/mehmet/Desktop/Rushd/artifacts/agent-reports/<task-id>.md`. This local directory is already Git-ignored. Write the report after the implementation commit so it can name the actual commit; do not commit the report. Use a separate named report for each correction/review assignment. A blocked task writes its current result at its assigned path too.
+## Approved unattended execution
 
-Include task ID, complete/blocked status, completion time, actual repository/worktree path, base and result commit when present, actual model/reasoning setting, and the implementation/test/limitation details below. Markdown is fine; a prescribed JSON ceremony is unnecessary. Keep secrets and real user data out of reports.
+Prepare the task file before seeking launch approval. Explain the worker/model, scope, monitor, expected report, allowance used, and resume limit. Obtain the founder's approval before starting an external unattended run. This workflow setup alone is not launch approval. Preserve approval already given for the same run; do not ask again for authorized monitoring or bounded continuation.
 
-The Worker's chat reply need only say the report is saved and identify its path. The founder then tells the Development Master that the task finished; the Master reads the assigned report and checks the relevant code/evidence. This shared-file handoff requires access to the same filesystem. If unavailable, report that limitation in chat rather than claiming the file was saved.
+1. Verify CLI/tool capabilities and exact model availability with a cheap read-only check. Do not assume Cursor's UI models, subscription, and CLI models are interchangeable.
+2. Prefer a detached resumable CLI session. Use a Luna xHigh UI operator only when needed and authorized. Record the task/base, model, session, result path, and approval scope in one ignored run file.
+3. Verify launch once. Assign exactly one cheap Luna Low/Medium monitor for that worker. The monitor owns continuity, not just status. It checks liveness, observable progress, the exit marker, and the expected report at a sensible interval. If an approved session stops mechanically before producing a valid report, the monitor verifies that the original writer is gone and resumes the same session within the two-resume limit. It alerts the Master instead when recovery is ambiguous, the limit is exhausted, or the task needs a founder decision. The monitor does not inspect partial diffs, run product tests, change scope, switch models, or start the next task. It stays active until a valid report, terminal blocker, or Master handoff exists.
+4. Add one short current-thread fallback heartbeat every 15 minutes when unattended continuation matters. It recovers control if the worker or monitor fails to return it. Verify that the saved automation is active and targets the current Development Master task before ending the turn. The fallback stays quiet on non-terminal checks. On a successful terminal result, it takes the next already-authorized action, such as dispatching the frozen independent review, and repoints itself to that stage before notifying. It pauses only when the next action needs a founder decision or the result is blocked. When the founder explicitly requires uninterrupted continuation, keep one bounded direct wait open as the primary return path and retain the heartbeat only as fallback.
+5. On completion, the Master reads the packaged result and immediately routes the next review, correction, or task. Do not create speculative parallel handoffs, multiple monitors, or repeated status turns while one worker/reviewer owns the critical path.
+6. Treat a living PID or screen as presence, not progress. Suspect a stall only after no report/log/CPU change across three checks spanning at least 20 minutes and no known long-running child. A long-lived preview/dev server does not count as productive work after the report and required evidence are complete; stop only that owned server so the worker can return. Then inspect the minimal log/process state once and either resume the same authorized session or report a blocker. Limit same-session resumes to two.
+7. A rate-limit response with a reset time should wait until eligible; exhausted free capacity is not permission to switch to paid. Before any stopped-session resume, verify the original writer is gone. The founder has pre-authorized same-session resumes once a task, provider, model, checkout, and scope are already approved. Do not ask again solely to resume that session. New billing, login/CAPTCHA, destructive recovery, changed provider or model family, expanded task scope, or a second writer still requires the applicable decision.
+8. Completion requires a matching report and coherent repository state, not merely an idle UI or living PID.
+9. Once the worker, one monitor, and optional 20-minute fallback are verified, the Master normally ends its turn. If the founder explicitly requires uninterrupted continuation, keep the bounded direct wait active instead. Delete or repurpose stale task-specific fallbacks after the terminal event; leave unrelated user automations alone.
 
-Report content includes:
+New billing, login/CAPTCHA, destructive recovery, publication, changed provider, or a second writer requires the applicable founder decision. Prepare any safe remaining work before asking. Transparency should not become repeated permission requests.
 
-```json
-{
-  "status": "complete | blocked",
-  "changed_files": [],
-  "implementation_summary": "",
-  "tests_run": [],
-  "test_results": {},
-  "manual_or_visual_checks": [],
-  "risks": [],
-  "follow_ups": [],
-  "questions": []
-}
-```
+## Communication and continuity
 
-No receipts, manifests, lifecycle transcripts, or state transitions are required unless explicitly requested.
+Use plain, tasteful language. Lead with the result or decision. Give useful progress updates during active work; do not manufacture status turns while idle. Share material concerns and worthwhile ideas with a short reason, distinguish opinion from evidence, and make a recommendation.
 
-## Unattended worker execution
+Every handoff names exactly what the founder must do, or says that nothing is needed and identifies who acts next. “Nothing required” is valid at a completed scope or a verified unattended handoff, not a substitute for preparing the next authorized step.
 
-Use unattended execution whenever a long task can run safely in a cheaper worker while the
-Development Master is idle. This is a cost-control pattern, not blanket authorization.
-Before every new unattended run, ask the founder one clear question:
+Keep one current status record in `ACTIVE_DELIVERY_PLAN.md`: phase/base, assignment owner, prompt/result, relevant session and approval, next action, blockers, and unresolved decisions as applicable. Link long run details rather than duplicating them. Update at handoffs, decisions, and closure; do not maintain a parallel ceremony.
 
-> Would you like me to run this task unattended, have a cheaper subagent monitor and resume it when safe, and report back when it finishes?
+## Git and product boundaries
 
-Proceed only after explicit approval for that task. The approval covers launching the named
-worker and monitor under the stated free/paid route; it does not authorize a paid fallback,
-provider change, login, purchase, secret entry, destructive action, publication, or a second
-product writer.
+Preserve existing edits. Stage explicit files and commit only within authorization after relevant verification. Never push or publish without permission. No receipts, manifests, or historical state-machine transitions are required for ordinary work.
 
-### Launch path
-
-1. Freeze a worker-ready task card with outcome, product base, owned paths, acceptance,
-   validation, commit/report requirements, model, reasoning setting, and routing reason.
-2. Tell the founder exactly what will run, what will monitor it, and that their next action is
-   to wait for completion or failure notification.
-3. Record durable local run metadata under `artifacts/agent-reports/`: task ID, prompt path,
-   product base, worker model/setting, process/session/tab identity, log path, report path, and
-   monitor identity. Keep secrets out.
-4. Start one product-source writer asynchronously. Prefer a detached CLI/API session when the
-   route supports it. Verify the process/session accepted the prompt once, then stop reading
-   partial output.
-5. When the model is available only through a user-authorized UI, assign a capable low-cost
-   operator such as Luna xHigh to use computer control to open the exact app/tab, select the
-   approved model/setting, submit the frozen prompt, and capture the resulting session identity.
-   The operator may use already-authorized accounts; it may not solve a CAPTCHA, change billing,
-   accept new terms, expose secrets, or choose a paid route without a separate founder decision.
-
-The launch operator does not become a second implementation worker. After it verifies a live
-run, it hands monitoring to the cheapest model that can reliably read status and resume the
-same session—normally Luna Low for CLI/process checks or Luna Medium for UI state.
-
-### Monitor path
-
-The monitor is a liveness coordinator, not a reviewer or developer.
-
-- Wait with long adaptive intervals, normally 3–10 minutes based on expected task duration.
-  Prefer one sleeping process/tool call over repeated model turns.
-- Check only liveness, terminal/app status, final report presence, and the minimal log tail needed
-  to classify a stop. Do not stream partial reasoning, inspect evolving diffs, run tests, or make
-  product decisions while the worker is active.
-- Preserve one-writer ownership. Resume the same worker session; never start a replacement writer
-  against its partial tree without Development Master and founder approval.
-- Automatically resume the same session after a clearly transient stop such as a connection drop,
-  rate limit, terminal detachment, or incomplete stop with no final report. Re-send a short
-  continuation that preserves the frozen task, working tree, model, and report requirement.
-- Limit automatic continuation to two consecutive transient resumes. A third stop, an unavailable
-  session, contradictory state, merge conflict, approval request, login/CAPTCHA, paid fallback,
-  destructive action, or ambiguous product question is a blocker to report—not permission to
-  improvise.
-- On completion or blocker, save a concise monitor summary, notify the Development Master, and use
-  an available user notification channel (Codex task notification or local OS notification) so
-  the founder knows to return.
-
-### Development Master sleep rule
-
-After launch verification and monitor assignment, the Development Master ends its turn. It does
-not hold an expensive foreground process, call `wait` repeatedly, poll the log, or remain active
-to narrate progress. The manager resumes only when the monitor reports completion/blocker or the
-founder sends new input.
-
-When the manager resumes, it reads the final worker report and commit, performs the risk-tiered
-verification/review loop, updates status, and again tells the founder the exact next action.
-Detached workers and monitors still consume their own provider/model allowances; this pattern
-prevents unnecessary Development Master usage but does not make delegated work free.
-
-## Git discipline
-
-- Keep each coherent task in one commit.
-- Keep unrelated cleanup out of the commit.
-- Commit only after required verification.
-- Do not push unless the founder asks.
-- Use clear subjects such as `Rushd P01: protect paid activity from reconciliation`.
-
-## Non-negotiable product invariants
-
-- Arabic and English receive equal design quality.
-- Financial calculations remain explicit, testable, and honest about available money.
-- Canonical money will move toward integer halalas during domain extraction.
-- Destructive operations require confirmation and safe containment.
-- Existing user data is never silently lost.
-- AI never writes canonical finance data directly; it proposes typed actions.
-- Do not claim sync, security, production readiness, residency, PWA support, or release readiness before implemented and verified.
-- Do not reward spending, underspending, wealth, transaction count, or app opens in Momentum.
-
-## Current phase plan
-
-P00 through P03 are closed. P01's reviewed product baseline is commit `075317ebebd1aa4f366a2ac6fd3f715f748d54fe`; P02 closes at `f80cfc9`, and P03 closes at reviewed product commit `291228c778d0714b343c396d2a37067f5361d8a1`. P01's risk dispositions remain in `docs/baseline/P01-risk-matrix.json`.
-
-Read the current execution position from `docs/implementation/ACTIVE_DELIVERY_PLAN.md` and the relevant contract from `docs/implementation/phase-plan.json`. Ordinary development follows this workflow and does not use the retired P00 state machine.
+Arabic and English remain equal-quality languages. Preserve financial safety, data, destructive-action confirmation, typed AI proposals, honest readiness claims, and the locked navigation/Momentum rules in `AGENTS.md` and the master plan. Saving usage is not permission to lower acceptance or motion/design ambition.

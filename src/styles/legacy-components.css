@@ -208,6 +208,59 @@
             transform: scale(0.95);
         }
 
+        .icon-font-fallback-label {
+            display: none;
+            font-family: var(--font-body);
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 1.2;
+            white-space: nowrap;
+        }
+
+        html:not([data-icons-ready='true']) .icon-font-fallback-label {
+            display: inline;
+        }
+
+        html:not([data-icons-ready='true']) .home-settings-btn {
+            width: auto;
+            padding-inline: 10px;
+            gap: 6px;
+        }
+
+        html:not([data-icons-ready='true']) .fab {
+            width: auto;
+            min-width: 60px;
+            padding-inline: 18px;
+            gap: 8px;
+            border-radius: 30px;
+        }
+
+        html:not([data-icons-ready='true']) .settings-back-btn {
+            width: auto;
+            padding-inline: 10px;
+            gap: 6px;
+            border-radius: 18px;
+        }
+
+        html:not([data-icons-ready='true']) .home-settings-btn .material-symbols-rounded,
+        html:not([data-icons-ready='true']) .fab .material-symbols-rounded,
+        html:not([data-icons-ready='true']) .settings-back-btn .material-symbols-rounded {
+            display: none !important;
+        }
+
+        html:not([data-icons-ready='true']) .modal-close-btn .material-symbols-rounded {
+            display: none !important;
+        }
+
+        html:not([data-icons-ready='true']) .modal-close-btn::after {
+            content: '×';
+            font-family: var(--font-body);
+            color: white;
+            -webkit-text-fill-color: white;
+            font-size: 22px;
+            line-height: 1;
+        }
+
         /* V5: Edit Modal Input Labels (above inputs) */
         .edit-input-group {
             display: flex;

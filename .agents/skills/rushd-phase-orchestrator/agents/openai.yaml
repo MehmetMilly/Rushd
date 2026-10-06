@@ -1,4 +1,4 @@
 interface:
   display_name: "Rushd Phase Orchestrator"
-  short_description: "Run strict phased Rushd implementation gates"
-  default_prompt: "Use $rushd-phase-orchestrator to run the next Rushd implementation phase with independent review."
+  short_description: "Coordinate Rushd delivery with Workflow Lite"
+  default_prompt: "Use $rushd-phase-orchestrator to advance the authorized Rushd task using Workflow Lite and current founder routing."

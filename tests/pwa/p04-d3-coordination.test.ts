@@ -135,10 +135,15 @@ describe('service-worker activation epoch glue', () => {
         if (type === 'statechange') stateChanged = callback;
       },
       removeEventListener() {},
+      postMessage: (message: unknown) => void posted.push(message),
     };
     const registration = {
       installing: worker,
-      waiting: { postMessage: (message: unknown) => void posted.push(message) },
+      // Realistic timing: a worker becomes `waiting` only once installed
+      // over a live controller, never while still installing.
+      get waiting() {
+        return worker.state === 'installed' ? worker : null;
+      },
       addEventListener(type: string, callback: () => void) {
         if (type === 'updatefound') updateFound = callback;
       },
@@ -169,6 +174,95 @@ describe('service-worker activation epoch glue', () => {
 
     expect(posted).toEqual([{ type: 'rushd-pwa-skip-waiting' }]);
     expect(coordination.getEpoch()).toBe(1);
+    coordination.close();
+  });
+
+  it('recovers a worker that reached waiting before registration returned', async () => {
+    // D5 update correction: a worker installed while every tab was closed
+    // (or whose updatefound fired before listeners attached) shows up as
+    // `registration.waiting` at register time with no updatefound event.
+    // Registration must route it through the same gated activation path.
+    const coordination = coordinator();
+    const posted: unknown[] = [];
+    const waiting = { postMessage: (message: unknown) => void posted.push(message) };
+    const registration = {
+      installing: null,
+      waiting,
+      addEventListener() {},
+    };
+    const environment = {
+      navigator: {
+        serviceWorker: {
+          controller: {},
+          register: async () => registration,
+        },
+      },
+    };
+    const result = await registerCandidatePwa({
+      environment: environment as never,
+      coordination: coordination as never,
+    });
+    expect(result.ok).toBe(true);
+    for (let i = 0; i < 10; i += 1) await Promise.resolve();
+    expect(posted).toEqual([{ type: 'rushd-pwa-skip-waiting' }]);
+    expect(coordination.getEpoch()).toBe(1);
+    coordination.close();
+  });
+
+  it('waiting-worker recovery stays gated on a live critical section', async () => {
+    const coordination = coordinator();
+    const token = coordination.beginCritical('write');
+    const posted: unknown[] = [];
+    const registration = {
+      installing: null,
+      waiting: { postMessage: (message: unknown) => void posted.push(message) },
+      addEventListener() {},
+    };
+    const environment = {
+      navigator: {
+        serviceWorker: {
+          controller: {},
+          register: async () => registration,
+        },
+      },
+    };
+    const result = await registerCandidatePwa({
+      environment: environment as never,
+      coordination: coordination as never,
+    });
+    expect(result.ok).toBe(true);
+    for (let i = 0; i < 10; i += 1) await Promise.resolve();
+    expect(posted).toEqual([]);
+    expect(coordination.getEpoch()).toBe(0);
+    coordination.endCritical(token);
+    coordination.close();
+  });
+
+  it('waiting-worker recovery never bumps the epoch on a first install', async () => {
+    const coordination = coordinator();
+    const posted: unknown[] = [];
+    const registration = {
+      installing: null,
+      waiting: { postMessage: (message: unknown) => void posted.push(message) },
+      addEventListener() {},
+    };
+    const environment = {
+      navigator: {
+        serviceWorker: {
+          // No controller: no previous binary exists to retire.
+          controller: null,
+          register: async () => registration,
+        },
+      },
+    };
+    const result = await registerCandidatePwa({
+      environment: environment as never,
+      coordination: coordination as never,
+    });
+    expect(result.ok).toBe(true);
+    for (let i = 0; i < 10; i += 1) await Promise.resolve();
+    expect(posted).toEqual([{ type: 'rushd-pwa-skip-waiting' }]);
+    expect(coordination.getEpoch()).toBe(0);
     coordination.close();
   });
 

@@ -538,9 +538,13 @@ describe('d4 failure, cross-tab, and cutover', () => {
         listeners[event] = [...(listeners[event] ?? []), handler];
       },
       removeEventListener: () => undefined,
+      postMessage: (message: unknown) => posted.push(message),
     };
     const registration = {
-      waiting: { postMessage: (message: unknown) => posted.push(message) },
+      // Realistic timing: the worker becomes `waiting` only once installed.
+      get waiting() {
+        return worker.state === 'installed' ? worker : null;
+      },
       installing: worker,
       addEventListener: (event: string, handler: () => void) => {
         listeners[event] = [...(listeners[event] ?? []), handler];
@@ -581,9 +585,13 @@ describe('d4 failure, cross-tab, and cutover', () => {
         listeners[event] = [...(listeners[event] ?? []), handler];
       },
       removeEventListener: () => undefined,
+      postMessage: () => undefined,
     };
     const registration = {
-      waiting: { postMessage: () => undefined },
+      // Realistic timing: the worker becomes `waiting` only once installed.
+      get waiting() {
+        return worker.state === 'installed' ? worker : null;
+      },
       installing: worker,
       addEventListener: (event: string, handler: () => void) => {
         listeners[event] = [...(listeners[event] ?? []), handler];

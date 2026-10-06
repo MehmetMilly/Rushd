@@ -41,11 +41,109 @@
         })();
     </script>
 
+    <style>
+        html:not([data-boot-visual-ready='true']) #app {
+            visibility: hidden !important;
+        }
+
+        html:not([data-icons-ready='true']) .material-symbols-rounded {
+            visibility: hidden !important;
+        }
+
+        #rushd-boot-screen {
+            position: fixed;
+            inset: 0;
+            z-index: 2147483647;
+            display: grid;
+            place-items: center;
+            background: #09090b;
+            color: #fafafa;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        html[data-theme='light'] #rushd-boot-screen {
+            background: #f4f7fb;
+            color: #18181b;
+        }
+
+        html[data-boot-visual-ready='true'] #rushd-boot-screen {
+            display: none;
+        }
+
+        .rushd-boot-content {
+            display: grid;
+            justify-items: center;
+            gap: 24px;
+        }
+
+        .rushd-boot-brand {
+            font-size: 32px;
+            font-weight: 700;
+        }
+
+        .rushd-boot-indicator {
+            width: 32px;
+            height: 32px;
+            border: 3px solid rgba(129, 140, 248, 0.22);
+            border-top-color: #818cf8;
+            border-radius: 50%;
+            animation: rushd-boot-spin 1s linear infinite;
+        }
+
+        @keyframes rushd-boot-spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .rushd-boot-indicator { animation: none; }
+        }
+    </style>
+
     <link rel="stylesheet" href="/fonts/material-symbols-rounded.css">
+    <script>
+        (() => {
+            const root = document.documentElement;
+            let appMounted = false;
+            let fontSettled = false;
+            const reveal = () => {
+                if (appMounted && fontSettled) root.dataset.bootVisualReady = 'true';
+            };
+            window.addEventListener('rushd:app-mounted', () => {
+                appMounted = true;
+                reveal();
+            }, { once: true });
+            const deadline = setTimeout(() => {
+                fontSettled = true;
+                reveal();
+            }, 9000);
+            if (!document.fonts?.load) {
+                clearTimeout(deadline);
+                fontSettled = true;
+                reveal();
+                return;
+            }
+            document.fonts.load('24px "Material Symbols Rounded"', 'home')
+                .then((faces) => {
+                    if (faces.some((face) => face.status === 'loaded')) root.dataset.iconsReady = 'true';
+                })
+                .catch(() => undefined)
+                .finally(() => {
+                    clearTimeout(deadline);
+                    fontSettled = true;
+                    reveal();
+                });
+        })();
+    </script>
     <script src="/retire-rejected-shell.js"></script>
 </head>
 
 <body>
+    <div id="rushd-boot-screen" role="status" aria-label="جارٍ تحميل رُشد — Loading Rushd">
+        <div class="rushd-boot-content">
+            <span class="rushd-boot-brand">رُشد</span>
+            <span class="rushd-boot-indicator" aria-hidden="true"></span>
+        </div>
+    </div>
     <div class="cinema-wrapper">
         <div class="cinema-backdrop"></div>
         <div id="app" v-cloak></div>

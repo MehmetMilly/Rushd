@@ -9,6 +9,19 @@
  * - Same-origin GET requests are served cache-first from the versioned
  *   `rushd-pwa-*` cache and populated on miss while online, so an
  *   installed candidate shell reloads offline with zero remote requests.
+ * - D5 update correction: NAVIGATIONS are network-first. An online client
+ *   always asks the deployment for the shell and refreshes the cached
+ *   copy, so a client can never stay pinned to an obsolete cached shell
+ *   after a deploy changes app assets; only a failed/navigation network
+ *   answer falls back to the cached shell, which keeps true offline
+ *   reloads intact. Non-navigation same-origin assets stay cache-first
+ *   (hashed bundles are immutable; the install precache covers the rest).
+ * - D5 update correction: the cache generation moves to `rushd-pwa-v4`.
+ *   The v2 generation shipped byte-identical across a product correction,
+ *   so existing v2 clients never discovered a new worker and served the
+ *   stale cached shell indefinitely. A new generation changes this file's
+ *   bytes (update discovery), precaches the fresh shell at install, and
+ *   retires the old cache at activation.
  * - D5: the stable offline-critical closure (shell document, SQLite
  *   worker, and the full wa-sqlite engine files) is precached at install
  *   time, so the FIRST offline reload after install hydrates canonical
@@ -41,7 +54,7 @@
  * PWA gate (`npm run test:pwa`) proves.
  */
 
-const PWA_CACHE_VERSION = 'rushd-pwa-v2';
+const PWA_CACHE_VERSION = 'rushd-pwa-v4';
 const SHELL_CACHE_PREFIX = 'rushd-shell-';
 const SKIP_WAITING_MESSAGE = 'rushd-pwa-skip-waiting';
 
@@ -212,6 +225,37 @@ self.addEventListener('fetch', (event) => {
   const ranged = hasRangeHeader(request);
   event.respondWith((async () => {
     const cache = await caches.open(PWA_CACHE_VERSION);
+    if (navigation) {
+      // D5 update correction: navigations are network-first so an online
+      // client can never stay permanently pinned to an obsolete cached
+      // shell when a deployment changes app assets. A successful answer
+      // refreshes the cached shell (both the request URL and the offline
+      // fallback alias); only a network failure or non-OK answer falls
+      // back to the cache, which keeps offline reloads working. No fetch
+      // path rejects into respondWith: a navigation with nothing cached
+      // still answers 503 instead of failing the tab.
+      try {
+        const response = await fetch(request);
+        if (response && response.ok && response.type === 'basic') {
+          try {
+            await cache.put(request, response.clone());
+            if (url.pathname === '/' || url.pathname === '/index.html') {
+              await cache.put('/index.html', response.clone());
+            }
+          } catch {
+            /* quota or private mode: serve the live response anyway */
+          }
+          return response;
+        }
+      } catch {
+        /* offline or server failure: fall back to the cached shell below */
+      }
+      const shell = (await cache.match(request, { ignoreSearch: false }))
+        || (await cache.match('/index.html', { ignoreSearch: true }))
+        || (await cache.match('/', { ignoreSearch: true }));
+      if (shell) return shell;
+      return new Response('', { status: 503, statusText: 'offline' });
+    }
     const cached = await cache.match(request, { ignoreSearch: false });
     if (cached && !ranged) return cached;
     if (cached && ranged) {
@@ -242,15 +286,10 @@ self.addEventListener('fetch', (event) => {
       }
       return response;
     } catch {
-      // Offline with a cache miss: navigations fall back to the cached
-      // shell document so the app mounts its truthful local state;
-      // a cached body still satisfies a Range request offline;
-      // subresources answer 503 instead of rejecting the load.
-      if (navigation) {
-        const shell = (await cache.match('/index.html', { ignoreSearch: true }))
-          || (await cache.match('/', { ignoreSearch: true }));
-        if (shell) return shell;
-      } else if (cached) {
+      // Offline with a cache miss (subresources only — navigations never
+      // reach this path): a cached body still satisfies a Range request
+      // offline; anything else answers 503 instead of rejecting the load.
+      if (cached) {
         if (ranged) {
           try {
             const partial = await satisfyRangeFromCache(cached, request);

@@ -140,7 +140,7 @@
       "objective": "Deliver resilient offline guest storage, legacy migration, versioned portability, and installable/update-safe PWA behavior.",
       "depends_on": ["P03"],
       "risk": "hard",
-      "allowed_paths": ["src/data/**", "src/pwa/**", "src/application/**", "public/**", "tests/data/**", "tests/pwa/**", "tests/fixtures/**", "vite.config.*", "playwright.config.*", "package.json", "package-lock.json", "docs/**", "tests/domain/support/repository-conformance.ts", "tests/domain/repository-conformance.test.ts", "scripts/production-source.mjs", "tests/p02-build-contract.test.mjs", "tsconfig.json"],
+      "allowed_paths": ["src/data/**", "src/pwa/**", "src/application/**", "src/main.ts", "src/app/root-controller.js", "src/app/root-template.html", "src/app/p04-d/**", "src/components/p04-d/**", "src/styles/p04-d.css", "src/styles/legacy-foundation.css", "src/styles/legacy-components.css", "index.html", "public/**", "tests/application/**", "tests/data/**", "tests/pwa/**", "tests/fixtures/**", "vite.config.*", "vitest.config.ts", "playwright.config.*", "package.json", "package-lock.json", "docs/**", "tests/domain/support/repository-conformance.ts", "tests/domain/repository-conformance.test.ts", "scripts/production-source.mjs", "scripts/browser-smoke.cjs", "scripts/visual-parity.cjs", "tests/p02-build-contract.test.mjs", "tsconfig.json", "vercel.json"],
       "acceptance": [
         {"id": "P04-A1", "text": "Guest mode reads/writes a disconnected local v2 database and never contacts account/cloud services."},
         {"id": "P04-A2", "text": "Legacy migration converts canonical SAR major-unit decimals to halalas exactly without rounding, rejects/quarantines excess precision/invalid/ambiguous values, retains original source values, preserves provisional essential reservations and unallocated vault opening value, maps each verified legacy budget settlement to one named carry-in and vault settlement to one allocation funding movement, never infers goal allocations, and survives every fixture/failure point with rollback evidence."},
@@ -150,6 +150,13 @@
         {"id": "P04-A6", "text": "A physical-device VFS ADR benchmarks IndexedDB and supported cooperative OPFS/per-platform options; the selected adapter passes Safari/iOS/iPadOS/Android/desktop two-tab locking, crash/reload, quota/private-mode, migration, install/update, and rollback gates."},
         {"id": "P04-A7", "text": "Home/Add/Ask/Plan/Insights/Goals/detail URLs and supported Add/Ask manifest shortcuts preserve destination across refresh, installed offline launch, update, and authentication interruption without false platform claims."}
       ],
+      "founder_private_use_checkpoint": {
+        "decision_date": "2026-09-23",
+        "purpose": "Allow visible P05/P06 work after one fake-data iPhone and Android safety pass without claiming full P04 closure or release readiness.",
+        "required_device_pass": "Current isolated build: installed launch/update, offline read/write/reopen, persistence, manual export, no-export Factory Reset, import cancellation/rejection/restore, and safe two-tab behavior on iPhone and Android.",
+        "deferred_not_tested": "Physical iPadOS, physical quota/private-mode/kill-during-write/newer-schema rollback without a safe harness, and Mac Safari. Original P04-A6 remains open for the full release gate.",
+        "deferred_feature": "P04-A7 URL destinations and manifest shortcuts are not a private-use blocker. Keep P04-A7 open; route Home/Add/Plan/Insights/Goals/detail addresses and Add shortcut to the navigation/core-product phase, and Ask/auth-interruption semantics to their later owner phases."
+      },
       "required_commands": ["npm run lint", "npm run typecheck", "npm test", "npm run test:data", "npm run test:pwa", "npm run build"],
       "manual_qa": ["P04-M1: Install/update/offline test on real iOS/iPadOS Safari and Android Chrome; retain structured device/OS attestation and evidence."]
     },
@@ -158,6 +165,7 @@
       "title": "Design system, locked shell, and Motion Lab",
       "objective": "Establish Rushd's bilingual visual system, invariant navigation hierarchy, accessible interaction foundation, and empirically approved signature motion language.",
       "depends_on": ["P04"],
+      "early_start_exception": "Founder-approved on 2026-09-23: visible P05/P06 design and core-product work may start after the P04 private-use device checkpoint while strict deferred P04-A6/A7 evidence stays open; this is not P04 closure or permission to publish.",
       "risk": "medium",
       "required_skills": ["frontend-design", "rushd-motion-lab"],
       "allowed_paths": ["src/app/**", "src/components/**", "src/design-system/**", "src/motion/**", "src/styles/**", "src/assets/**", "tests/ui/**", "tests/visual/**", "docs/design/**", "package.json", "package-lock.json", "playwright.config.*"],

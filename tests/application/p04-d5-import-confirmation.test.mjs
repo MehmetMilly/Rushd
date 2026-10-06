@@ -1,5 +1,6 @@
 // P04-D5 import confirmation regression. Run: node tests/application/p04-d5-import-confirmation.test.mjs
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { installRootController } from '../../src/app/root-controller.js';
 import { TRANSLATIONS } from '../../src/app/i18n/translations.js';
 
@@ -47,6 +48,7 @@ const runtime = {
   },
   LEGACY_TEMPLATE_PROFILE: { id: 'legacy' },
   DEFAULT_PROFILE_OFFDAYS: [5, 6],
+  validateBackupPayload: () => ({ ok: true }),
   Store: {
     currentDate: '2026-09-14',
     currentViewExpenses: [],
@@ -109,6 +111,7 @@ await openImportConfirmation(ctx);
 assert.equal(ctx.confirmDialog.open, true, 'valid import must open confirmation');
 assert.equal(ctx.confirmDialog.confirmText, TRANSLATIONS.ar.importBtn, 'Arabic import confirmation must say استيراد');
 assert.equal(ctx.confirmDialog.confirmColor, 'brand', 'import confirmation must use non-destructive styling');
+assert.equal(ctx.confirmDialog.message, TRANSLATIONS.ar.importReplaceMsg, 'canonical import must warn that current data is replaced');
 assert.equal(restoreCalls.length, 0, 'import must wait for confirmation');
 
 ctx.handleConfirmDialogCancel.call(ctx);
@@ -118,9 +121,15 @@ assert.equal(restoreCalls.length, 0, 'cancel must not import');
 ctx.t = TRANSLATIONS.en;
 await openImportConfirmation(ctx);
 assert.equal(ctx.confirmDialog.confirmText, TRANSLATIONS.en.importBtn, 'English import confirmation must say Import');
+assert.equal(ctx.confirmDialog.message, TRANSLATIONS.en.importReplaceMsg, 'English canonical import must warn that current data is replaced');
 ctx.handleConfirmDialogConfirm.call(ctx);
 await new Promise((resolve) => setImmediate(resolve));
 assert.equal(restoreCalls.length, 1, 'confirm must import exactly once');
+
+const legacyBackup = JSON.parse(readFileSync(new URL('../fixtures/v1/backups/empty.backup.json', import.meta.url), 'utf8'));
+await ctx.importLegacyBackupDocument.call(ctx, legacyBackup);
+assert.equal(ctx.confirmDialog.message, TRANSLATIONS.en.importReplaceMsg, 'canonical legacy-backup import must also warn that current data is replaced');
+ctx.handleConfirmDialogCancel.call(ctx);
 
 ctx.lang = 'ar';
 ctx.t = TRANSLATIONS.ar;

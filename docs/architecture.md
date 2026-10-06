@@ -600,9 +600,12 @@ behind the D1 latch without changing default production:
   registration and update activation, gated on
   `canActivateUpdate()`. Never called by default production.
 - `public/rushd-pwa-sw.js`: candidate-only offline worker. Same-origin
-  GET cache-first, no remote URLs, no storage access, preserves the
-  `rushd-shell-*` retirement, and never force-activates. Default
-  production still loads only `/retire-rejected-shell.js`.
+  GET cache-first for assets and network-first for navigations (an online
+  client can never stay pinned to an obsolete cached shell after a deploy;
+  the cached shell remains the offline fallback), no remote URLs, no
+  storage access, preserves the `rushd-shell-*` retirement, and never
+  force-activates. Default production still loads only
+  `/retire-rejected-shell.js`.
 - `public/manifest.webmanifest`: candidate manifest with no install
   claims beyond tested evidence.
 

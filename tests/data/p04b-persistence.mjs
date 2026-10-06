@@ -78,6 +78,8 @@ function startServer() {
         const file =
           name === 'v2-worker.js'
             ? join(ROOT, WORKER_BUNDLE)
+            : name === 'storage-api-denial-worker.js'
+              ? join(ROOT, 'tests/data/workers', name)
             : name === 'conformance.bundle.mjs'
               ? join(ROOT, CONFORMANCE_BUNDLE)
               : name === 'page-api.bundle.mjs'
@@ -170,6 +172,8 @@ async function main() {
     scopeSeparation: null,
     reopenAndKill: null,
     unsupported: null,
+    schemaRollback: null,
+    storageFailure: null,
     guestNetwork: null,
     failures,
   };
@@ -682,13 +686,323 @@ async function main() {
     const unsupported = await unsupportedPage.evaluate(async () => globalThis.__p04b.openUnsupported());
     evidence.unsupported = unsupported;
     requireScenario(unsupported.failed === true && unsupported.code === 'storageUnsupported', 'unsupported OPFS did not fail visibly');
-    await unsupportedPage.evaluate(async () => {
-      await globalThis.__p04b.open({ deviceId: 'test-device-0001', storageId: 'schema-reject', reset: true });
-    });
-    const unknownSchema = await unsupportedPage.evaluate(async () => globalThis.__p04b.rejectUnknownSchema());
-    evidence.unsupported = { ...unsupported, unknownSchema };
-    requireScenario(unknownSchema.failed === true && unknownSchema.code === 'SchemaRejectedError', 'unknown schema did not fail visibly');
     await unsupportedPage.close();
+
+    const schemaRollbackId = `schema-rollback-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const schemaPage = await openApiPage(context, origin);
+    const schemaPeer = await openApiPage(context, origin);
+    let schemaBaseline = null;
+    let schemaDuring = null;
+    let schemaRejected = null;
+    let schemaRestored = null;
+    let schemaRestoreError = null;
+    let schemaCleanup = null;
+    let schemaCleanupError = null;
+    try {
+      schemaBaseline = await schemaPage.evaluate(async ({ storageId: id }) => {
+        await globalThis.__p04b.open({ deviceId: 'test-device-0001', storageId: id, reset: true });
+        await globalThis.__p04b.seed();
+        const committed = await globalThis.__p04b.executeInflow({
+          operationId: 'op-schema-baseline',
+          amount: 777,
+          day: '2026-09-20',
+          note: 'schema-baseline',
+        });
+        if (!committed.ok) throw new Error(`schema baseline write failed: ${JSON.stringify(committed.failure)}`);
+        const delivery = await globalThis.__p04b.updateDelivery({ operationId: 'op-schema-baseline', error: 'schema-baseline-delivery' });
+        const snapshot = await globalThis.__p04b.coherentSnapshot();
+        return { snapshot, receipt: committed.receipt, delivery };
+      }, { storageId: schemaRollbackId });
+      const baselineSnapshot = schemaBaseline.snapshot;
+      requireDurableCoherent(baselineSnapshot, 'schema rollback baseline');
+      const baselineRows = JSON.parse(baselineSnapshot.snapshotBytes);
+      requireScenario(
+        baselineRows.operations.some((record) => record.operationId === 'op-schema-baseline'),
+        'schema rollback baseline operation receipt row missing',
+      );
+      requireScenario(
+        baselineRows.delivery.some((state) => state.operationId === 'op-schema-baseline' && state.attempts === 1),
+        'schema rollback baseline delivery receipt row missing',
+      );
+
+      await schemaPage.evaluate(async () => globalThis.__p04b.forceSchemaVersion('99'));
+      schemaRejected = await schemaPeer.evaluate(async ({ storageId: id }) => {
+        try {
+          await globalThis.__p04b.open({ deviceId: 'test-device-0001', storageId: id, reset: false });
+          return { failed: false, code: null, foundVersion: null, message: null };
+        } catch (error) {
+          const foundVersion = error instanceof Error && 'foundVersion' in error ? String(error.foundVersion) : null;
+          return {
+            failed: true,
+            code: error instanceof Error ? error.name : 'unknown',
+            foundVersion,
+            message: error instanceof Error ? error.message : String(error),
+          };
+        }
+      }, { storageId: schemaRollbackId });
+      schemaDuring = await schemaPage.evaluate(async () => globalThis.__p04b.coherentSnapshot());
+      requireScenario(
+        schemaRejected.failed === true && schemaRejected.code === 'SchemaRejectedError' && schemaRejected.foundVersion === '99',
+        `newer schema reopen was not visibly rejected: ${JSON.stringify(schemaRejected)}`,
+      );
+      requireScenario(
+        schemaDuring.snapshotBytes === baselineSnapshot.snapshotBytes && schemaDuring.checkpointBytes === baselineSnapshot.checkpointBytes,
+        'newer schema rejection changed preexisting logical snapshot/checkpoint state',
+      );
+      requireScenario(schemaDuring.revision === baselineSnapshot.revision, 'newer schema rejection changed revision');
+      requireScenario(schemaDuring.outboxIds.join('|') === baselineSnapshot.outboxIds.join('|'), 'newer schema rejection changed outbox rows');
+      requireScenario(schemaDuring.integrity === 'ok', `integrity after newer schema rejection: ${schemaDuring.integrity}`);
+
+      await schemaPage.evaluate(async () => globalThis.__p04b.forceSchemaVersion('1'));
+      schemaRestored = await schemaPage.evaluate(async () => globalThis.__p04b.reopenConnectionCoherent());
+      requireDurableCoherent(schemaRestored, 'schema rollback restored reopen');
+      requireScenario(
+        schemaRestored.snapshotBytes === baselineSnapshot.snapshotBytes && schemaRestored.checkpointBytes === baselineSnapshot.checkpointBytes,
+        'restored schema reopen changed logical rows, receipts, or checkpoint state',
+      );
+      requireScenario(schemaRestored.revision === baselineSnapshot.revision, 'restored schema reopen changed revision');
+      requireScenario(schemaRestored.outboxIds.join('|') === baselineSnapshot.outboxIds.join('|'), 'restored schema reopen changed outbox rows');
+      requireScenario(schemaRestored.notes.join('|') === baselineSnapshot.notes.join('|'), 'restored schema reopen changed book rows');
+      requireScenario(schemaRestored.integrity === 'ok', `integrity after restored schema reopen: ${schemaRestored.integrity}`);
+    } catch (error) {
+      schemaRestoreError = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+      failures.push(`schema rollback probe threw: ${schemaRestoreError}`);
+    } finally {
+      if (schemaRestored === null) {
+        try {
+          schemaRestored = await schemaPage.evaluate(async () => {
+            await globalThis.__p04b.forceSchemaVersion('1');
+            return globalThis.__p04b.reopenConnectionCoherent();
+          });
+        } catch (error) {
+          schemaRestoreError = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+        }
+      }
+      await schemaPage.evaluate(async () => globalThis.__p04b.close()).catch(() => undefined);
+      await schemaPeer.evaluate(async () => globalThis.__p04b.close()).catch(() => undefined);
+      try {
+        schemaCleanup = await schemaPeer.evaluate(
+          async ({ storageId: id }) =>
+            globalThis.__p04b.cleanupNamespace({ deviceId: 'test-device-0001', storageId: id }),
+          { storageId: schemaRollbackId },
+        );
+        requireScenario(schemaCleanup.remaining.length === 0, `schema rollback namespace cleanup left entries: ${schemaCleanup.remaining.join(', ')}`);
+      } catch (error) {
+        schemaCleanupError = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+        failures.push(`schema rollback namespace cleanup failed: ${schemaCleanupError}`);
+      }
+      await schemaPeer.close().catch(() => undefined);
+      await schemaPage.close().catch(() => undefined);
+    }
+    evidence.schemaRollback = {
+      storageId: schemaRollbackId,
+      syntheticNamespace: true,
+      resetUsedOnlyForFreshSyntheticNamespace: true,
+      newerVersion: '99',
+      supportedVersion: '1',
+      baseline: schemaBaseline
+        ? {
+            revision: schemaBaseline.snapshot.revision,
+            outboxIds: schemaBaseline.snapshot.outboxIds,
+            logicalSnapshotJson: schemaBaseline.snapshot.snapshotBytes,
+            logicalCheckpointJson: schemaBaseline.snapshot.checkpointBytes,
+            receiptOperationId: 'op-schema-baseline',
+            deliveryAttempts: schemaBaseline.delivery.attempts,
+            integrity: schemaBaseline.snapshot.integrity,
+          }
+        : null,
+      rejection: schemaRejected,
+      during: schemaDuring
+        ? {
+            revision: schemaDuring.revision,
+            outboxIds: schemaDuring.outboxIds,
+            logicalStateUnchanged: schemaBaseline !== null && schemaDuring.snapshotBytes === schemaBaseline.snapshot.snapshotBytes && schemaDuring.checkpointBytes === schemaBaseline.snapshot.checkpointBytes,
+            integrity: schemaDuring.integrity,
+          }
+        : null,
+      restored: schemaRestored
+        ? {
+            revision: schemaRestored.revision,
+            outboxIds: schemaRestored.outboxIds,
+            logicalStateExact: schemaBaseline !== null && schemaRestored.snapshotBytes === schemaBaseline.snapshot.snapshotBytes && schemaRestored.checkpointBytes === schemaBaseline.snapshot.checkpointBytes,
+            integrity: schemaRestored.integrity,
+          }
+        : null,
+      restoreError: schemaRestoreError,
+      cleanup: schemaCleanup,
+      cleanupError: schemaCleanupError,
+      browserSimulationOnly: true,
+    };
+
+    const storageFailureId = `storage-failure-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const storageBaselinePage = await openApiPage(context, origin);
+    const storageFailurePage = await openApiPage(context, origin);
+    let storageFailureBaseline = null;
+    let storageFailureAttempt = null;
+    let storageFailureAfter = null;
+    let storageFailureRestored = null;
+    let storageFailureError = null;
+    let storageFailureCleanup = null;
+    let storageFailureCleanupError = null;
+    try {
+      storageFailureBaseline = await storageBaselinePage.evaluate(async ({ storageId: id }) => {
+        await globalThis.__p04b.open({
+          deviceId: 'test-device-0001',
+          storageId: id,
+          reset: true,
+        });
+        await globalThis.__p04b.seed();
+        const committed = await globalThis.__p04b.executeInflow({
+          operationId: 'op-storage-baseline',
+          amount: 888,
+          day: '2026-09-21',
+          note: 'storage-baseline',
+        });
+        if (!committed.ok) throw new Error(`storage failure baseline write failed: ${JSON.stringify(committed.failure)}`);
+        const delivery = await globalThis.__p04b.updateDelivery({ operationId: 'op-storage-baseline', error: 'storage-baseline-delivery' });
+        return { snapshot: await globalThis.__p04b.coherentSnapshot(), receipt: committed.receipt, delivery };
+      }, { storageId: storageFailureId });
+      const baselineSnapshot = storageFailureBaseline.snapshot;
+      requireDurableCoherent(baselineSnapshot, 'storage failure baseline');
+      const baselineRows = JSON.parse(baselineSnapshot.snapshotBytes);
+      requireScenario(
+        baselineRows.operations.some((record) => record.operationId === 'op-storage-baseline'),
+        'storage failure baseline operation receipt row missing',
+      );
+      requireScenario(
+        baselineRows.delivery.some((state) => state.operationId === 'op-storage-baseline' && state.attempts === 1),
+        'storage failure baseline delivery receipt row missing',
+      );
+
+      storageFailureAttempt = await storageFailurePage.evaluate(async ({ storageId: id }) => {
+        try {
+          await globalThis.__p04b.open({
+            deviceId: 'test-device-0001',
+            storageId: id,
+            reset: false,
+            workerUrl: '/harness/storage-api-denial-worker.js',
+          });
+          return { failed: false, typed: false, code: null, reason: null, message: null };
+        } catch (error) {
+          return {
+            failed: true,
+            typed: error instanceof Error && error.name === 'StorageFailureError',
+            code: error instanceof Error ? error.name : 'unknown',
+            reason: error instanceof Error && 'reason' in error ? String(error.reason) : null,
+            message: error instanceof Error ? error.message : String(error),
+          };
+        }
+      }, { storageId: storageFailureId });
+      storageFailureAfter = await storageBaselinePage.evaluate(async () => globalThis.__p04b.coherentSnapshot());
+      requireScenario(
+        storageFailureAttempt.failed === true &&
+          storageFailureAttempt.typed === true &&
+          storageFailureAttempt.code === 'StorageFailureError' &&
+          storageFailureAttempt.reason === 'io' &&
+          storageFailureAttempt.message.includes('storage quota exceeded'),
+        `storage API denial was not classified truthfully: ${JSON.stringify(storageFailureAttempt)}`,
+      );
+      requireScenario(
+        storageFailureAfter.snapshotBytes === baselineSnapshot.snapshotBytes &&
+          storageFailureAfter.checkpointBytes === baselineSnapshot.checkpointBytes,
+        'storage denial changed preexisting logical snapshot/checkpoint state',
+      );
+      requireScenario(storageFailureAfter.revision === baselineSnapshot.revision, 'storage denial changed revision');
+      requireScenario(
+        storageFailureAfter.outboxIds.join('|') === baselineSnapshot.outboxIds.join('|'),
+        'storage denial changed outbox rows',
+      );
+      requireScenario(storageFailureAfter.integrity === 'ok', `integrity after storage denial: ${storageFailureAfter.integrity}`);
+
+      storageFailureRestored = await storageFailurePage.evaluate(async ({ storageId: id }) => {
+        await globalThis.__p04b.open({ deviceId: 'test-device-0001', storageId: id, reset: false });
+        return globalThis.__p04b.coherentSnapshot();
+      }, { storageId: storageFailureId });
+      requireDurableCoherent(storageFailureRestored, 'storage failure restored reopen');
+      requireScenario(
+        storageFailureRestored.snapshotBytes === baselineSnapshot.snapshotBytes &&
+          storageFailureRestored.checkpointBytes === baselineSnapshot.checkpointBytes,
+        'storage failure reopen changed logical snapshot/checkpoint state',
+      );
+      requireScenario(storageFailureRestored.revision === baselineSnapshot.revision, 'storage failure reopen changed revision');
+      requireScenario(storageFailureRestored.integrity === 'ok', `integrity after storage failure reopen: ${storageFailureRestored.integrity}`);
+    } catch (error) {
+      storageFailureError = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+      failures.push(`storage failure probe threw: ${storageFailureError}`);
+    } finally {
+      if (storageFailureRestored === null) {
+        try {
+          storageFailureRestored = await storageFailurePage.evaluate(async ({ storageId: id }) => {
+            await globalThis.__p04b.open({ deviceId: 'test-device-0001', storageId: id, reset: false });
+            return globalThis.__p04b.coherentSnapshot();
+          }, { storageId: storageFailureId });
+        } catch (error) {
+          storageFailureError = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+        }
+      }
+      await storageBaselinePage.evaluate(async () => globalThis.__p04b.close()).catch(() => undefined);
+      await storageFailurePage.evaluate(async () => globalThis.__p04b.close()).catch(() => undefined);
+      try {
+        storageFailureCleanup = await storageFailurePage.evaluate(
+          async ({ storageId: id }) =>
+            globalThis.__p04b.cleanupNamespace({ deviceId: 'test-device-0001', storageId: id }),
+          { storageId: storageFailureId },
+        );
+        requireScenario(
+          storageFailureCleanup.remaining.length === 0,
+          `storage failure namespace cleanup left entries: ${storageFailureCleanup.remaining.join(', ')}`,
+        );
+      } catch (error) {
+        storageFailureCleanupError = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+        failures.push(`storage failure namespace cleanup failed: ${storageFailureCleanupError}`);
+      }
+      await storageBaselinePage.close().catch(() => undefined);
+      await storageFailurePage.close().catch(() => undefined);
+    }
+    evidence.storageFailure = {
+      storageId: storageFailureId,
+      syntheticNamespace: true,
+      workerUrl: '/harness/storage-api-denial-worker.js',
+      injection: 'one-shot dedicated-worker navigator.storage.getDirectory() DOMException: QuotaExceededError',
+      baseline: storageFailureBaseline
+        ? {
+            revision: storageFailureBaseline.snapshot.revision,
+            outboxIds: storageFailureBaseline.snapshot.outboxIds,
+            logicalSnapshotJson: storageFailureBaseline.snapshot.snapshotBytes,
+            logicalCheckpointJson: storageFailureBaseline.snapshot.checkpointBytes,
+            receiptOperationId: 'op-storage-baseline',
+            deliveryAttempts: storageFailureBaseline.delivery.attempts,
+            integrity: storageFailureBaseline.snapshot.integrity,
+          }
+        : null,
+      attempt: storageFailureAttempt,
+      afterFailure: storageFailureAfter
+        ? {
+            revision: storageFailureAfter.revision,
+            outboxIds: storageFailureAfter.outboxIds,
+            logicalStateUnchanged:
+              storageFailureBaseline !== null &&
+              storageFailureAfter.snapshotBytes === storageFailureBaseline.snapshot.snapshotBytes &&
+              storageFailureAfter.checkpointBytes === storageFailureBaseline.snapshot.checkpointBytes,
+            integrity: storageFailureAfter.integrity,
+          }
+        : null,
+      restored: storageFailureRestored
+        ? {
+            revision: storageFailureRestored.revision,
+            outboxIds: storageFailureRestored.outboxIds,
+            logicalStateExact:
+              storageFailureBaseline !== null &&
+              storageFailureRestored.snapshotBytes === storageFailureBaseline.snapshot.snapshotBytes &&
+              storageFailureRestored.checkpointBytes === storageFailureBaseline.snapshot.checkpointBytes,
+            integrity: storageFailureRestored.integrity,
+          }
+        : null,
+      error: storageFailureError,
+      cleanup: storageFailureCleanup,
+      cleanupError: storageFailureCleanupError,
+      browserSimulationOnly: true,
+    };
 
     const netPage = await openApiPage(context, origin);
     await netPage.evaluate(async () => {

@@ -243,7 +243,7 @@ async function main() {
     // The required offline closure must be cached before going offline;
     // a missing worker/engine/shell entry fails the gate here, not later.
     const closure = await offline.evaluate(async () => {
-      const cache = await caches.open('rushd-pwa-v2');
+      const cache = await caches.open('rushd-pwa-v4');
       const required = ['/', '/index.html', '/sqlite-worker.js', '/pkg/dist/wa-sqlite.mjs', '/pkg/dist/wa-sqlite.wasm'];
       const missing = [];
       for (const path of required) {

@@ -184,7 +184,7 @@ function stripComments(source) {
 {
   const raw = await readFile('public/rushd-pwa-sw.js', 'utf8');
   const source = stripComments(raw);
-  assert.match(source, /rushd-pwa-v2/, 'candidate SW must carry the D5 cache version');
+  assert.match(source, /rushd-pwa-v4/, 'candidate SW must carry the font-update cache version');
   assert.match(source, /REQUIRED_URLS/, 'candidate SW must precache required offline assets at install');
   assert.match(source, /BEST_EFFORT_URLS/, 'candidate SW must keep optional assets best-effort');
   assert.match(source, /cache\.addAll\(REQUIRED_URLS\)/, 'candidate SW must fail installation without the required closure');
@@ -211,11 +211,26 @@ function stripComments(source) {
   const registration = await readFile('src/pwa/registration.js', 'utf8');
   const registrationSource = stripComments(registration);
   assert.doesNotMatch(registrationSource, /^import\s/m, 'pwa registration must stay import-free');
-  assert.match(registrationSource, /CANDIDATE_PWA_CACHE = 'rushd-pwa-v2'/, 'page cache name must mirror the worker version');
+  assert.match(registrationSource, /CANDIDATE_PWA_CACHE = 'rushd-pwa-v4'/, 'page cache name must mirror the worker version');
   assert.match(registrationSource, /selectWarmUrls/, 'pwa registration must select same-origin warm URLs');
   assert.match(registrationSource, /warmPwaCache/, 'pwa registration must warm hashed bundles after boot');
   const versionLine = source.match(/PWA_CACHE_VERSION = '([^']+)'/);
-  assert.ok(versionLine && versionLine[1] === 'rushd-pwa-v2', 'worker cache version and page cache name must agree');
+  assert.ok(versionLine && versionLine[1] === 'rushd-pwa-v4', 'worker cache version and page cache name must agree');
+
+  // D5 update correction: navigations are network-first (an online client
+  // can never stay pinned to an obsolete cached shell), the offline shell
+  // fallback is retained, and registration recovers a worker that reached
+  // `waiting` before the page's listeners attached, through the same gated
+  // activation path (one activation request per worker).
+  const navBranch = source.indexOf('if (navigation)');
+  assert.ok(navBranch > 0, 'candidate SW must special-case navigations');
+  const navFetch = source.indexOf('await fetch(request)', navBranch);
+  const navMatch = source.indexOf('cache.match(request', navBranch);
+  assert.ok(navFetch > navBranch && navFetch < navMatch, 'candidate SW must fetch navigations before consulting the cache (network-first shell)');
+  assert.match(source.slice(navBranch, navBranch + 2000), /cache\.put\('\/index\.html'/, 'candidate SW must refresh the offline shell alias on a fresh navigation');
+  assert.match(registrationSource, /registration\.waiting\) requestActivation/, 'pwa registration must recover an already-waiting worker at registration time');
+  assert.match(registrationSource, /activationWorker === worker/, 'pwa registration must guard one activation request per worker');
+  assert.match(registrationSource, /registration\.update\(\)/, 'pwa registration must explicitly check for updates once per boot');
 
   const host = stripComments(await readFile('src/application/p04-d/canonical-host.js', 'utf8'));
   assert.match(host, /provisionFreshBookIfMissing/, 'canonical host must provision a usable book when storage holds none');

@@ -36,10 +36,11 @@
                                     <span class="text-xs font-bold text-white">{{ t.yourProfile }}</span>
                                 </button>
                                 <!-- Settings Icon -->
-                                <button @click="navigateTo('settings')"
-                                    class="w-9 h-9 rounded-xl bg-surface-1 border border-glass hover:bg-surface-2 flex items-center justify-center transition-all">
-                                    <span class="material-symbols-rounded text-zinc-400"
+                                <button @click="navigateTo('settings')" :aria-label="t.settings"
+                                    class="home-settings-btn w-9 h-9 rounded-xl bg-surface-1 border border-glass hover:bg-surface-2 flex items-center justify-center transition-all">
+                                    <span class="material-symbols-rounded text-zinc-400" aria-hidden="true"
                                         style="font-size: 20px;">settings</span>
+                                    <span class="icon-font-fallback-label" aria-hidden="true">{{ t.settings }}</span>
                                 </button>
                             </div>
                         </div>
@@ -241,8 +242,10 @@
                     </div>
 
                     <!-- V2: FAB hidden when modal is open -->
-                    <button v-show="!anyModalOpen && !selectionMode" class="fab" ref="fabBtn" @click="openAddModal">
-                        <span class="material-symbols-rounded">add</span>
+                    <button v-show="!anyModalOpen && !selectionMode" class="fab" ref="fabBtn" @click="openAddModal"
+                        :aria-label="t.newExpense">
+                        <span class="material-symbols-rounded" aria-hidden="true">add</span>
+                        <span class="icon-font-fallback-label" aria-hidden="true">{{ t.newExpense }}</span>
                     </button>
 
                 </div>
@@ -251,9 +254,10 @@
                     <!-- Back arrow + Settings title -->
                     <header class="app-shell-header">
                         <div class="app-shell-header-row">
-                        <button @click="navigateTo('dashboard')" class="settings-back-btn">
-                            <span class="material-symbols-rounded" style="font-size: 18px;">{{ lang === 'ar' ?
+                        <button @click="navigateTo('dashboard')" class="settings-back-btn" :aria-label="t.home">
+                            <span class="material-symbols-rounded" aria-hidden="true" style="font-size: 18px;">{{ lang === 'ar' ?
                                 'arrow_forward' : 'arrow_back' }}</span>
+                            <span class="icon-font-fallback-label" aria-hidden="true">{{ t.home }}</span>
                         </button>
                         <h2 class="modal-title-premium">{{ currentShellTitle }}</h2>
                         <div class="w-9 h-9"></div>

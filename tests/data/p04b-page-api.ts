@@ -22,6 +22,7 @@ import { openDurableGuestRepository } from '../../src/data/v2/session';
 import { DurableCheckpointStore } from '../../src/data/v2/checkpoint-store';
 import { DurableGuestRepository } from '../../src/data/v2/repository';
 import { GuardConflictError, StorageFailureError, StorageUnsupportedError, isDurableConflict } from '../../src/data/v2/errors';
+import { databaseNamespaceFor } from '../../src/data/v2/namespace';
 import { LOCAL_SCHEMA_VERSION } from '../../src/data/v2/schema';
 import { SQLITE_ENGINE_VERSION } from '../../src/data/v2/protocol';
 
@@ -131,7 +132,7 @@ export const pageApi = {
   schemaVersion: LOCAL_SCHEMA_VERSION,
   sqliteEngine: SQLITE_ENGINE_VERSION,
 
-  async open(params: { deviceId: string; storageId: string; reset?: boolean; accountId?: string }) {
+  async open(params: { deviceId: string; storageId: string; reset?: boolean; accountId?: string; workerUrl?: string }) {
     if (handle !== null) await handle.repo.close().catch(() => undefined);
     const origin = originFor(params.deviceId, params.accountId);
     const { context } = createDeterministicContext({
@@ -141,7 +142,7 @@ export const pageApi = {
     const repo = await openDurableGuestRepository({
       boundScope: origin.boundScope,
       boundDevice: origin.boundDevice,
-      workerUrl: WORKER_URL,
+      workerUrl: params.workerUrl ?? WORKER_URL,
       sqliteAssetBase: SQLITE_BASE,
       storageId: params.storageId,
       reset: params.reset === true,
@@ -620,6 +621,44 @@ export const pageApi = {
       const code = error instanceof Error ? error.name : 'unknown';
       return { failed: true, code, foundVersion };
     }
+  },
+
+  async forceSchemaVersion(version: string) {
+    if (handle === null) throw new Error('repository is not open');
+    await handle.repo.forceSchemaVersion(version);
+    return { version };
+  },
+
+  async reopenConnectionCoherent() {
+    if (handle === null) throw new Error('repository is not open');
+    const current = handle;
+    const repo = await current.repo.reopenConnection();
+    handle = {
+      repo,
+      checkpoints: new DurableCheckpointStore({ adapter: repo }),
+      context: current.context,
+      deviceId: current.deviceId,
+    };
+    return pageApi.coherentSnapshot();
+  },
+
+  async cleanupNamespace(params: { deviceId: string; storageId: string; accountId?: string }) {
+    const origin = originFor(params.deviceId, params.accountId);
+    const namespace = databaseNamespaceFor(origin.boundScope, origin.boundDevice, params.storageId);
+    const root = await navigator.storage.getDirectory();
+    const matchesNamespace = (name: string) =>
+      name === namespace || name.startsWith(`${namespace}-`) || name.startsWith(`${namespace}.`);
+    const removed: string[] = [];
+    for await (const entry of root.values()) {
+      if (!matchesNamespace(entry.name)) continue;
+      await root.removeEntry(entry.name, { recursive: entry.kind === 'directory' });
+      removed.push(entry.name);
+    }
+    const remaining: string[] = [];
+    for await (const entry of root.values()) {
+      if (matchesNamespace(entry.name)) remaining.push(entry.name);
+    }
+    return { namespace, removed, remaining };
   },
 
   async close() {
