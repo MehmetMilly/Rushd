@@ -456,7 +456,7 @@ async function captureCharacterizedStates(page, rootUrl, fixture, language, them
   await navigate(page, 0);
   await page.locator('.fab').click();
   await captureState(page, states, 'add-modal');
-  await page.getByRole('button', { name: 'close', exact: true }).click();
+  await page.locator('.modal-floating-card .modal-close-btn').last().click();
   await page.evaluate((message) => {
     const proxy = globalThis.__rushdResolveParityProxy('showing the error toast');
     proxy.toastMessage = message;
@@ -499,14 +499,14 @@ async function captureCharacterizedStates(page, rootUrl, fixture, language, them
   }
   await firstExpense.click();
   await captureState(page, states, 'edit-modal');
-  await page.getByRole('button', { name: 'close', exact: true }).click();
+  await page.locator('.modal-floating-card .modal-close-btn').last().click();
   await page.locator('.cinematic-stage header button').first().click();
   await captureState(page, states, 'profile-modal');
-  await page.getByRole('button', { name: 'close', exact: true }).click();
+  await page.locator('.modal-floating-card .modal-close-btn').last().click();
   await navigate(page, 3);
   await page.locator('.plan-action-block').click();
   await captureState(page, states, 'apply-plan-modal');
-  await page.getByRole('button', { name: 'close', exact: true }).click();
+  await page.locator('.modal-floating-card .modal-close-btn').last().click();
   await navigate(page, 4);
   await page.getByRole('button', { name: language === 'ar' ? /إعادة ضبط المصنع/ : /Factory Reset/ }).click();
   await captureState(page, states, 'confirm-reset-modal');
