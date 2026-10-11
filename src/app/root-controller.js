@@ -779,7 +779,7 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     return toFiniteNumber(this.monthEndModal.summary?.surplus, 0) > 0;
                 },
                 anyModalOpen() {
-                    return this.payModal.open || this.addModal.open || this.editModal.open || this.applyTemplatesModal.open || this.monthEndModal.open || this.onboardingModal.open || this.guestSetup.open || this.confirmDialog.open;
+                    return this.payModal.open || this.addModal.open || this.editModal.open || this.applyTemplatesModal.open || this.monthEndModal.open || this.onboardingModal.open || this.guestSetup?.open || this.confirmDialog.open;
                 },
                 currentShellTitle() {
                     return this.currentView === 'statistics'
@@ -846,7 +846,7 @@ export function installRootController(app, dataRuntime, environment = globalThis
             methods: {
                 // --- INITIALIZATION ---
                 navigateTo(view) {
-                    if (this.guestSetup.step === 'under18') return;
+                    if (this.guestSetup?.step === 'under18') return;
                     const targetView = ['dashboard', 'statistics', 'vault', 'plans', 'settings'].includes(view) ? view : 'dashboard';
                     if (targetView !== 'dashboard' && this.selectionMode) {
                         this.exitSelectionMode();
@@ -2981,7 +2981,7 @@ export function installRootController(app, dataRuntime, environment = globalThis
 
                 // --- ADD MODAL LOGIC ---
                 openAddModal() {
-                    if (this.guestSetup.step === 'under18') return;
+                    if (this.guestSetup?.step === 'under18') return;
                     const fab = this.$refs.fabBtn;
                     if (fab) {
                         fab.classList.remove('fab-burst');
@@ -2997,7 +2997,7 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     this.addModal.open = true;
                 },
                 async submitNewExpense() {
-                    if (this.guestSetup.step === 'under18') return;
+                    if (this.guestSetup?.step === 'under18') return;
                     // V2: Prevent double-entry with isSubmitting flag
                     if (this.addModal.isSubmitting) return;
                     // P04-D3: manual Add commits through the canonical
