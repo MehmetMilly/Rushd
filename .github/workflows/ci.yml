@@ -26,5 +26,9 @@ jobs:
         run: npx playwright install --with-deps chromium
         env:
           PLAYWRIGHT_BROWSERS_PATH: 0
+      - name: Install baseline media verifier
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends ffmpeg
       - name: Run CI gates
         run: npm run ci
