@@ -14,8 +14,9 @@ The working target is a feature-complete build ready for private founder use wit
 
 **P04 is open; its private-use phone checkpoint has passed; the first visible P06 usability slice is now implemented on the development branch.** P05/P06 early start was already authorized; no public release or production rollout is authorized. The full prior state and risks are in `DEVELOPMENT_MASTER_HANDOFF.md`; this section is the short current status.
 
-- Branch `codex/p04d-restart` is backed up to `origin/codex/p04d-restart`; it is not merged to `main`, deployed, or published as a release. The phone-tested P04 checkpoint at `6268eb3` remains intact. A focused P06-A1 manual guest onboarding/funding slice is implemented and independently reviewed PASS_WITH_NOTES; focused build, existing-empty-legacy onboarding browser check, and 33/33 P04-D host tests pass (`tests/pwa/p06-onboarding-browser.mjs`, `tests/pwa/p04-d4-host.test.ts`). This does not close P06 or establish release readiness.
-- GitHub Actions has not yet gone green on the pushed branch: at `dd9a2d0`, lint/typecheck/domain/build/browser-smoke passed, then `parity:self-test` failed with 13 differing pixels in its same-root determinism check on Linux. Do not loosen pixel thresholds or update baselines to mask it; diagnose the raster nondeterminism and rerun the affected CI gate.
+- Branch `codex/p04d-restart` is backed up to `origin/codex/p04d-restart` at `20f675d`; it is not merged to `main`, deployed, or published as a release. The phone-tested P04 checkpoint at `6268eb3` remains intact. P06-A1's new-user guest setup and first manual-funding path are implemented and independently reviewed PASS_WITH_NOTES. Focused build, a real empty-legacy-database onboarding browser regression, 33/33 P04-D host tests, P01 stability, and the updated new-user browser smoke pass. This does not close P06 or establish release readiness.
+- GitHub Actions run `38127512223` for `20f675d` passed lint, typecheck, `npm test` (207 domain tests plus repository/P00/P01 checks), build, browser smoke, and `parity:self-test`. It failed only at `parity:quick`, which reports 1,493,262 differing pixels across 15 states against the historical P00 comparator. This turn did not adjudicate every visual difference. Do not lower thresholds or rewrite baselines to force green; keep the visual discrepancy visible and inspect it before any release claim.
+- The new-user path is now usable for manual setup and manual expense entry, but this does **not** remove all canonical-mode restrictions. Auto-Fill/recurring-plan management, template profiles/off-days/deletion, flexible presets, payment/reopen, bulk mark-unpaid, allowance editing, and expense classification are still unavailable because their required canonical finance commands/data semantics are absent or incomplete. Do not simply remove those guards; implement and verify the corresponding behavior before enabling each control.
 - Private-use checkpoint: iPhone script (founder report) and Galaxy A55 v2→v4/offline/two-tab (agent-observed) passed; A55 remainder by founder report. iPadOS, Mac Safari and unsafe storage-failure probes are **NOT_TESTED**; P04-A6 (VFS ADR) and P04-A7 (URL routes, deferred) stay open. Do not claim P04 closure.
 - P05 `early_start_exception` (23 Sep) authorizes visible P05/P06 design and core-product work. Not publication.
 - The founder confirmed on 6 October that no deployment holds real financial data.
@@ -23,9 +24,10 @@ The working target is a feature-complete build ready for private founder use wit
 
 ## Next action
 
-1. Resolve the Linux-only `parity:self-test` nondeterminism without weakening visual assertions; push the corrected development branch and verify the relevant GitHub check.
-2. Keep the new-user flow on the canonical runtime and record the founder's accepted first-run experience. Do not merge to `main` or publish a release until the applicable phase/release gates and remaining user-facing gaps are resolved.
-3. Show the founder a visible proposal before the consequential locked-navigation redesign, then continue P05/P06 with larger coherent slices and motion judged in the running canonical app.
+1. Treat `20f675d` as a pushed development branch only. Do not merge to `main`, deploy, or publish a release until remaining visual/user-facing gaps and release gates are resolved.
+2. Continue with a coherent P06 user-facing slice. For every blocked control, add its canonical command/data semantics before enabling it; keep the money-safety guards in place until that work lands.
+3. Reconcile the current P00 visual diff with the seven founder-accepted D4 deviations and the later font/onboarding changes; do not dismiss unreviewed pixels as expected.
+4. Show the founder a visible proposal before the consequential locked-navigation redesign, then judge P05 motion in the running canonical app.
 
 ## Founder decisions that remain external
 
