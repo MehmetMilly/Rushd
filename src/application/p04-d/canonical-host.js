@@ -70,6 +70,7 @@ import { composeCycleId, makeBookId, makeGoalId, makeOperationId, makePlanId } f
 import { effectiveVersionStatus } from '../../domain/contracts/ledger.ts';
 import { canonicalJson, stableDigest } from '../../domain/contracts/canonical.ts';
 import { parseCivilDate } from '../../domain/primitives/civil-date.ts';
+import { monthlyCycleContaining } from '../../domain/primitives/monthly-cycle.ts';
 import { deriveTrackedPool } from '../../domain/allocations/derive.ts';
 import { convertUntaggedSarMajor } from '../../data/migration/money-conversion.ts';
 import { LEGACY_GUEST_BOOK_ID } from '../../data/migration/mapping.ts';
@@ -142,7 +143,7 @@ const MONTH_KEY_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 const hostAuthorityBinders = new WeakMap();
 
 /**
- * @returns {{ get(): PortStatus, fail(message: string): void }}
+ * @returns {{ get(): PortStatus, fail(message: string): void, clear(): void }}
  */
 function createStatusCell() {
   let error = null;
@@ -152,6 +153,9 @@ function createStatusCell() {
     },
     fail(message) {
       error = message;
+    },
+    clear() {
+      error = null;
     },
   };
 }
@@ -453,6 +457,7 @@ function correctionResultId(receipt, fallbackEntryId) {
  *   workerUrl?: string,
  *   sqliteAssetBase?: string,
  *   selectedDate?: string,
+ *   deferInitialProvision?: boolean,
  *   coordination?: TabCoordinator,
   *   storage?: {
   *     control?: ControlStore,
@@ -497,6 +502,7 @@ export async function prepareCanonicalCandidateHost(options = {}) {
       ? options.selectedDate
       : defaultSelectedDate(context),
   };
+  const deferInitialProvision = options.deferInitialProvision === true;
 
   const authorityPortPlaceholder = null;
   void authorityPortPlaceholder;
@@ -838,7 +844,7 @@ export async function prepareCanonicalCandidateHost(options = {}) {
     try {
       await reopenActive(newStorageId);
       state.storageId = newStorageId;
-      await provisionFreshBookIfMissing(kind, { lease: false });
+      if (!deferInitialProvision) await provisionFreshBookIfMissing(kind, { lease: false });
     } catch (error) {
       // The flip already retired other tabs; this tab must not keep
       // writing to the orphaned repository it still holds. Fail closed:
@@ -865,6 +871,353 @@ export async function prepareCanonicalCandidateHost(options = {}) {
   const lifecycleStatus = createStatusCell();
 
   const currentBook = () => readBookState(state.repository, state.bookId);
+  const setupOperationId = (phase) => {
+    const fingerprint = String(stableDigest(`p06-a1:${state.storageId}:${phase}`)).slice(0, 20);
+    const made = makeOperationId(`p06a1-${phase}-${fingerprint}`);
+    if (!made.ok) throw new Error('guest setup operation identity is invalid');
+    return made.value;
+  };
+  const setupBookCreateOperationId = () => setupOperationId('book');
+  const setupSettingsOperationId = () => setupOperationId('settings');
+  const setupCycleOperationId = () => setupOperationId('cycle');
+  const hasSetupOperation = (operationId) => {
+    try {
+      return !!state.repository?.getOperation?.(operationId);
+    } catch {
+      return false;
+    }
+  };
+  const isEmptyFinanceState = (book) => !!book
+    && book.entries.length === 0
+    && book.obligations.length === 0
+    && book.obligationEvents.length === 0
+    && book.goals.length === 0
+    && book.allocationRecords.length === 0
+    && book.observations.length === 0
+    && book.adjustments.length === 0
+    && book.recoveryLinks.length === 0
+    && book.plans.length === 0
+    && book.planRevisions.length === 0
+    && book.planOccurrences.length === 0
+    && book.propagationDeltas.length === 0
+    && book.propagationConflicts.length === 0
+    && book.conflictResolutions.length === 0
+    && (book.buffer === null || book.buffer === undefined);
+  const guestSetupOpenCycle = (book) => {
+    if (!book || !Array.isArray(book.cycles)) return null;
+    return book.cycles
+      .filter((cycle) => effectiveVersionStatus(book, cycle) === 'open')
+      .sort((left, right) => left.versionSeq - right.versionSeq)
+      .at(-1) ?? null;
+  };
+  const isEmptyZeroCycle = (book) => {
+    const cycle = guestSetupOpenCycle(book);
+    return !!cycle
+      && cycle.mode === 'fullCycle'
+      && cycle.startingFunds?.minorUnits === 0
+      && isEmptyFinanceState(book)
+      && book.cycles.length > 0
+      && book.cycles.every((candidate) => candidate.startingFunds?.minorUnits === 0);
+  };
+  const guestSetupRequired = () => deferInitialProvision && (
+    !state.bookId
+    || (isEmptyFinanceState(currentBook())
+      && (currentBook()?.cycles?.length ?? 0) === 0
+      && (hasSetupOperation(setupBookCreateOperationId()) || hasSetupOperation(setupSettingsOperationId())))
+    || isEmptyZeroCycle(currentBook())
+  );
+  const latestSetupRevision = (book) => {
+    if (!book || !Array.isArray(book.settingsRevisions) || book.settingsRevisions.length === 0) return null;
+    return [...book.settingsRevisions].sort((left, right) =>
+      left.effectiveDate.localeCompare(right.effectiveDate)
+      || left.capturedAtInstantMs - right.capturedAtInstantMs).at(-1) ?? null;
+  };
+
+  async function completeGuestSetup(input) {
+    if (!guestSetupRequired()) {
+      let existingSetupOperation = null;
+      try {
+        existingSetupOperation = state.repository?.getOperation?.(setupCycleOperationId()) ?? null;
+      } catch {
+        existingSetupOperation = null;
+      }
+      if (existingSetupOperation && guestSetupOpenCycle(currentBook())) {
+        return { ok: true, alreadyComplete: true };
+      }
+      lifecycleStatus.fail('guest setup is not available for this canonical book; no funding was written.');
+      return { ok: false, reason: 'not-available' };
+    }
+    const record = input && typeof input === 'object' ? input : {};
+    const mode = record.mode === 'fullCycle' ? 'fullCycle' : record.mode === 'remainingFromNow' ? 'remainingFromNow' : '';
+    const requestedTimeZone = toText(record.timeZone).trim();
+    const weekStart = Number(record.weekStart);
+    if (!mode || !requestedTimeZone || !Number.isSafeInteger(weekStart) || weekStart < 0 || weekStart > 6) {
+      lifecycleStatus.fail('guest setup requires a valid tracking mode, timezone, and week start.');
+      return { ok: false, reason: 'validation' };
+    }
+    try {
+      new Intl.DateTimeFormat('en', { timeZone: requestedTimeZone });
+    } catch {
+      lifecycleStatus.fail('guest setup timezone is not a valid IANA timezone.');
+      return { ok: false, reason: 'validation' };
+    }
+    const converted = convertUntaggedSarMajor(record.amount, {
+      database: 'MicroSaveOS_DB',
+      databaseVersion: 1,
+      store: 'settings',
+      recordKey: 'p06-a1-guest-setup',
+      field: 'observedPool',
+    });
+    if (!converted.ok || converted.money.minorUnits < 0) {
+      lifecycleStatus.fail('guest setup pool amount is invalid; enter a non-negative SAR amount with at most two decimals.');
+      return { ok: false, reason: 'validation' };
+    }
+    try {
+      authorityPort.assertWritable('lifecycle.completeGuestSetup');
+    } catch (error) {
+      lifecycleStatus.fail(error instanceof Error ? error.message : String(error));
+      return { ok: false, reason: 'blocked' };
+    }
+    if (!(await requireCurrentNamespace('lifecycle.completeGuestSetup', lifecycleStatus))) {
+      return { ok: false, reason: 'blocked' };
+    }
+
+    return withHeldCritical('write', async () => {
+      const executeSetupCommand = async (command, operationId, scope) => {
+        try {
+          authorityPort.assertWritable(`lifecycle.completeGuestSetup.${scope}`);
+        } catch (error) {
+          lifecycleStatus.fail(error instanceof Error ? error.message : String(error));
+          return false;
+        }
+        if (!(await requireCurrentNamespace(scope, lifecycleStatus))) return false;
+        const committed = findCommittedIntent(state.repository, operationId, command);
+        if (committed.status === 'conflict') {
+          lifecycleStatus.fail(`guest setup ${scope} was already committed with different content; no duplicate funding was written.`);
+          return false;
+        }
+        if (committed.status === 'replayed') {
+          await refreshCommitted();
+          return true;
+        }
+        let result;
+        try {
+          result = await state.gateway.execute(command, { operationId });
+        } catch (error) {
+          lifecycleStatus.fail(error instanceof Error ? error.message : String(error));
+          return false;
+        }
+        if (!result.ok) {
+          lifecycleStatus.fail(result.detail ?? `guest setup ${scope} failed`);
+          return false;
+        }
+        await refreshCommitted();
+        coordination.announceCommit({ storageId: state.storageId, operationId: String(operationId) });
+        return true;
+      };
+
+      try {
+        let book = currentBook();
+        let cycle = guestSetupOpenCycle(book);
+        const legacyEmptyCycle = isEmptyZeroCycle(book);
+        if (cycle && !legacyEmptyCycle) {
+          lifecycleStatus.fail('an existing cycle is already open; guest setup will not fund it again.');
+          return { ok: false, reason: 'already-open' };
+        }
+        if (legacyEmptyCycle && mode !== 'remainingFromNow') {
+          lifecycleStatus.fail('this existing empty cycle can only be initialized from the amount physically left now.');
+          return { ok: false, reason: 'observed-only' };
+        }
+
+        const madeBookId = makeBookId(LEGACY_GUEST_BOOK_ID);
+        if (!madeBookId.ok) {
+          lifecycleStatus.fail('guest setup refused an invalid canonical book identity.');
+          return { ok: false, reason: 'validation' };
+        }
+        const bookId = state.bookId || madeBookId.value;
+        let createdAtLocalDate = book?.book?.createdAtLocalDate ?? '';
+        let anchor = book?.book?.cycleAnchor ?? null;
+
+        if (!state.bookId) {
+          const instant = context.clock.nowMs();
+          let parts;
+          try {
+            parts = new Intl.DateTimeFormat('en', {
+              timeZone: requestedTimeZone,
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+            }).formatToParts(new Date(instant));
+          } catch {
+            lifecycleStatus.fail('guest setup could not resolve today in the selected timezone.');
+            return { ok: false, reason: 'validation' };
+          }
+          const part = (type) => parts.find((item) => item.type === type)?.value ?? '';
+          const today = parseCivilDate(`${part('year')}-${part('month')}-${part('day')}`);
+          if (!today.ok) {
+            lifecycleStatus.fail('guest setup could not resolve a valid local date.');
+            return { ok: false, reason: 'validation' };
+          }
+          createdAtLocalDate = today.value;
+          anchor = mode === 'fullCycle'
+            ? { kind: 'payday', dayOfMonth: Number(today.value.slice(-2)) }
+            : { kind: 'firstOfMonth' };
+          const createBook = {
+            kind: 'createBook',
+            bookId,
+            displayName: 'Rushd guest book',
+            currency: 'SAR',
+            timeZone: requestedTimeZone,
+            cycleAnchor: anchor,
+          };
+          if (!(await executeSetupCommand(createBook, setupBookCreateOperationId(), 'create-book'))) {
+            return { ok: false, reason: 'error' };
+          }
+          state.bookId = resolveGuestBookId(state.repository);
+          await refreshCommitted();
+          book = currentBook();
+        } else if (!legacyEmptyCycle && book?.cycles?.length === 0) {
+          const originalCreate = {
+            kind: 'createBook',
+            bookId,
+            displayName: 'Rushd guest book',
+            currency: book?.book?.currency,
+            timeZone: book?.book?.timeZone,
+            cycleAnchor: book?.book?.cycleAnchor,
+          };
+          if (findCommittedIntent(state.repository, setupBookCreateOperationId(), originalCreate).status !== 'replayed') {
+            lifecycleStatus.fail('an existing book is not an interrupted guest setup; no funding was written.');
+            return { ok: false, reason: 'not-available' };
+          }
+          if (requestedTimeZone !== book.book.timeZone) {
+            lifecycleStatus.fail('the timezone was already saved with this interrupted setup; reload to restore it before continuing.');
+            return { ok: false, reason: 'setup-mismatch' };
+          }
+        } else if (!legacyEmptyCycle) {
+          lifecycleStatus.fail('the active book is not an empty interrupted guest setup; no funding was written.');
+          return { ok: false, reason: 'not-available' };
+        }
+
+        if (!book || !state.bookId) {
+          lifecycleStatus.fail('guest setup could not read its committed canonical book.');
+          return { ok: false, reason: 'error' };
+        }
+        createdAtLocalDate = book.book.createdAtLocalDate;
+        anchor = book.book.cycleAnchor;
+        cycle = guestSetupOpenCycle(book);
+
+        if (legacyEmptyCycle && cycle) {
+          const effectiveDate = cycle.endDateExclusive;
+          const updateSettings = {
+            kind: 'updateBookSettings',
+            bookId: state.bookId,
+            timeZone: requestedTimeZone === cycle.timeZone ? null : requestedTimeZone,
+            cycleAnchor: null,
+            weekStart,
+            effectiveDate,
+            note: 'Guest setup timezone and week-start confirmation for next cycle',
+          };
+          if (!(await executeSetupCommand(updateSettings, setupSettingsOperationId(), 'settings'))) {
+            return { ok: false, reason: 'error' };
+          }
+          const realityCheck = {
+            kind: 'recordRealityCheck',
+            bookId: state.bookId,
+            observedPool: converted.money,
+            boundary: { kind: 'instant', instantMs: context.clock.nowMs() },
+            currencyLabel: null,
+            classificationNote: null,
+            note: 'Guest setup: physically observed pool at the tracking boundary',
+          };
+          if (!(await executeSetupCommand(realityCheck, setupCycleOperationId(), 'observed-pool'))) {
+            return { ok: false, reason: 'error' };
+          }
+          const reconciledBook = currentBook();
+          const active = guestSetupOpenCycle(reconciledBook);
+          const observed = reconciledBook?.observations
+            ?.filter((item) => String(item.sourceOperationId) === String(setupCycleOperationId()))
+            .at(-1);
+          state.selectedDate = observed?.boundaryLocalDate ?? active?.startDate ?? state.selectedDate;
+          await refreshCommitted();
+          lifecycleStatus.clear();
+          return { ok: true, mode: 'remainingFromNow', alreadyOpenCycle: true };
+        }
+
+        const date = parseCivilDate(createdAtLocalDate);
+        if (!date.ok) {
+          lifecycleStatus.fail('guest setup has no valid saved local start date.');
+          return { ok: false, reason: 'validation' };
+        }
+        const revision = book.settingsRevisions.find((item) => String(item.sourceOperationId) === String(setupSettingsOperationId())) ?? null;
+        const targetAnchor = revision?.cycleAnchor
+          ?? (mode === 'fullCycle'
+            ? { kind: 'payday', dayOfMonth: Number(date.value.slice(-2)) }
+            : anchor);
+        if (revision && (revision.weekStart !== weekStart || JSON.stringify(revision.cycleAnchor) !== JSON.stringify(targetAnchor))) {
+          lifecycleStatus.fail('week start or cycle timing differs from the already saved setup; no funding was written.');
+          return { ok: false, reason: 'setup-mismatch' };
+        }
+        const window = monthlyCycleContaining(targetAnchor, date.value);
+        const settingsCommand = {
+          kind: 'updateBookSettings',
+          bookId: state.bookId,
+          timeZone: null,
+          cycleAnchor: JSON.stringify(targetAnchor) === JSON.stringify(book.book.cycleAnchor) ? null : targetAnchor,
+          weekStart,
+          effectiveDate: window.startDate,
+          note: 'Guest setup timezone and week-start confirmation',
+        };
+        if (!(await executeSetupCommand(settingsCommand, setupSettingsOperationId(), 'settings'))) {
+          return { ok: false, reason: 'error' };
+        }
+
+        const instant = context.clock.nowMs();
+        if (mode === 'fullCycle') {
+          const parts = new Intl.DateTimeFormat('en', {
+            timeZone: book.book.timeZone,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+          }).formatToParts(new Date(instant));
+          const part = (type) => parts.find((item) => item.type === type)?.value ?? '';
+          const today = parseCivilDate(`${part('year')}-${part('month')}-${part('day')}`);
+          if (!today.ok || today.value !== date.value) {
+            lifecycleStatus.fail('this full-cycle setup was interrupted after its start date; continue from the pool physically left now.');
+            return { ok: false, reason: 'full-cycle-stale' };
+          }
+          const openFullCycle = {
+            kind: 'openCycle',
+            bookId: state.bookId,
+            startingFunds: converted.money,
+            startDate: date.value,
+          };
+          if (!(await executeSetupCommand(openFullCycle, setupCycleOperationId(), 'full-cycle'))) {
+            return { ok: false, reason: 'error' };
+          }
+          state.selectedDate = date.value;
+        } else {
+          const openBoundaryCycle = {
+            kind: 'openBoundaryCycle',
+            bookId: state.bookId,
+            observedPool: converted.money,
+            boundary: { kind: 'instant', instantMs: instant },
+            note: 'Guest setup: physically observed pool at the tracking boundary',
+          };
+          if (!(await executeSetupCommand(openBoundaryCycle, setupCycleOperationId(), 'observed-pool'))) {
+            return { ok: false, reason: 'error' };
+          }
+          const opened = guestSetupOpenCycle(currentBook());
+          state.selectedDate = opened?.boundaryLocalDate ?? date.value;
+        }
+        await refreshCommitted();
+        lifecycleStatus.clear();
+        return { ok: true, mode, alreadyOpenCycle: false };
+      } catch (error) {
+        lifecycleStatus.fail(error instanceof Error ? error.message : String(error));
+        return { ok: false, reason: 'error' };
+      }
+    });
+  }
 
   /**
    * @param {string} scope
@@ -2463,12 +2816,12 @@ export async function prepareCanonicalCandidateHost(options = {}) {
         await refreshCommitted();
       },
       getSettings() {
-        // D4: book settings project from committed canonical state. The
-        // base allowance shows the migrated opening-cycle starting funds
-        // (read-only truth); there is no command that rewrites it, and the
-        // buffer below is an explicit reserve, never a budget.
+        // D4: project only committed canonical state. The existing allowance
+        // field is a read-only starting-funds compatibility view; it is not
+        // the cycle's safe-to-spend answer or the Insights budget.
         const book = currentBook();
         const projected = projectBookSettings(book, state.selectedDate);
+        const activeCycle = guestSetupOpenCycle(book);
         let allowance = 0;
         try {
           const openCycleId = projectOpenCycleId(book);
@@ -2482,6 +2835,10 @@ export async function prepareCanonicalCandidateHost(options = {}) {
         } catch {
           /* allowance stays at its empty-state default */
         }
+        const guestSetupObservedPool = !!activeCycle && Array.isArray(book?.observations)
+          && book.observations.some((observation) =>
+            String(observation.cycleId) === String(activeCycle.cycleId)
+            && String(observation.sourceOperationId) === String(setupCycleOperationId()));
         return {
           baseAllowance: allowance,
           theme: readPreference(environment, 'rushd_theme', 'dark') === 'light' ? 'light' : 'dark',
@@ -2494,6 +2851,8 @@ export async function prepareCanonicalCandidateHost(options = {}) {
           bufferAmount: projected?.bufferAmount ?? null,
           currency: projected?.currency ?? 'SAR',
           openCycleId: projectOpenCycleId(book),
+          cycleMode: activeCycle?.mode ?? null,
+          guestSetupObservedPool,
         };
       },
       async saveBaseAllowance() {
@@ -2525,6 +2884,45 @@ export async function prepareCanonicalCandidateHost(options = {}) {
         // no I/O, never finance truth beyond existence.
         return !!state.bookId;
       },
+      needsGuestSetup() {
+        return guestSetupRequired();
+      },
+      getGuestSetupProgress() {
+        if (!guestSetupRequired()) return { available: false };
+        const book = currentBook();
+        if (!book) {
+          return {
+            available: true,
+            bookCreated: false,
+            currentCycleAlreadyOpen: false,
+            mode: '',
+            timeZone: '',
+            weekStart: null,
+            settingsCommitted: false,
+          };
+        }
+        const cycle = guestSetupOpenCycle(book);
+        const revision = book.settingsRevisions.find((item) => String(item.sourceOperationId) === String(setupSettingsOperationId()))
+          ?? latestSetupRevision(book);
+        let settingsCommitted = false;
+        try {
+          settingsCommitted = !!state.repository?.getOperation?.(setupSettingsOperationId());
+        } catch {
+          settingsCommitted = false;
+        }
+        return {
+          available: true,
+          bookCreated: true,
+          currentCycleAlreadyOpen: !!cycle,
+          preexistingOpenCycle: isEmptyZeroCycle(book),
+          mode: isEmptyZeroCycle(book) ? 'remainingFromNow' : ((revision?.cycleAnchor ?? book.book.cycleAnchor).kind === 'payday' ? 'fullCycle' : 'remainingFromNow'),
+          timeZone: revision?.timeZone ?? book.book.timeZone,
+          weekStart: revision?.weekStart ?? null,
+          settingsCommitted,
+          createdAtLocalDate: book.book.createdAtLocalDate,
+        };
+      },
+      completeGuestSetup,
       getOnboardingState() {
         // D4: onboarding is a local setup flow with no canonical finance
         // fact; its status stays a validated local preference.
@@ -2634,15 +3032,12 @@ export async function prepareCanonicalCandidateHost(options = {}) {
     return failClosed(`canonical storage failed to open: ${error instanceof Error ? error.message : String(error)}`);
   }
 
-  // D5 correction: a committed pointer with no guest book (an
-  // interrupted pre-D5 reset, or an empty-but-valid import) must still
-  // boot into a supported scope. The authority turns ready first so the
-  // provisioning write below passes the same writability gate as any
-  // other writer; provisioning then runs before reads serve, so the
-  // first write in a fresh tab succeeds. Boot never fails on this step.
+  // D5: non-onboarding boots provision empty reset/import namespaces before
+  // reads serve. Fresh-source production explicitly defers this zero-funded
+  // shell so onboarding can create the first canonical book and cycle.
   setAuthority({ kind: 'canonicalReady', writable: true, storageId: state.storageId });
   try {
-    if (state.gateway && !state.bookId) {
+    if (state.gateway && !state.bookId && !deferInitialProvision) {
       await provisionFreshBookIfMissing('boot');
     }
   } catch (error) {
@@ -2654,7 +3049,7 @@ export async function prepareCanonicalCandidateHost(options = {}) {
   //
   // D4 boot rule: recording requires an open cycle covering the selected
   // date, and the domain holds a single open cycle. When the open cycle
-  // is stale (fresh install whose migration only opened the fallback
+  // is stale (an older migration-shaped install opened the fallback
   // month, or a new month since), boot advances it ONLY when that is
   // provably a no-op: the book holds no entries, obligations, or
   // allocations, so close + leaveIndependent + open-current (zero
@@ -2663,7 +3058,7 @@ export async function prepareCanonicalCandidateHost(options = {}) {
   // stale months stay truthfully per-date refused until the user settles
   // through the goals port. Boot never fails on this step.
   try {
-    if (state.gateway && state.bookId) {
+    if (state.gateway && state.bookId && !(deferInitialProvision && !guestSetupOpenCycle(currentBook()))) {
       await withHeldCritical('write', async () => {
         // findOpenCycle tie-breaks to the earliest open version, so scan
         // every version: today is covered when any open version's window

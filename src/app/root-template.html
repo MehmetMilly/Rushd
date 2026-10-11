@@ -99,6 +99,11 @@
                         </div>
                     </header>
 
+                    <div v-if="p04dCycleMode === 'remainingFromBoundary' || p04dGuestSetupObservedPool"
+                        class="glass-panel p-3 mb-3 text-xs text-secondary">
+                        {{ t.guestSetupTrackingStarted }}
+                    </div>
+
                     <!-- V3: Date Scroller - Month Top, Day Name Bottom -->
                     <div class="date-scroller no-scrollbar" ref="dateScroller">
                         <div v-for="d in dateWindow" :key="d.iso" class="date-chip glass-panel" :data-iso="d.iso"
@@ -375,8 +380,8 @@
                         <div class="text-xs font-bold text-secondary uppercase mb-3 ms-2">{{ t.budgetConfig }}</div>
                         <div class="glass-panel p-4 flex justify-between items-center mb-3">
                             <div>
-                                <div class="font-bold">{{ t.monthlyAllowance }}</div>
-                                <div class="text-xs text-secondary">{{ t.baseFunds }}</div>
+                                <div class="font-bold">{{ p04dCycleMode === 'remainingFromBoundary' ? t.guestSetupObservedBaseLabel : ((p04dGuestSetupObservedPool || p04dCycleMode) ? t.guestSetupRealityCheckLabel : t.monthlyAllowance) }}</div>
+                                <div class="text-xs text-secondary">{{ p04dCycleMode === 'remainingFromBoundary' ? t.guestSetupObservedBaseHint : (p04dGuestSetupObservedPool ? t.guestSetupRealityCheckHint : (p04dCycleMode ? t.guestSetupCycleFundsHint : t.baseFunds)) }}</div>
                             </div>
                         <input type="text" inputmode="decimal" v-model="store.settings.baseAllowance" @change="saveSettings" :disabled="p04dCandidateActive"
                             class="bg-surface-1 border border-glass text-end font-mono p-3 rounded-lg w-32 focus:border-brand outline-none text-white">
@@ -1498,6 +1503,103 @@
                             @click="decideMonthEndPromptLater"
                             :disabled="monthEndModal.isLoading">
                             {{ t.decideLater }}
+                        </button>
+                    </div>
+                </div>
+            </ms-modal>
+
+            <ms-modal :model-value="guestSetup.open" @update:model-value="handleGuestSetupVisibilityChange"
+                :title="guestSetup.step === 'under18' ? t.guestSetupUnder18Title : t.guestSetupTitle">
+                <div v-if="guestSetup.step === 'age'" class="flex flex-col gap-4">
+                    <div class="glass-panel p-3 bg-surface-1">
+                        <div class="text-sm font-semibold text-white">{{ t.guestSetupAgePrompt }}</div>
+                    </div>
+                    <button class="w-full py-3 rounded-xl bg-brand text-white border border-brand/40 hover:brightness-110 transition-all text-sm font-semibold"
+                        @click="confirmGuestAdultAge">
+                        {{ t.guestSetupAdultYes }}
+                    </button>
+                    <button class="w-full py-3 rounded-xl bg-surface-1 border border-glass hover:bg-surface-2 transition-all text-sm font-semibold"
+                        @click="declineGuestAdultAge">
+                        {{ t.guestSetupUnder18 }}
+                    </button>
+                </div>
+
+                <div v-else-if="guestSetup.step === 'under18'" class="flex flex-col gap-4">
+                    <div class="glass-panel p-3 bg-surface-1">
+                        <div class="text-sm font-semibold text-white">{{ t.guestSetupUnder18Body }}</div>
+                    </div>
+                    <button class="w-full py-3 rounded-xl bg-surface-1 border border-glass text-secondary text-sm font-semibold"
+                        @click="exitUnderageSetup">
+                        {{ t.guestSetupExit }}
+                    </button>
+                </div>
+
+                <div v-else class="flex flex-col gap-4">
+                    <div class="glass-panel p-3 bg-surface-1">
+                        <div class="text-sm font-semibold text-white">{{ t.guestSetupTitle }}</div>
+                        <div class="text-xs text-secondary mt-1">{{ t.guestSetupIntro }}</div>
+                    </div>
+
+                    <div v-if="guestSetup.preexistingOpenCycle" class="glass-panel p-3 bg-surface-1 text-xs text-secondary">
+                        {{ t.guestSetupLegacyCycleHint }}
+                    </div>
+
+                    <div>
+                        <label class="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1 block">{{ t.guestSetupTimezone }}</label>
+                        <input type="text" v-model.trim="guestSetup.timeZone" dir="ltr" autocomplete="off"
+                            :disabled="guestSetup.timeZoneLocked"
+                            class="w-full p-3 bg-surface-1 border border-glass rounded-lg text-white text-sm focus:border-brand outline-none disabled:opacity-60">
+                    </div>
+
+                    <div>
+                        <label class="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1 block">{{ t.guestSetupWeekStart }}</label>
+                        <select v-model="guestSetup.weekStart" :disabled="guestSetup.weekStartLocked" class="glass-input w-full">
+                            <option value="">{{ t.guestSetupChooseWeekStart }}</option>
+                            <option value="0">{{ t.guestSetupSunday }}</option>
+                            <option value="1">{{ t.guestSetupMonday }}</option>
+                            <option value="2">{{ t.guestSetupTuesday }}</option>
+                            <option value="3">{{ t.guestSetupWednesday }}</option>
+                            <option value="4">{{ t.guestSetupThursday }}</option>
+                            <option value="5">{{ t.guestSetupFriday }}</option>
+                            <option value="6">{{ t.guestSetupSaturday }}</option>
+                        </select>
+                    </div>
+
+                    <fieldset v-if="!guestSetup.preexistingOpenCycle" class="flex flex-col gap-2">
+                        <label class="flex items-start gap-3 p-3 rounded-xl bg-surface-1 border border-glass">
+                            <input type="radio" value="fullCycle" v-model="guestSetup.mode" class="mt-1 accent-brand" :disabled="guestSetup.modeLocked">
+                            <span>
+                                <span class="block text-sm font-semibold text-white">{{ t.guestSetupFullCycle }}</span>
+                                <span class="block text-xs text-secondary mt-1">{{ t.guestSetupFullCycleHint }}</span>
+                            </span>
+                        </label>
+                        <label class="flex items-start gap-3 p-3 rounded-xl bg-surface-1 border border-glass">
+                            <input type="radio" value="remainingFromNow" v-model="guestSetup.mode" class="mt-1 accent-brand" :disabled="guestSetup.modeLocked">
+                            <span>
+                                <span class="block text-sm font-semibold text-white">{{ t.guestSetupCurrentPool }}</span>
+                                <span class="block text-xs text-secondary mt-1">{{ t.guestSetupCurrentPoolHint }}</span>
+                            </span>
+                        </label>
+                    </fieldset>
+                    <div v-else class="glass-panel p-3 bg-surface-1 text-xs text-secondary">
+                        {{ t.guestSetupCurrentPoolHint }}
+                    </div>
+
+                    <div>
+                        <label class="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1 block">{{ t.guestSetupAmount }}</label>
+                        <input type="text" inputmode="decimal" v-model="guestSetup.amount" dir="ltr" autocomplete="off"
+                            class="w-full p-3 bg-surface-1 border border-glass rounded-lg text-white text-sm focus:border-brand outline-none">
+                    </div>
+
+                    <div v-if="guestSetup.error" class="text-xs text-danger" role="alert">{{ guestSetup.error }}</div>
+                    <div class="flex gap-2">
+                        <button class="flex-1 py-3 rounded-xl bg-surface-1 border border-glass hover:bg-surface-2 transition-all text-sm font-semibold"
+                            @click="deferGuestSetup" :disabled="guestSetup.isLoading">
+                            {{ t.guestSetupLater }}
+                        </button>
+                        <button class="flex-1 py-3 rounded-xl bg-brand text-white border border-brand/40 hover:brightness-110 transition-all text-sm font-semibold disabled:opacity-50"
+                            @click="completeGuestSetup" :disabled="guestSetup.isLoading || !guestSetup.timeZone || guestSetup.weekStart === '' || (!guestSetup.preexistingOpenCycle && !guestSetup.mode) || guestSetup.amount === ''">
+                            {{ t.guestSetupSave }}
                         </button>
                     </div>
                 </div>

@@ -1,6 +1,6 @@
 # Rushd active delivery plan
 
-**Updated:** 6 October 2026
+**Updated:** 11 October 2026
 
 This file records the current delivery position and resource strategy. It does not replace the product contract in `docs/RUSHD_MASTER_PLAN_FINAL.md`, the phase outcomes in `docs/implementation/phase-plan.json`, or the working method in `WORKFLOW_LITE.md`.
 
@@ -10,11 +10,12 @@ Build the full Rushd feature set described by the final master plan. The founder
 
 The working target is a feature-complete build ready for private founder use within one month. Public-release validation is a later finish line because P13 requires at least four weeks of real beta evidence plus external legal and operational work. This separates calendar validation from implementation without removing product features.
 
-## Current position — 6 October 2026
+## Current position — 11 October 2026
 
-**P04 is open; its private-use phone checkpoint has passed; visible P05/P06 work is authorized but not started.** Development Master moved from Codex to Claude Code (Opus 5.5) on 6 October. The full verified state, risks and reasoning are in `DEVELOPMENT_MASTER_HANDOFF.md`; this section is the short status.
+**P04 is open; its private-use phone checkpoint has passed; the first visible P06 usability slice is now implemented on the development branch.** P05/P06 early start was already authorized; no public release or production rollout is authorized. The full prior state and risks are in `DEVELOPMENT_MASTER_HANDOFF.md`; this section is the short current status.
 
-- Branch `codex/p04d-restart`. Checkpoint commit `6268eb3` holds the phone-tested build (bytes match the device-gate deployment `dpl_2PKp8cCzPNN3YmK7Vizp4zgTzJzC`). Lint, typecheck, `npm test`, `test:data` and `test:pwa` pass on it. 71 commits ahead of `origin/main`, none pushed.
+- Branch `codex/p04d-restart` is backed up to `origin/codex/p04d-restart`; it is not merged to `main`, deployed, or published as a release. The phone-tested P04 checkpoint at `6268eb3` remains intact. A focused P06-A1 manual guest onboarding/funding slice is implemented and independently reviewed PASS_WITH_NOTES; focused build, existing-empty-legacy onboarding browser check, and 33/33 P04-D host tests pass (`tests/pwa/p06-onboarding-browser.mjs`, `tests/pwa/p04-d4-host.test.ts`). This does not close P06 or establish release readiness.
+- GitHub Actions has not yet gone green on the pushed branch: at `dd9a2d0`, lint/typecheck/domain/build/browser-smoke passed, then `parity:self-test` failed with 13 differing pixels in its same-root determinism check on Linux. Do not loosen pixel thresholds or update baselines to mask it; diagnose the raster nondeterminism and rerun the affected CI gate.
 - Private-use checkpoint: iPhone script (founder report) and Galaxy A55 v2→v4/offline/two-tab (agent-observed) passed; A55 remainder by founder report. iPadOS, Mac Safari and unsafe storage-failure probes are **NOT_TESTED**; P04-A6 (VFS ADR) and P04-A7 (URL routes, deferred) stay open. Do not claim P04 closure.
 - P05 `early_start_exception` (23 Sep) authorizes visible P05/P06 design and core-product work. Not publication.
 - The founder confirmed on 6 October that no deployment holds real financial data.
@@ -22,9 +23,9 @@ The working target is a feature-complete build ready for private founder use wit
 
 ## Next action
 
-1. Agree with the founder: the Claude Code delegation model; whether to push the local commits; the first P05/P06 slice.
-2. Show the founder a visible proposal for the locked navigation (Home, Plan, Ask Rushd, Insights, Goals, Settings in the header) and the first slice. The handoff recommends capture → commit → ledger/availability plus new-user funding/onboarding.
-3. Then freeze the Motion Lab rubric and motion-token source and start P05/P06 on the canonical runtime.
+1. Resolve the Linux-only `parity:self-test` nondeterminism without weakening visual assertions; push the corrected development branch and verify the relevant GitHub check.
+2. Keep the new-user flow on the canonical runtime and record the founder's accepted first-run experience. Do not merge to `main` or publish a release until the applicable phase/release gates and remaining user-facing gaps are resolved.
+3. Show the founder a visible proposal before the consequential locked-navigation redesign, then continue P05/P06 with larger coherent slices and motion judged in the running canonical app.
 
 ## Founder decisions that remain external
 

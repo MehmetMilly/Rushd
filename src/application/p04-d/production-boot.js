@@ -11,8 +11,9 @@
 //   user-reachable dual-authority toggle anywhere in the product.
 // - first boot extracts the unchanged v1 snapshot read-only
 //   (`extractLegacyIndexedDb` never creates, migrates, or writes the v1
-//   database: a missing source aborts the open instead of upgrading it)
-//   and migrates once through the accepted staging/pointer protocol.
+//   database). Existing v1 data migrates once through the accepted
+//   staging/pointer protocol; a missing source opens an empty canonical
+//   namespace and defers book/cycle creation to guest onboarding.
 //   Reopening an existing canonical namespace reopens it; it never
 //   re-migrates or overwrites it (the host owns that rule).
 // - the SAME established composition root (`createLegacyApplication` with
@@ -297,8 +298,9 @@ export async function bootProductionApplication(options) {
   };
   const selectedDate = resolveProductionSelectedDate() || undefined;
 
-  // Read-only v1 extraction. A missing source yields an empty snapshot
-  // (fresh install); any other extraction failure mounts the shell
+  // Read-only v1 extraction. A missing source or a present-but-empty source
+  // carries no user data, so it follows fresh onboarding and skips default
+  // zero-funds provisioning. Any other extraction failure mounts the shell
   // write-blocked below instead of falling back to legacy writes.
   let snapshot = null;
   let extractionReason = '';
@@ -325,11 +327,13 @@ export async function bootProductionApplication(options) {
 
   let host = null;
   if (snapshot) {
+    const freshInstall = snapshot.sourcePresent === false
+      || (snapshot.settings.length === 0 && snapshot.templates.length === 0 && snapshot.expenses.length === 0);
     host = await prepareCanonicalCandidateHost({
       environment,
       context,
-      snapshot,
-      migrationId: migrationId.value,
+      ...(freshInstall ? {} : { snapshot, migrationId: migrationId.value }),
+      deferInitialProvision: freshInstall,
       workerUrl: endpoints.workerUrl,
       sqliteAssetBase: endpoints.sqliteAssetBase,
       selectedDate,

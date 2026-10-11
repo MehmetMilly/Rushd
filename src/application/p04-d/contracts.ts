@@ -335,6 +335,8 @@ export interface AppSettingsView {
   readonly language: string;
   readonly calendarType: string;
   readonly activeTemplateProfileId: string;
+  readonly cycleMode?: string | null;
+  readonly guestSetupObservedPool?: boolean;
   readonly [key: string]: unknown;
 }
 
@@ -358,6 +360,27 @@ export interface UpdateLifecyclePort {
   persistOnboardingState(status: string, source?: string): Promise<OnboardingStateView>;
   /** True when active storage holds a usable guest book. Gates setup-completion claims. */
   hasUsableBook(): boolean;
+  /** Fresh guest setup is available only for an empty fresh namespace or its interrupted empty shell. */
+  needsGuestSetup?(): boolean;
+  /** Non-financial setup metadata used to resume a partially written guest setup. */
+  getGuestSetupProgress?(): {
+    readonly available: boolean;
+    readonly bookCreated?: boolean;
+    readonly currentCycleAlreadyOpen?: boolean;
+    readonly preexistingOpenCycle?: boolean;
+    readonly mode?: string;
+    readonly timeZone?: string;
+    readonly weekStart?: number | null;
+    readonly settingsCommitted?: boolean;
+    readonly createdAtLocalDate?: string;
+  };
+  /** Opens a first cycle or records the physically observed pool through the canonical command layer. */
+  completeGuestSetup?(input: {
+    readonly mode: 'fullCycle' | 'remainingFromNow';
+    readonly timeZone: string;
+    readonly weekStart: number;
+    readonly amount: string | number;
+  }): Promise<{ readonly ok: boolean; readonly reason?: string; readonly mode?: string; readonly alreadyComplete?: boolean }>;
   getMonthStartDeferral(): unknown;
   deferMonthStartPrompt(referenceDate: string): void;
   clearMonthStartDeferral(): void;

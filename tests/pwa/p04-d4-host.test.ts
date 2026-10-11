@@ -122,6 +122,20 @@ async function migratedHost(options: {
   return { context, coordination, storage, host };
 }
 
+async function freshUnprovisionedHost(tabId: string) {
+  const { context } = createDeterministicContext();
+  const coordination = createTabCoordinator({ tabId, environment: SYNC_ENV, store: memoryStore() });
+  const storage = createMemoryStorage({ context });
+  const host = await prepareCanonicalCandidateHost({
+    environment: { localStorage: memoryLocalStorage() } as unknown as typeof globalThis,
+    context,
+    deferInitialProvision: true,
+    coordination,
+    storage: storage as never,
+  });
+  return { context, coordination, storage, host };
+}
+
 function guestBookOf(storage: ReturnType<typeof createMemoryStorage>, storageId: string) {
   const repo = storage.inspect(storageId);
   expect(repo).not.toBeNull();
@@ -173,6 +187,163 @@ describe('d4 fresh-install boot rule', () => {
     });
     expect(`${added.ok}:${host.featurePorts.capture.getStatus().error}`).toBe('true:null');
     expect(guestBookOf(storage, host.storageId).cycles.length).toBe(before);
+  });
+});
+
+describe('p06 guest funding setup', () => {
+  it('leaves a true fresh namespace unfunded, opens a full cycle, and retries without duplicating it', async () => {
+    const { storage, host } = await freshUnprovisionedHost('p06-new-full');
+    expect(host.ok).toBe(true);
+    expect(host.featurePorts.lifecycle.needsGuestSetup?.()).toBe(true);
+    expect(host.featurePorts.lifecycle.hasUsableBook()).toBe(false);
+    expect(storage.inspect(host.storageId)?.getBookState(LEGACY_GUEST_BOOK_ID as never)).toBeNull();
+
+    const input = { mode: 'fullCycle' as const, timeZone: 'Asia/Riyadh', weekStart: 0, amount: '250.00' };
+    const result = await host.featurePorts.lifecycle.completeGuestSetup?.(input);
+    expect(result?.ok).toBe(true);
+    const book = guestBookOf(storage, host.storageId);
+    expect(book.cycles).toHaveLength(1);
+    expect(book.cycles[0].mode).toBe('fullCycle');
+    expect(book.cycles[0].startDate).toBe('2026-09-05');
+    expect(book.cycles[0].startingFunds.minorUnits).toBe(25_000);
+    expect(book.settingsRevisions[0].weekStart).toBe(0);
+
+    const retried = await host.featurePorts.lifecycle.completeGuestSetup?.(input);
+    expect(retried?.ok).toBe(true);
+    expect(guestBookOf(storage, host.storageId).cycles).toHaveLength(1);
+
+    const expense = await host.featurePorts.capture.submitExpense({
+      name: 'lunch', cost: 25, category: 'food', date: '2026-09-05',
+    });
+    expect(expense.ok).toBe(true);
+    expect(host.featurePorts.home.getSafeToSpend()).toBe(225);
+    expect(guestBookOf(storage, host.storageId).entries).toHaveLength(1);
+  });
+
+  it('resumes after settings commit, rejects a changed retry, and opens one observed-boundary cycle', async () => {
+    const { context, storage, host } = await freshUnprovisionedHost('p06-new-resume');
+    const repository = storage.inspect(host.storageId)! as unknown as {
+      runTransaction<T>(work: (transaction: unknown) => T | Promise<T>): Promise<T>;
+      injectWriteFailure(method: 'putBookState', occurrences?: number): void;
+    };
+    const originalRunTransaction = repository.runTransaction.bind(repository);
+    let executionCount = 0;
+    repository.runTransaction = async (work) => {
+      executionCount += 1;
+      if (executionCount === 3) repository.injectWriteFailure('putBookState');
+      return originalRunTransaction(work);
+    };
+    const input = { mode: 'remainingFromNow' as const, timeZone: 'Asia/Riyadh', weekStart: 1, amount: '300' };
+    const interrupted = await host.featurePorts.lifecycle.completeGuestSetup?.(input);
+    expect(interrupted?.ok).toBe(false);
+    const partiallySaved = guestBookOf(storage, host.storageId);
+    expect(partiallySaved.cycles).toHaveLength(0);
+    expect(partiallySaved.settingsRevisions).toHaveLength(1);
+    expect(host.featurePorts.lifecycle.needsGuestSetup?.()).toBe(true);
+    await host.close();
+
+    const restartedHost = await prepareCanonicalCandidateHost({
+      environment: { localStorage: memoryLocalStorage() } as unknown as typeof globalThis,
+      context,
+      deferInitialProvision: true,
+      coordination: createTabCoordinator({ tabId: 'p06-new-restart', environment: SYNC_ENV, store: memoryStore() }),
+      storage: storage as never,
+      control: storage.control,
+      selectedDate: '2026-09-05',
+    });
+    expect(restartedHost.featurePorts.lifecycle.needsGuestSetup?.()).toBe(true);
+
+    repository.runTransaction = originalRunTransaction;
+    const changedRetry = await restartedHost.featurePorts.lifecycle.completeGuestSetup?.({ ...input, weekStart: 2 });
+    expect(changedRetry).toMatchObject({ ok: false, reason: 'setup-mismatch' });
+    expect(guestBookOf(storage, host.storageId).cycles).toHaveLength(0);
+
+    const resumed = await restartedHost.featurePorts.lifecycle.completeGuestSetup?.(input);
+    expect(resumed?.ok).toBe(true);
+    const book = guestBookOf(storage, host.storageId);
+    expect(book.cycles).toHaveLength(1);
+    expect(book.cycles[0].mode).toBe('remainingFromBoundary');
+    expect(book.cycles[0].boundaryObservedPool?.minorUnits).toBe(30_000);
+    expect(book.settingsRevisions).toHaveLength(1);
+    expect(book.settingsRevisions[0].weekStart).toBe(1);
+    await restartedHost.close();
+  });
+
+  it('refuses a full-cycle start after interruption crosses its saved date, then accepts a current observation', async () => {
+    const { context } = createDeterministicContext({ baseInstantMs: Date.UTC(2026, 8, 5, 23, 59, 55) });
+    const coordination = createTabCoordinator({ tabId: 'p06-cross-midnight', environment: SYNC_ENV, store: memoryStore() });
+    const storage = createMemoryStorage({ context });
+    const host = await prepareCanonicalCandidateHost({
+      environment: { localStorage: memoryLocalStorage() } as unknown as typeof globalThis,
+      context,
+      deferInitialProvision: true,
+      coordination,
+      storage: storage as never,
+    });
+    const interrupted = await host.featurePorts.lifecycle.completeGuestSetup?.({
+      mode: 'fullCycle', timeZone: 'UTC', weekStart: 0, amount: '250',
+    });
+    expect(interrupted).toMatchObject({ ok: false, reason: 'full-cycle-stale' });
+    expect(guestBookOf(storage, host.storageId).cycles).toHaveLength(0);
+
+    const resumed = await host.featurePorts.lifecycle.completeGuestSetup?.({
+      mode: 'remainingFromNow', timeZone: 'UTC', weekStart: 0, amount: '200',
+    });
+    expect(resumed?.ok).toBe(true);
+    const cycle = guestBookOf(storage, host.storageId).cycles[0];
+    expect(cycle.mode).toBe('remainingFromBoundary');
+    expect(cycle.boundaryObservedPool?.minorUnits).toBe(20_000);
+    expect(cycle.boundaryLocalDate).toBe('2026-09-06');
+  });
+
+  it('uses Reality Check on the previously auto-provisioned empty cycle and never funds a migrated cycle twice', async () => {
+    const { context } = createDeterministicContext();
+    const coordination = createTabCoordinator({ tabId: 'p06-old-zero', environment: SYNC_ENV, store: memoryStore() });
+    const storage = createMemoryStorage({ context });
+    const first = await prepareCanonicalCandidateHost({
+      environment: { localStorage: memoryLocalStorage() } as unknown as typeof globalThis,
+      context,
+      snapshot: snapshotFromStores({ settings: [], templates: [], expenses: [], sourcePresent: false }),
+      migrationId: 'mg-p06-old-zero',
+      coordination,
+      storage: storage as never,
+      selectedDate: '2026-09-05',
+    });
+    const host = await prepareCanonicalCandidateHost({
+      environment: { localStorage: memoryLocalStorage() } as unknown as typeof globalThis,
+      context,
+      deferInitialProvision: true,
+      coordination: createTabCoordinator({ tabId: 'p06-old-zero-reload', environment: SYNC_ENV, store: memoryStore() }),
+      control: storage.control,
+      storage: storage as never,
+      selectedDate: '2026-09-05',
+    });
+    expect(host.featurePorts.lifecycle.needsGuestSetup?.()).toBe(true);
+    const priorCycleCount = guestBookOf(storage, host.storageId).cycles.length;
+    const reconciled = await host.featurePorts.lifecycle.completeGuestSetup?.({
+      mode: 'remainingFromNow', timeZone: 'Asia/Riyadh', weekStart: 1, amount: '125.50',
+    });
+    expect(reconciled?.ok).toBe(true);
+    const book = guestBookOf(storage, host.storageId);
+    expect(book.cycles).toHaveLength(priorCycleCount);
+    expect(book.cycles.find((cycle) => cycle.endDateExclusive === '2026-10-01')?.startingFunds.minorUnits).toBe(0);
+    expect(book.observations).toHaveLength(1);
+    expect(book.observations[0].observedPool.minorUnits).toBe(12_550);
+    expect(host.featurePorts.home.getSafeToSpend()).toBe(125.5);
+    expect((await host.featurePorts.lifecycle.completeGuestSetup?.({
+      mode: 'remainingFromNow', timeZone: 'Asia/Riyadh', weekStart: 1, amount: '125.50',
+    }))?.ok).toBe(true);
+    expect(guestBookOf(storage, host.storageId).observations).toHaveLength(1);
+
+    const migrated = await migratedHost({ migrationId: 'mg-p06-existing-migration', selectedDate: '2026-09-05' });
+    const migratedBook = guestBookOf(migrated.storage, migrated.host.storageId);
+    const before = JSON.stringify(migratedBook);
+    expect(migrated.host.featurePorts.lifecycle.needsGuestSetup?.()).toBe(false);
+    expect((await migrated.host.featurePorts.lifecycle.completeGuestSetup?.({
+      mode: 'remainingFromNow', timeZone: 'Asia/Riyadh', weekStart: 1, amount: '999',
+    }))?.ok).toBe(false);
+    expect(JSON.stringify(guestBookOf(migrated.storage, migrated.host.storageId))).toBe(before);
+    await first.close();
   });
 });
 

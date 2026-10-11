@@ -302,6 +302,8 @@ export function installRootController(app, dataRuntime, environment = globalThis
                 vm.store.settings.baseAllowance = settings.baseAllowance;
                 vm.store.settings.theme = settings.theme;
                 vm.store.settings.motionLevel = settings.motionLevel;
+                vm.p04dCycleMode = settings.cycleMode || '';
+                vm.p04dGuestSetupObservedPool = settings.guestSetupObservedPool === true;
             }
         } catch {
             /* settings chrome keeps its last state on mirror failure */
@@ -389,6 +391,22 @@ export function installRootController(app, dataRuntime, environment = globalThis
             monthlyDraft: createOnboardingTemplateDraft(),
         });
 
+        const createGuestSetupState = () => ({
+            open: false,
+            step: 'age',
+            adultConfirmed: false,
+            isLoading: false,
+            amount: '',
+            mode: '',
+            timeZone: '',
+            weekStart: '',
+            timeZoneLocked: false,
+            weekStartLocked: false,
+            modeLocked: false,
+            preexistingOpenCycle: false,
+            error: '',
+        });
+
         app.mixin({
             data() {
                 return {
@@ -399,6 +417,7 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     toastMessage: '',
                     toastVisible: false,
                     onboardingState: null,
+                    guestSetup: createGuestSetupState(),
 
                     // Modal States
                     payModal: {
@@ -463,6 +482,8 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     // D4: canonical availability for the Home hero. Independent
                     // of `budgetKnown` because starting funds are not a budget.
                     p04dSafeToSpend: null,
+                    p04dCycleMode: '',
+                    p04dGuestSetupObservedPool: false,
 
                     _toastTimer: null
                 }
@@ -758,7 +779,7 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     return toFiniteNumber(this.monthEndModal.summary?.surplus, 0) > 0;
                 },
                 anyModalOpen() {
-                    return this.payModal.open || this.addModal.open || this.editModal.open || this.applyTemplatesModal.open || this.monthEndModal.open || this.onboardingModal.open || this.confirmDialog.open;
+                    return this.payModal.open || this.addModal.open || this.editModal.open || this.applyTemplatesModal.open || this.monthEndModal.open || this.onboardingModal.open || this.guestSetup.open || this.confirmDialog.open;
                 },
                 currentShellTitle() {
                     return this.currentView === 'statistics'
@@ -825,6 +846,7 @@ export function installRootController(app, dataRuntime, environment = globalThis
             methods: {
                 // --- INITIALIZATION ---
                 navigateTo(view) {
+                    if (this.guestSetup.step === 'under18') return;
                     const targetView = ['dashboard', 'statistics', 'vault', 'plans', 'settings'].includes(view) ? view : 'dashboard';
                     if (targetView !== 'dashboard' && this.selectionMode) {
                         this.exitSelectionMode();
@@ -834,6 +856,176 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     // navigation port (UI chrome only) so refresh and
                     // offline recovery restore the destination.
                     if (p04dIsCandidate()) p04dPersistNavIntent(this);
+                },
+                guestSetupDraftStorageKey() {
+                    const authority = p04dAuthorityState();
+                    const storageId = typeof authority?.storageId === 'string' ? authority.storageId : 'active';
+                    return `rushd_p06_guest_setup_${storageId}`;
+                },
+                async beginGuestSetup() {
+                    const lifecycle = p04dCandidatePorts?.lifecycle;
+                    if (!lifecycle || typeof lifecycle.needsGuestSetup !== 'function' || lifecycle.needsGuestSetup() !== true) {
+                        this.showToast(p04dBlockedCopy(this.lang, 'onboarding'));
+                        return false;
+                    }
+                    let progress = { available: true };
+                    try {
+                        if (typeof lifecycle.getGuestSetupProgress === 'function') progress = lifecycle.getGuestSetupProgress() || progress;
+                    } catch {
+                        progress = { available: true };
+                    }
+                    let draft = null;
+                    try {
+                        const raw = environment?.localStorage?.getItem?.(this.guestSetupDraftStorageKey());
+                        const parsed = raw ? JSON.parse(raw) : null;
+                        if (parsed && parsed.version === 1 && typeof parsed === 'object') draft = parsed;
+                    } catch {
+                        draft = null;
+                    }
+                    let detectedTimeZone = 'Asia/Riyadh';
+                    try {
+                        detectedTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || detectedTimeZone;
+                    } catch {
+                        /* keep the explicit supported fallback for confirmation */
+                    }
+                    const savedWeekStart = progress.settingsCommitted
+                        ? progress.weekStart
+                        : draft?.weekStart;
+                    const savedTimeZone = progress.settingsCommitted
+                        ? progress.timeZone
+                        : (progress.preexistingOpenCycle && typeof draft?.timeZone === 'string'
+                            ? draft.timeZone
+                            : (progress.bookCreated && progress.timeZone ? progress.timeZone : draft?.timeZone));
+                    this.guestSetup = {
+                        ...createGuestSetupState(),
+                        open: true,
+                        step: 'age',
+                        timeZone: typeof savedTimeZone === 'string' && savedTimeZone
+                            ? savedTimeZone
+                            : detectedTimeZone,
+                        weekStart: Number.isInteger(savedWeekStart) ? String(savedWeekStart) : '',
+                        mode: progress.preexistingOpenCycle
+                            ? 'remainingFromNow'
+                            : (draft?.mode === 'fullCycle' || draft?.mode === 'remainingFromNow' ? draft.mode : (progress.mode || '')),
+                        timeZoneLocked: progress.settingsCommitted === true
+                            || (progress.bookCreated === true && progress.preexistingOpenCycle !== true),
+                        weekStartLocked: progress.settingsCommitted === true,
+                        modeLocked: progress.preexistingOpenCycle === true,
+                        preexistingOpenCycle: progress.preexistingOpenCycle === true,
+                    };
+                    return true;
+                },
+                async confirmGuestAdultAge() {
+                    if (this.guestSetup.step !== 'age') return;
+                    this.guestSetup.adultConfirmed = true;
+                    this.guestSetup.step = 'configure';
+                    this.guestSetup.error = '';
+                    try {
+                        const next = await p04dCandidatePorts.lifecycle.persistOnboardingState('pending', 'guest-adult-attested');
+                        this.onboardingState = next;
+                    } catch {
+                        this.showToast(p04dBlockedCopy(this.lang, 'authority'));
+                    }
+                },
+                declineGuestAdultAge() {
+                    this.guestSetup.step = 'under18';
+                    this.guestSetup.adultConfirmed = false;
+                    this.guestSetup.error = '';
+                },
+                exitUnderageSetup() {
+                    try {
+                        environment?.window?.close?.();
+                    } catch {
+                        /* the non-dismissible safety screen remains in place */
+                    }
+                },
+                handleGuestSetupVisibilityChange(nextValue) {
+                    if (nextValue === true) {
+                        this.guestSetup.open = true;
+                        return;
+                    }
+                    if (this.guestSetup.step === 'under18') {
+                        this.guestSetup.open = true;
+                        return;
+                    }
+                    this.guestSetup.open = false;
+                    if (this.guestSetup.step === 'configure') void this.persistGuestSetupDraft();
+                },
+                async persistGuestSetupDraft() {
+                    try {
+                        const store = environment?.localStorage;
+                        if (!store || typeof store.setItem !== 'function') throw new Error('setup progress storage unavailable');
+                        const draft = {
+                            version: 1,
+                            mode: this.guestSetup.mode,
+                            timeZone: this.guestSetup.timeZone,
+                            weekStart: this.guestSetup.weekStart === '' ? null : Number(this.guestSetup.weekStart),
+                        };
+                        store.setItem.call(store, this.guestSetupDraftStorageKey(), JSON.stringify(draft));
+                        return true;
+                    } catch {
+                        this.guestSetup.error = this.t.guestSetupError;
+                        return false;
+                    }
+                },
+                async deferGuestSetup() {
+                    if (this.guestSetup.isLoading || this.guestSetup.step === 'under18') return;
+                    await this.persistGuestSetupDraft();
+                    this.guestSetup.open = false;
+                },
+                async completeGuestSetup() {
+                    if (this.guestSetup.isLoading || this.guestSetup.step !== 'configure') return;
+                    if (!this.guestSetup.adultConfirmed) {
+                        this.guestSetup.error = this.t.guestSetupError;
+                        return;
+                    }
+                    if (!await this.persistGuestSetupDraft()) return;
+                    const finish = p04dCandidatePorts?.lifecycle?.completeGuestSetup;
+                    if (typeof finish !== 'function') {
+                        this.guestSetup.error = this.t.guestSetupError;
+                        return;
+                    }
+                    this.guestSetup.isLoading = true;
+                    this.guestSetup.error = '';
+                    try {
+                        const result = await finish.call(p04dCandidatePorts.lifecycle, {
+                            mode: this.guestSetup.preexistingOpenCycle ? 'remainingFromNow' : this.guestSetup.mode,
+                            timeZone: this.guestSetup.timeZone,
+                            weekStart: Number(this.guestSetup.weekStart),
+                            amount: this.guestSetup.amount,
+                        });
+                        if (!result?.ok) {
+                            this.guestSetup.error = result?.reason === 'full-cycle-stale'
+                                ? this.t.guestSetupStale
+                                : this.t.guestSetupError;
+                            if (result?.reason === 'full-cycle-stale') {
+                                this.guestSetup.mode = 'remainingFromNow';
+                                this.guestSetup.amount = '';
+                                await this.persistGuestSetupDraft();
+                            }
+                            return;
+                        }
+                        try {
+                            environment?.localStorage?.removeItem?.(this.guestSetupDraftStorageKey());
+                        } catch {
+                            /* a stale non-financial draft is harmless */
+                        }
+                        try {
+                            this.onboardingState = await p04dCandidatePorts.lifecycle.persistOnboardingState('completed', 'guest-funded');
+                        } catch {
+                            this.onboardingState = { status: 'completed', updatedAt: '', source: 'guest-funded' };
+                        }
+                        this.guestSetup.open = false;
+                        this.guestSetup.amount = '';
+                        await syncP04DCandidateHome(this);
+                        await syncP04DCandidateSettings(this);
+                        await syncP04DCandidateInsights(this);
+                        this.showToast(this.t.guestSetupDone);
+                    } catch {
+                        this.guestSetup.error = this.t.guestSetupError;
+                    } finally {
+                        this.guestSetup.isLoading = false;
+                    }
                 },
                 async persistOnboardingState(status, source = '') {
                     // P04-D4: onboarding status is local flow state and
@@ -1225,6 +1417,11 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     // told to reload (boot re-provisions the book); the
                     // existing blocked copy is reused, no new screens.
                     if (p04dIsCandidate()) {
+                        if (typeof p04dCandidatePorts.lifecycle.needsGuestSetup === 'function'
+                            && p04dCandidatePorts.lifecycle.needsGuestSetup() === true) {
+                            void this.beginGuestSetup();
+                            return;
+                        }
                         let usableBook = false;
                         try {
                             usableBook = typeof p04dCandidatePorts.lifecycle.hasUsableBook === 'function'
@@ -1290,13 +1487,16 @@ export function installRootController(app, dataRuntime, environment = globalThis
                         // say so with the existing blocked copy (a reload
                         // retries provisioning). Fail closed on read errors.
                         try {
+                            const needsGuestSetup = typeof p04dCandidatePorts.lifecycle.needsGuestSetup === 'function'
+                                && p04dCandidatePorts.lifecycle.needsGuestSetup() === true;
                             const usable = typeof p04dCandidatePorts.lifecycle.hasUsableBook === 'function'
                                 ? p04dCandidatePorts.lifecycle.hasUsableBook() === true
                                 : false;
                             this.onboardingState = usable
                                 ? this.onboardingState
                                 : { status: 'pending', updatedAt: '', source: 'no-book' };
-                            if (!usable) this.showToast(p04dBlockedCopy(this.lang, 'authority'));
+                            if (needsGuestSetup) await this.beginGuestSetup();
+                            else if (!usable) this.showToast(p04dBlockedCopy(this.lang, 'authority'));
                         } catch {
                             this.onboardingState = { status: 'pending', updatedAt: '', source: 'no-book' };
                         }
@@ -2781,6 +2981,7 @@ export function installRootController(app, dataRuntime, environment = globalThis
 
                 // --- ADD MODAL LOGIC ---
                 openAddModal() {
+                    if (this.guestSetup.step === 'under18') return;
                     const fab = this.$refs.fabBtn;
                     if (fab) {
                         fab.classList.remove('fab-burst');
@@ -2796,6 +2997,7 @@ export function installRootController(app, dataRuntime, environment = globalThis
                     this.addModal.open = true;
                 },
                 async submitNewExpense() {
+                    if (this.guestSetup.step === 'under18') return;
                     // V2: Prevent double-entry with isSubmitting flag
                     if (this.addModal.isSubmitting) return;
                     // P04-D3: manual Add commits through the canonical
