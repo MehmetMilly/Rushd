@@ -117,6 +117,28 @@ async function close() {
   await page.getByText('P02 debug bridge toast probe', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
   await page.evaluate(() => { window.RushdDebug.getAppProxy().toastVisible = false; });
 
+  await page.getByText('هل تبلغ 18 عاماً أو أكثر؟', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
+  await page.getByRole('button', { name: 'نعم، أبلغ 18 عاماً أو أكثر', exact: true }).click();
+  const guestSetup = page.locator('.modal-floating-card:visible');
+  await guestSetup.getByText('ما اليوم الذي يبدأ به أسبوعك؟', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
+  await guestSetup.locator('input[autocomplete="off"]').first().fill('Asia/Riyadh');
+  await guestSetup.locator('select').selectOption('0');
+  await guestSetup.locator('input[type="radio"][value="fullCycle"]').check();
+  await guestSetup.locator('input[inputmode="decimal"]').fill('500.00');
+  const setupSaveButton = guestSetup.getByRole('button', { name: 'حفظ المبلغ وبدء التتبع', exact: true });
+  const setupFields = await guestSetup.evaluate((element) => ({
+    timeZone: element.querySelector('input[autocomplete="off"]')?.value ?? '',
+    weekStart: element.querySelector('select')?.value ?? '',
+    mode: element.querySelector('input[type="radio"]:checked')?.value ?? '',
+    amount: element.querySelector('input[inputmode="decimal"]')?.value ?? '',
+  }));
+  assert.equal(await setupSaveButton.isEnabled(), true, `setup fields should be complete: ${JSON.stringify(setupFields)}`);
+  await setupSaveButton.click();
+  await page.waitForFunction(() => {
+    const ports = document.querySelector('#app')?.__vue_app__?.config?.globalProperties?.$p04dPorts;
+    return ports?.lifecycle?.getSettings?.().cycleMode === 'fullCycle';
+  }, null, { timeout: 30_000 });
+
   if (process.env.RUSHD_SMOKE_INJECT_EXTERNAL === '1') {
     // A deterministic negative probe for the local-only gate. The route above
     // aborts this request; the final assertion reports its exact URL.
@@ -147,6 +169,11 @@ async function close() {
   await page.waitForTimeout(1_000);
 
   assert.ok((await page.locator('body').innerText()).includes(expenseName), 'expense should appear after adding it');
+  const safeToSpend = await page.evaluate(() => {
+    const ports = document.querySelector('#app')?.__vue_app__?.config?.globalProperties?.$p04dPorts;
+    return ports?.home?.getSafeToSpend?.() ?? null;
+  });
+  assert.equal(safeToSpend, 458, 'the first expense should subtract from the amount entered during setup');
 
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForTimeout(1_500);
