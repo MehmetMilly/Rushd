@@ -1,0 +1,23 @@
+{
+  "note": "Exact previously served CDN bytes, preserved without minification or edits. Update deliberately and verify rendering before replacing.",
+  "assets": [
+    {
+      "file": "vue-3.5.44.global.js",
+      "version": "3.5.44",
+      "source": "https://unpkg.com/vue@3.5.44/dist/vue.global.js",
+      "originalSource": "https://unpkg.com/vue@3/dist/vue.global.js",
+      "license": "vue-LICENSE.txt",
+      "bytes": 601662,
+      "sha256": "32e8d2cf5034e241ccd220b42bb07042b0604839bd04607106728c338c92738b"
+    },
+    {
+      "file": "tailwindcss-3.4.17.play.js",
+      "version": "3.4.17",
+      "source": "https://cdn.tailwindcss.com/3.4.17",
+      "originalSource": "https://cdn.tailwindcss.com",
+      "license": "tailwindcss-LICENSE.txt",
+      "bytes": 407279,
+      "sha256": "176e894661aa9cdc9a5cba6c720044cbbf7b8bd80d1c9a142a7c24b1b6c50d15"
+    }
+  ]
+}
